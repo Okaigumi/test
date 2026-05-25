@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>現場日報</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg: #F5F3EE;
+  --surface: #FFFFFF;
+  --surface2: #EEECE7;
+  --accent: #2B5F3F;
+  --accent-light: #D6E8DC;
+  --accent2: #E07B39;
+  --text: #1A1A18;
+  --text2: #6B6960;
+  --text3: #9E9C95;
+  --border: #DEDAD2;
+  --danger: #C84B31;
+  --danger-bg: #FBE9E5;
+  --success: #2B5F3F;
+  --success-bg: #D6E8DC;
+  --warn: #B87A1A;
+  --warn-bg: #FDF0D5;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; max-width: 430px; margin: 0 auto; }
+
+/* Loading */
+.loading-screen {
+  position: fixed; inset: 0; background: var(--accent);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 999; color: white; gap: 16px;
+}
+.loading-title { font-size: 22px; font-weight: 700; }
+.loading-sub { font-size: 14px; opacity: 0.75; }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Login */
+.login-screen {
+  display: none; min-height: 100vh;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 24px; background: var(--bg);
+}
+.login-logo { font-size: 48px; margin-bottom: 12px; }
+.login-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+.login-sub { font-size: 14px; color: var(--text3); margin-bottom: 32px; }
+.login-card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; width: 100%; max-width: 320px; }
+.login-label { font-size: 13px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+.login-input {
+  width: 100%; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px 14px; font-size: 15px; font-family: 'Noto Sans JP', sans-serif;
+  background: var(--surface2); color: var(--text); margin-bottom: 14px;
+}
+.login-input:focus { outline: none; border-color: var(--accent); background: white; }
+.login-btn {
+  width: 100%; background: var(--accent); color: white; border: none;
+  border-radius: var(--radius); padding: 14px; font-size: 16px; font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif; cursor: pointer;
+}
+.login-btn:disabled { background: var(--text3); cursor: not-allowed; }
+.login-error { font-size: 13px; color: var(--danger); margin-top: 10px; text-align: center; display: none; }
+
+/* PIN pad */
+.pin-display { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+.pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); background: white; transition: background 0.15s; }
+.pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pin-key {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 16px; font-size: 20px; font-weight: 500; font-family: 'DM Mono', monospace;
+  cursor: pointer; text-align: center; transition: all 0.1s;
+}
+.pin-key:active { background: var(--accent-light); transform: scale(0.95); }
+.pin-key.del { font-size: 16px; }
+
+/* Header */
+.app-header {
+  background: var(--accent); color: white;
+  padding: 16px 20px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; flex-direction: column; gap: 2px; }
+.app-name { font-size: 18px; font-weight: 700; }
+.app-date { font-size: 12px; opacity: 0.75; font-family: 'DM Mono', monospace; }
+.role-badge {
+  font-size: 11px; font-weight: 500;
+  background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 20px; padding: 4px 10px; cursor: pointer;
+}
+.logout-btn {
+  font-size: 11px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px; padding: 4px 10px; color: white; cursor: pointer;
+}
+
+/* Tab */
+.tab-nav {
+  display: flex; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 57px; z-index: 90;
+}
+.tab-btn {
+  flex: 1; padding: 12px 8px; font-size: 13px; font-weight: 500;
+  color: var(--text3); background: none; border: none;
+  border-bottom: 2.5px solid transparent; cursor: pointer;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn .tab-icon { font-size: 16px; display: block; margin-bottom: 2px; }
+
+/* Content */
+.content { padding: 16px; display: none; }
+.content.active { display: block; }
+
+/* Card */
+.card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 12px; overflow: hidden; }
+.card-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.card-icon { font-size: 18px; }
+.card-title { font-size: 14px; font-weight: 700; }
+.card-subtitle { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.card-body { padding: 14px 16px; }
+
+/* Chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 7px 13px; border-radius: 20px; border: 1.5px solid var(--border);
+  font-size: 13px; font-family: 'Noto Sans JP', sans-serif;
+  background: var(--surface); color: var(--text2);
+  cursor: pointer; transition: all 0.15s; user-select: none; white-space: nowrap;
+}
+.chip:active { transform: scale(0.95); }
+.chip.selected { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.chip.selected::before { content: '✓ '; font-size: 11px; }
+
+/* Time */
+.time-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+.time-sep { font-size: 18px; color: var(--text3); text-align: center; }
+.time-input {
+  background: var(--surface2); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 20px; font-weight: 500; font-family: 'DM Mono', monospace;
+  color: var(--text); text-align: center; width: 100%; -webkit-appearance: none;
+}
+.time-input:focus { outline: none; border-color: var(--accent); background: white; }
+
+/* Textarea */
+.memo-area {
+  width: 100%; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 14px; font-family: 'Noto Sans JP', sans-serif;
+  color: var(--text); background: var(--surface2); resize: none; min-height: 80px;
+}
+.memo-area:focus { outline: none; border-color: var(--accent); background: white; }
+.memo-area::placeholder { color: var(--text3); }
+
+/* Photo */
+.photo-upload-area {
+  border: 2px dashed var(--border); border-radius: var(--radius-sm);
+  padding: 20px; text-align: center; cursor: pointer; background: var(--surface2);
+}
+.photo-upload-area:hover { border-color: var(--accent); background: var(--accent-light); }
+.upload-icon { font-size: 28px; margin-bottom: 6px; }
+.upload-text { font-size: 13px; color: var(--text2); }
+.upload-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+#photoInput { display: none; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.photo-thumb { aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; position: relative; background: var(--surface2); border: 1px solid var(--border); }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.photo-remove { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: rgba(0,0,0,0.55); color: white; border-radius: 50%; border: none; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.photo-count { font-size: 11px; color: var(--text3); margin-top: 6px; text-align: right; }
+
+/* Submit */
+.submit-btn {
+  width: 100%; background: var(--accent); color: white; border: none;
+  border-radius: var(--radius); padding: 15px; font-size: 16px; font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;
+}
+.submit-btn:disabled { background: var(--text3); cursor: not-allowed; }
+.required { color: var(--danger); margin-left: 2px; }
+.validation-msg { font-size: 12px; color: var(--danger); margin-top: 6px; display: none; }
+
+/* Success overlay */
+.success-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.success-overlay.show { display: flex; }
+.success-card {
+  background: white; border-radius: 20px; padding: 32px 28px;
+  text-align: center; max-width: 320px; width: 90%;
+  animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.success-icon { font-size: 52px; margin-bottom: 12px; }
+.success-title { font-size: 20px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.success-detail { font-size: 13px; color: var(--text2); line-height: 1.7; margin-bottom: 20px; white-space: pre-line; }
+.success-close { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; }
+
+/* History */
+.report-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+.report-item-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.report-item-date { font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace; }
+.status-pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+.status-pill.confirmed { background: var(--success-bg); color: var(--success); }
+.status-pill.pending { background: var(--warn-bg); color: var(--warn); }
+.report-sites { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.report-site-tag { font-size: 11px; padding: 2px 8px; background: var(--accent-light); color: var(--accent); border-radius: 12px; font-weight: 500; }
+.report-meta { font-size: 12px; color: var(--text3); }
+
+/* Admin */
+.admin-notice { background: var(--accent-light); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: var(--accent); font-weight: 500; margin-bottom: 14px; }
+.summary-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.summary-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; text-align: center; }
+.stat-num { font-size: 24px; font-weight: 700; font-family: 'DM Mono', monospace; }
+.stat-num.green { color: var(--accent); }
+.stat-num.orange { color: var(--accent2); }
+.stat-label { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.staff-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.staff-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.staff-avatar.pending { background: var(--border); color: var(--text3); }
+.staff-info { flex: 1; }
+.staff-name { font-size: 14px; font-weight: 700; }
+.staff-detail { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+/* Master */
+.master-list { display: flex; flex-direction: column; gap: 6px; }
+.master-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+.master-item-name { font-size: 14px; color: var(--text); }
+.master-delete { background: none; border: none; font-size: 16px; color: var(--text3); cursor: pointer; padding: 4px; }
+.master-delete:hover { color: var(--danger); }
+.master-add-row { display: flex; gap: 8px; margin-top: 8px; }
+.master-add-input { flex: 1; background: var(--surface2); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; font-family: 'Noto Sans JP', sans-serif; color: var(--text); }
+.master-add-input:focus { outline: none; border-color: var(--accent); background: white; }
+.master-add-btn { background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); padding: 10px 16px; font-size: 14px; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150; align-items: flex-end; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal-sheet { background: white; border-radius: 20px 20px 0 0; width: 100%; max-width: 430px; max-height: 75vh; overflow-y: auto; padding: 20px; animation: slideUp 0.28s ease; }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 16px; }
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.modal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.modal-row:last-child { border-bottom: none; }
+.modal-key { color: var(--text3); }
+.modal-val { color: var(--text); font-weight: 500; text-align: right; max-width: 60%; }
+.modal-close { width: 100%; padding: 13px; background: var(--surface2); color: var(--text); border: none; border-radius: var(--radius); font-size: 14px; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; margin-top: 14px; }
+
+.empty-msg { text-align: center; color: var(--text3); padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <div class="loading-title">📋 現場日報</div>
+  <div class="loading-sub">読み込み中...</div>
+</div>
+
+<!-- Login -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-logo">📋</div>
+  <div class="login-title">現場日報</div>
+  <div class="login-sub">お名前とPINコードを入力してください</div>
+  <div class="login-card">
+    <div class="login-label">お名前を選択</div>
+    <select class="login-input" id="nameSelect">
+      <option value="">選択してください</option>
+    </select>
+    <div class="login-label">PINコード（4桁）</div>
+    <div class="pin-display">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinInput('1')">1</button>
+      <button class="pin-key" onclick="pinInput('2')">2</button>
+      <button class="pin-key" onclick="pinInput('3')">3</button>
+      <button class="pin-key" onclick="pinInput('4')">4</button>
+      <button class="pin-key" onclick="pinInput('5')">5</button>
+      <button class="pin-key" onclick="pinInput('6')">6</button>
+      <button class="pin-key" onclick="pinInput('7')">7</button>
+      <button class="pin-key" onclick="pinInput('8')">8</button>
+      <button class="pin-key" onclick="pinInput('9')">9</button>
+      <button class="pin-key del" onclick="pinClear()">C</button>
+      <button class="pin-key" onclick="pinInput('0')">0</button>
+      <button class="pin-key del" onclick="pinBack()">⌫</button>
+    </div>
+    <div class="login-error" id="loginError">名前またはPINが正しくありません</div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp" style="display:none;">
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-name">📋 現場日報</div>
+      <div class="app-date" id="headerDate"></div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <div class="role-badge" id="roleBadge"></div>
+      <button class="logout-btn" onclick="logout()">ログアウト</button>
+    </div>
+  </header>
+
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('report')" id="tab-report">
+      <span class="tab-icon">✏️</span>日報入力
+    </button>
+    <button class="tab-btn" onclick="switchTab('history')" id="tab-history">
+      <span class="tab-icon">📅</span>履歴
+    </button>
+    <button class="tab-btn" onclick="switchTab('admin')" id="tab-admin" style="display:none;">
+      <span class="tab-icon">👥</span>管理
+    </button>
+    <button class="tab-btn" onclick="switchTab('master')" id="tab-master" style="display:none;">
+      <span class="tab-icon">⚙️</span>設定
+    </button>
+  </nav>
+
+  <!-- 日報入力 -->
+  <div class="content active" id="content-report">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">🏗️</span>
+        <div><div class="card-title">現場<span class="required">*</span></div><div class="card-subtitle">複数選択可</div></div>
+      </div>
+      <div class="card-body"><div class="chips" id="siteChips"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">🧱</span>
+        <div><div class="card-title">使用材料<span class="required">*</span></div><div class="card-subtitle">複数選択可</div></div>
+      </div>
+      <div class="card-body"><div class="chips" id="materialChips"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">⏱️</span>
+        <div><div class="card-title">作業時間<span class="required">*</span></div></div>
+      </div>
+      <div class="card-body">
+        <div class="time-row">
+          <input type="time" class="time-input" id="startTime" value="08:00">
+          <div class="time-sep">〜</div>
+          <input type="time" class="time-input" id="endTime">
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:8px;text-align:right;" id="workDuration"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">📝</span>
+        <div><div class="card-title">作業メモ</div><div class="card-subtitle">任意</div></div>
+      </div>
+      <div class="card-body">
+        <textarea class="memo-area" id="memo" placeholder="特記事項・進捗状況など"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">📷</span>
+        <div><div class="card-title">写真</div><div class="card-subtitle">任意・最大5枚</div></div>
+      </div>
+      <div class="card-body">
+        <div class="photo-upload-area" onclick="document.getElementById('photoInput').click()">
+          <div class="upload-icon">📸</div>
+          <div class="upload-text">タップして写真を追加</div>
+          <div class="upload-hint">施工前・施工後・問題箇所など</div>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" multiple onchange="handlePhotos(event)">
+        <div class="photo-grid" id="photoGrid"></div>
+        <div class="photo-count" id="photoCount"></div>
+      </div>
+    </div>
+    <div id="validationMsg" class="validation-msg">現場・使用材料を選択してください。</div>
+    <button class="submit-btn" onclick="submitReport()" id="submitBtn">
+      <span>✓</span> 日報を提出する
+    </button>
+    <div style="height:24px;"></div>
+  </div>
+
+  <!-- 履歴 -->
+  <div class="content" id="content-history">
+    <div id="historyList"><div class="empty-msg">読み込み中...</div></div>
+  </div>
+
+  <!-- 管理（管理者） -->
+  <div class="content" id="content-admin">
+    <div class="admin-notice">📊 本日の提出状況</div>
+    <div class="summary-row">
+      <div class="summary-stat"><div class="stat-num" id="totalStaff">-</div><div class="stat-label">従業員数</div></div>
+      <div class="summary-stat"><div class="stat-num green" id="submittedCount">-</div><div class="stat-label">提出済</div></div>
+      <div class="summary-stat"><div class="stat-num orange" id="pendingCount">-</div><div class="stat-label">未提出</div></div>
+    </div>
+    <div id="staffList"><div class="empty-msg">読み込み中...</div></div>
+  </div>
+
+  <!-- 設定 -->
+  <div class="content" id="content-master">
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🏗️</span><div><div class="card-title">現場マスタ</div></div></div>
+      <div class="card-body">
+        <div class="master-list" id="masterSiteList"></div>
+        <div class="master-add-row">
+          <input class="master-add-input" id="newSiteInput" placeholder="現場名を入力" type="text">
+          <button class="master-add-btn" onclick="addSite()">追加</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">材料マスタ</div></div></div>
+      <div class="card-body">
+        <div class="master-list" id="masterMaterialList"></div>
+        <div class="master-add-row">
+          <input class="master-add-input" id="newMaterialInput" placeholder="材料名を入力" type="text">
+          <button class="master-add-btn" onclick="addMaterial()">追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 提出完了 -->
+<div class="success-overlay" id="successOverlay">
+  <div class="success-card">
+    <div class="success-icon">✅</div>
+    <div class="success-title">提出完了！</div>
+    <div class="success-detail" id="successDetail"></div>
+    <button class="success-close" onclick="closeSuccess()">閉じる</button>
+  </div>
+</div>
+
+<!-- 詳細モーダル -->
+<div class="modal-overlay" id="detailModal" onclick="closeDetail(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="detailTitle"></div>
+    <div id="detailBody"></div>
+    <button class="modal-close" onclick="document.getElementById('detailModal').classList.remove('show')">閉じる</button>
+  </div>
+</div>
+
+<script>
+// ===== SUPABASE =====
+const SUPABASE_URL = 'https://fblecreevjtrqnkhmwuk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ===== STATE =====
+let state = {
+  currentUser: null,
+  sites: [],
+  materials: [],
+  selectedSites: [],
+  selectedMaterials: [],
+  photos: [],
+  pin: ''
+};
+
+// ===== INIT =====
+async function init() {
+  const saved = sessionStorage.getItem('currentUser');
+  if (saved) {
+    state.currentUser = JSON.parse(saved);
+    await startApp();
+  } else {
+    await loadEmployeesForLogin();
+    show('loadingScreen', false);
+    show('loginScreen', true);
+  }
+}
+
+async function loadEmployeesForLogin() {
+  const { data } = await sb.from('employees').select('id,name').eq('is_active', true).order('name');
+  const sel = document.getElementById('nameSelect');
+  (data || []).forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ===== PIN LOGIN =====
+function pinInput(n) {
+  if (state.pin.length >= 4) return;
+  state.pin += n;
+  updatePinDisplay();
+  if (state.pin.length === 4) setTimeout(tryLogin, 200);
+}
+function pinBack() { state.pin = state.pin.slice(0, -1); updatePinDisplay(); }
+function pinClear() { state.pin = ''; updatePinDisplay(); }
+function updatePinDisplay() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < state.pin.length);
+  }
+}
+
+async function tryLogin() {
+  const empId = document.getElementById('nameSelect').value;
+  if (!empId) { document.getElementById('loginError').style.display = 'block'; state.pin = ''; updatePinDisplay(); return; }
+  const { data } = await sb.from('employees').select('*').eq('id', empId).eq('pin', state.pin).eq('is_active', true).single();
+  if (data) {
+    state.currentUser = data;
+    sessionStorage.setItem('currentUser', JSON.stringify(data));
+    document.getElementById('loginError').style.display = 'none';
+    show('loginScreen', false);
+    await startApp();
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+    state.pin = ''; updatePinDisplay();
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('currentUser');
+  state.currentUser = null;
+  state.pin = '';
+  location.reload();
+}
+
+// ===== START APP =====
+async function startApp() {
+  show('loadingScreen', true);
+  const d = new Date();
+  const days = ['日','月','火','水','木','金','土'];
+  document.getElementById('headerDate').textContent = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
+  document.getElementById('roleBadge').textContent = state.currentUser.role === 'admin' ? '管理者' : '従業員';
+
+  // 管理者タブ表示
+  if (state.currentUser.role === 'admin') {
+    document.getElementById('tab-admin').style.display = '';
+    document.getElementById('tab-master').style.display = '';
+  }
+
+  // 現在時刻をセット
+  const now = new Date();
+  document.getElementById('endTime').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  await Promise.all([loadSites(), loadMaterials()]);
+  await loadHistory();
+  if (state.currentUser.role === 'admin') await loadAdminData();
+
+  document.getElementById('startTime').addEventListener('change', updateDuration);
+  document.getElementById('endTime').addEventListener('change', updateDuration);
+  document.getElementById('newSiteInput').addEventListener('keydown', e => { if(e.key==='Enter') addSite(); });
+  document.getElementById('newMaterialInput').addEventListener('keydown', e => { if(e.key==='Enter') addMaterial(); });
+
+  updateDuration();
+  show('loadingScreen', false);
+  show('mainApp', true);
+}
+
+function show(id, visible) {
+  const el = document.getElementById(id);
+  if (id === 'loginScreen') el.style.display = visible ? 'flex' : 'none';
+  else el.style.display = visible ? '' : 'none';
+}
+
+// ===== SUPABASE DATA =====
+async function loadSites() {
+  const { data } = await sb.from('sites').select('*').eq('is_active', true).order('name');
+  state.sites = data || [];
+  renderChips();
+  renderMaster();
+}
+
+async function loadMaterials() {
+  const { data } = await sb.from('materials').select('*').eq('is_active', true).order('name');
+  state.materials = data || [];
+  renderChips();
+  renderMaster();
+}
+
+async function loadHistory() {
+  const { data } = await sb.from('reports')
+    .select('*')
+    .eq('employee_id', state.currentUser.id)
+    .order('report_date', { ascending: false })
+    .limit(30);
+  renderHistory(data || []);
+}
+
+async function loadAdminData() {
+  const today = new Date().toISOString().split('T')[0];
+  const { data: employees } = await sb.from('employees').select('*').eq('is_active', true).neq('role', 'admin');
+  const { data: todayReports } = await sb.from('report_summary').select('*').eq('report_date', today);
+
+  const submitted = (todayReports || []).map(r => r.employee_id);
+  document.getElementById('totalStaff').textContent = (employees || []).length;
+  document.getElementById('submittedCount').textContent = submitted.length;
+  document.getElementById('pendingCount').textContent = (employees || []).length - submitted.length;
+
+  document.getElementById('staffList').innerHTML = (employees || []).map(e => {
+    const rep = (todayReports || []).find(r => r.employee_id === e.id);
+    return `<div class="staff-item">
+      <div class="staff-avatar ${rep ? '' : 'pending'}">${e.name.slice(0,2)}</div>
+      <div class="staff-info">
+        <div class="staff-name">${e.name}</div>
+        <div class="staff-detail">${rep ? rep.start_time+'〜'+rep.end_time : '未提出'}</div>
+      </div>
+      <div class="status-pill ${rep ? 'confirmed' : 'pending'}">${rep ? '提出済' : '未提出'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===== CHIPS =====
+function renderChips() {
+  document.getElementById('siteChips').innerHTML = state.sites.map(s =>
+    `<div class="chip ${state.selectedSites.includes(s.id) ? 'selected' : ''}" onclick="toggleChip('site','${s.id}')">${s.name}</div>`
+  ).join('') || '<div style="color:var(--text3);font-size:13px;">現場が登録されていません</div>';
+
+  document.getElementById('materialChips').innerHTML = state.materials.map(m =>
+    `<div class="chip ${state.selectedMaterials.includes(m.id) ? 'selected' : ''}" onclick="toggleChip('material','${m.id}')">${m.name}</div>`
+  ).join('') || '<div style="color:var(--text3);font-size:13px;">材料が登録されていません</div>';
+}
+
+function toggleChip(type, id) {
+  const arr = type === 'site' ? state.selectedSites : state.selectedMaterials;
+  const idx = arr.indexOf(id);
+  idx >= 0 ? arr.splice(idx, 1) : arr.push(id);
+  renderChips();
+}
+
+// ===== TIME =====
+function updateDuration() {
+  const s = document.getElementById('startTime').value;
+  const e = document.getElementById('endTime').value;
+  if (!s || !e) return;
+  const [sh,sm] = s.split(':').map(Number);
+  const [eh,em] = e.split(':').map(Number);
+  const mins = (eh*60+em)-(sh*60+sm);
+  if (mins > 0) {
+    const h = Math.floor(mins/60), m = mins%60;
+    document.getElementById('workDuration').textContent = `作業時間：${h}時間${m>0?m+'分':''}`;
+  }
+}
+
+// ===== PHOTOS =====
+function handlePhotos(e) {
+  Array.from(e.target.files).slice(0, 5 - state.photos.length).forEach(f => {
+    const r = new FileReader();
+    r.onload = ev => { state.photos.push(ev.target.result); renderPhotos(); };
+    r.readAsDataURL(f);
+  });
+  e.target.value = '';
+}
+function renderPhotos() {
+  document.getElementById('photoGrid').innerHTML = state.photos.map((p,i) =>
+    `<div class="photo-thumb"><img src="${p}" alt="写真${i+1}"><button class="photo-remove" onclick="removePhoto(${i})">✕</button></div>`
+  ).join('');
+  document.getElementById('photoCount').textContent = state.photos.length > 0 ? `${state.photos.length}/5枚` : '';
+}
+function removePhoto(i) { state.photos.splice(i, 1); renderPhotos(); }
+
+// ===== SUBMIT =====
+async function submitReport() {
+  const msg = document.getElementById('validationMsg');
+  if (!state.selectedSites.length || !state.selectedMaterials.length) {
+    msg.style.display = 'block'; return;
+  }
+  msg.style.display = 'none';
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> 送信中...';
+
+  const start = document.getElementById('startTime').value;
+  const end = document.getElementById('endTime').value;
+  const memo = document.getElementById('memo').value;
+
+  const { error } = await sb.from('reports').insert({
+    employee_id:  state.currentUser.id,
+    report_date:  new Date().toISOString().split('T')[0],
+    site_ids:     state.selectedSites,
+    material_ids: state.selectedMaterials,
+    start_time:   start,
+    end_time:     end,
+    memo:         memo,
+    photo_count:  state.photos.length
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✓</span> 日報を提出する';
+
+  if (error) {
+    if (error.code === '23505') {
+      alert('本日の日報はすでに提出済みです。');
+    } else {
+      alert('送信に失敗しました。もう一度お試しください。');
+    }
+    return;
+  }
+
+  const siteNames = state.selectedSites.map(id => state.sites.find(s=>s.id===id)?.name).join('・');
+  document.getElementById('successDetail').textContent = `${siteNames}\n材料：${state.selectedMaterials.length}点\n${start}〜${end}${state.photos.length>0?`\n写真：${state.photos.length}枚`:''}`;
+  document.getElementById('successOverlay').classList.add('show');
+
+  state.selectedSites = []; state.selectedMaterials = []; state.photos = [];
+  document.getElementById('memo').value = '';
+  renderChips(); renderPhotos();
+  await loadHistory();
+}
+
+function closeSuccess() {
+  document.getElementById('successOverlay').classList.remove('show');
+  switchTab('history');
+}
+
+// ===== HISTORY =====
+function renderHistory(data) {
+  if (!data.length) {
+    document.getElementById('historyList').innerHTML = '<div class="empty-msg">日報がまだありません</div>';
+    return;
+  }
+  document.getElementById('historyList').innerHTML = data.map((r,i) => {
+    const siteNames = (r.site_ids||[]).map(id => state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('・');
+    const matNames = (r.material_ids||[]).map(id => state.materials.find(m=>m.id===id)?.name||'').filter(Boolean).join('・');
+    return `<div class="report-item" onclick="showDetail(${i})" data-idx="${i}">
+      <div class="report-item-header">
+        <div class="report-item-date">${r.report_date}</div>
+        <div class="status-pill ${r.status==='confirmed'?'confirmed':'pending'}">${r.status==='confirmed'?'✓ 確認済':'⏳ 確認待'}</div>
+      </div>
+      <div class="report-sites"><span class="report-site-tag">${siteNames||'現場なし'}</span></div>
+      <div class="report-meta">🧱 ${matNames||'-'} ｜ ⏱ ${r.start_time}〜${r.end_time}${r.photo_count>0?` ｜ 📷 ${r.photo_count}枚`:''}</div>
+    </div>`;
+  }).join('');
+  window._historyData = data;
+}
+
+function showDetail(i) {
+  const r = window._historyData[i];
+  const siteNames = (r.site_ids||[]).map(id => state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
+  const matNames = (r.material_ids||[]).map(id => state.materials.find(m=>m.id===id)?.name||'').filter(Boolean).join('、');
+  document.getElementById('detailTitle').textContent = `📋 ${r.report_date} の日報`;
+  document.getElementById('detailBody').innerHTML = `
+    <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames}</span></div>
+    <div class="modal-row"><span class="modal-key">使用材料</span><span class="modal-val">${matNames}</span></div>
+    <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
+    <div class="modal-row"><span class="modal-key">写真</span><span class="modal-val">${r.photo_count>0?r.photo_count+'枚':'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
+  `;
+  document.getElementById('detailModal').classList.add('show');
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('detailModal')) document.getElementById('detailModal').classList.remove('show');
+}
+
+// ===== MASTER =====
+function renderMaster() {
+  document.getElementById('masterSiteList').innerHTML = state.sites.map(s =>
+    `<div class="master-item"><span class="master-item-name">🏗️ ${s.name}</span><button class="master-delete" onclick="deleteSite('${s.id}')">🗑️</button></div>`
+  ).join('');
+  document.getElementById('masterMaterialList').innerHTML = state.materials.map(m =>
+    `<div class="master-item"><span class="master-item-name">🧱 ${m.name}</span><button class="master-delete" onclick="deleteMaterial('${m.id}')">🗑️</button></div>`
+  ).join('');
+}
+
+async function addSite() {
+  const input = document.getElementById('newSiteInput');
+  const val = input.value.trim();
+  if (!val) return;
+  await sb.from('sites').insert({ name: val });
+  input.value = '';
+  await loadSites();
+}
+
+async function deleteSite(id) {
+  if (!confirm('この現場を削除しますか？')) return;
+  await sb.from('sites').update({ is_active: false }).eq('id', id);
+  await loadSites();
+}
+
+async function addMaterial() {
+  const input = document.getElementById('newMaterialInput');
+  const val = input.value.trim();
+  if (!val) return;
+  await sb.from('materials').insert({ name: val });
+  input.value = '';
+  await loadMaterials();
+}
+
+async function deleteMaterial(id) {
+  if (!confirm('この材料を削除しますか？')) return;
+  await sb.from('materials').update({ is_active: false }).eq('id', id);
+  await loadMaterials();
+}
+
+// ===== TAB =====
+function switchTab(name) {
+  document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('content-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// ===== START =====
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -484,6 +484,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       </div>
       <div class="stats-section-title">従業員別</div>
       <div id="sdEmployeeList"></div>
+      <div class="stats-section-title">🚜 配置中の重機</div>
+      <div id="sdMachineList"></div>
       <div class="stats-section-title">使用材料</div>
       <div id="sdMaterialList"></div>
       <div class="stats-section-title">日別一覧</div>
@@ -629,7 +631,7 @@ async function startApp(){
     ['tab-admin','tab-stats','tab-master'].forEach(id=>document.getElementById(id).style.display='');
   }
 
-  await Promise.all([loadSites(),loadMaterials(),loadNotice()]);
+  await Promise.all([loadSites(),loadMaterials(),loadNotice(),loadMachineLocations()]);
   await loadHistory();
   if(state.currentUser.role==='admin')await loadAdminData();
 
@@ -666,10 +668,19 @@ async function loadNotice(){
 }
 
 // ===== SITE CHIPS =====
+function getMachinesAtSite(siteId){
+  return machinesData.filter(m=>{
+    const loc=machineLocations[m.id];
+    return loc&&loc.site_id===siteId;
+  }).map(m=>m.name);
+}
+
 function renderSiteChips(){
-  document.getElementById('siteChips').innerHTML=state.sites.map(s=>
-    `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}</div>`
-  ).join('')||'<div style="color:var(--text3);font-size:13px;">現場が登録されていません</div>';
+  document.getElementById('siteChips').innerHTML=state.sites.map(s=>{
+    const machines=getMachinesAtSite(s.id);
+    const machineTag=machines.length?` <span style="font-size:10px;color:var(--accent2);">🚜${machines.join(',')}</span>`:'';
+    return `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}${machineTag}</div>`;
+  }).join('')||'<div style="color:var(--text3);font-size:13px;">現場が登録されていません</div>';
 }
 function toggleSite(id){
   const idx=state.selectedSites.indexOf(id);
@@ -1098,6 +1109,12 @@ function showSiteDetail(siteId){
       <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(d.days/maxEmp*100)}%"></div></div>
     </div>`).join('');
 
+  // 配置中の重機
+  const siteMachines=getMachinesAtSite(siteId);
+  document.getElementById('sdMachineList').innerHTML=siteMachines.length
+    ?siteMachines.map(name=>`<div class="stats-bar-item" style="display:flex;align-items:center;gap:8px;"><span style="font-size:20px;">🚜</span><span class="stats-bar-name" style="font-size:14px;font-weight:700;">${name}</span></div>`).join('')
+    :'<div class="empty-msg">この現場に重機はありません</div>';
+
   // 材料別
   const matMap={};
   siteReports.forEach(r=>{
@@ -1160,16 +1177,19 @@ let machineLocations={};
 let selectedMachineId=null;
 let selectedMoveSiteId=null;
 
-async function loadMachines(){
+async function loadMachineLocations(){
   const{data:machines}=await sb.from('machines').select('*').eq('is_active',true).order('name');
   machinesData=machines||[];
-
-  // 各重機の最新配置を取得
   machineLocations={};
   for(const m of machinesData){
     const{data}=await sb.from('machine_locations').select('*').eq('machine_id',m.id).order('moved_at',{ascending:false}).limit(1);
     if(data&&data.length>0) machineLocations[m.id]=data[0];
   }
+}
+
+async function loadMachines(){
+  await loadMachineLocations();
+  renderSiteChips();
   renderMachines();
 }
 

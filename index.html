@@ -258,6 +258,16 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
 .modal-close { width: 100%; padding: 13px; background: var(--surface2); color: var(--text); border: none; border-radius: var(--radius); font-size: 14px; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; margin-top: 14px; }
 
 .empty-msg { text-align: center; color: var(--text3); padding: 40px 0; font-size: 14px; }
+
+/* Notice */
+.notice-card {
+  background: #FFF8E7; border: 1.5px solid #F0C040;
+  border-radius: var(--radius); padding: 12px 16px;
+  margin-bottom: 12px; display: none;
+}
+.notice-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.notice-label { font-size: 11px; font-weight: 700; color: #8a6200; letter-spacing: 0.04em; }
+.notice-text { font-size: 13px; color: #5a4000; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -334,6 +344,13 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
 
   <!-- 日報入力 -->
   <div class="content active" id="content-report">
+    <div class="notice-card" id="noticeCard">
+      <div class="notice-header">
+        <span>📢</span>
+        <span class="notice-label">お知らせ</span>
+      </div>
+      <div class="notice-text" id="noticeText"></div>
+    </div>
     <div class="card">
       <div class="card-header">
         <span class="card-icon">🏗️</span>
@@ -552,7 +569,7 @@ async function startApp() {
   const now = new Date();
   document.getElementById('endTime').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  await Promise.all([loadSites(), loadMaterials()]);
+  await Promise.all([loadSites(), loadMaterials(), loadNotice()]);
   await loadHistory();
   if (state.currentUser.role === 'admin') await loadAdminData();
 
@@ -585,6 +602,14 @@ async function loadMaterials() {
   state.materials = data || [];
   renderChips();
   renderMaster();
+}
+
+async function loadNotice() {
+  const { data } = await sb.from('notices').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(1);
+  if (data && data.length > 0) {
+    document.getElementById('noticeText').textContent = data[0].content;
+    document.getElementById('noticeCard').style.display = 'block';
+  }
 }
 
 async function loadHistory() {

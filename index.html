@@ -219,6 +219,21 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .csv-btn:active{background:var(--accent-light);}
 
 .empty-msg{text-align:center;color:var(--text3);padding:40px 0;font-size:14px;}
+
+/* work type selector */
+.wtype-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.wtype-btn{padding:10px 6px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-align:center;transition:all .15s;color:var(--text2);}
+.wtype-btn:active{transform:scale(.97);}
+.wtype-btn.sel-normal{background:var(--accent-light);border-color:var(--accent);color:var(--accent);}
+.wtype-btn.sel-night{background:#EDE9FE;border-color:#7C3AED;color:#7C3AED;}
+.wtype-btn.sel-overtime{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);}
+
+/* edit mode */
+.edit-banner{background:var(--warn-bg);border:1.5px solid var(--warn);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--warn);font-weight:500;display:none;align-items:center;justify-content:space-between;}
+.edit-cancel{background:none;border:1px solid var(--warn);color:var(--warn);border-radius:var(--radius-sm);padding:4px 10px;font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
+
+/* night badge */
+.badge-night{font-size:11px;padding:2px 8px;background:#EDE9FE;color:#7C3AED;border-radius:12px;font-weight:500;}
 </style>
 </head>
 <body>
@@ -288,11 +303,29 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div class="notice-text" id="noticeText"></div>
     </div>
 
+    <!-- 編集モードバナー -->
+    <div class="edit-banner" id="editBanner">
+      <span>✏️ 編集モード</span>
+      <button class="edit-cancel" onclick="cancelEdit()">キャンセル</button>
+    </div>
+
     <!-- 日付 -->
     <div class="card">
       <div class="card-header"><span class="card-icon">📅</span><div><div class="card-title">作業日<span class="required">*</span></div></div></div>
       <div class="card-body">
         <input type="date" class="date-input" id="reportDate">
+      </div>
+    </div>
+
+    <!-- 工事種別 -->
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🔖</span><div><div class="card-title">工事種別<span class="required">*</span></div></div></div>
+      <div class="card-body">
+        <div class="wtype-row">
+          <button class="wtype-btn sel-normal" id="wt-normal" onclick="setWorkType('normal')">🌞 通常</button>
+          <button class="wtype-btn" id="wt-overtime" onclick="setWorkType('overtime')">⏰ 残業</button>
+          <button class="wtype-btn" id="wt-night" onclick="setWorkType('night')">🌙 夜間緊急</button>
+        </div>
       </div>
     </div>
 
@@ -304,7 +337,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 材料＋数量 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">使用材料<span class="required">*</span></div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
+      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">使用材料</div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
       <div class="card-body"><div id="materialRows"></div></div>
     </div>
 
@@ -347,7 +380,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       </div>
     </div>
 
-    <div id="validationMsg" class="validation-msg">現場・使用材料・作業日を入力してください。</div>
+    <div id="validationMsg" class="validation-msg">現場・作業日を入力してください。</div>
     <button class="submit-btn" onclick="submitReport()" id="submitBtn"><span>✓</span> 日報を提出する</button>
     <div style="height:24px;"></div>
   </div>
@@ -627,12 +660,54 @@ function renderPhotos(){
 }
 function removePhoto(i){state.photos.splice(i,1);renderPhotos();}
 
+// ===== WORK TYPE =====
+let currentWorkType='normal';
+function setWorkType(type){
+  currentWorkType=type;
+  ['normal','overtime','night'].forEach(t=>{
+    const btn=document.getElementById('wt-'+t);
+    btn.className='wtype-btn'+(type===t?' sel-'+t:'');
+  });
+}
+
+// ===== EDIT MODE =====
+let editingReportId=null;
+function startEdit(i){
+  const r=window._historyData[i];
+  editingReportId=r.id;
+  // フォームに値をセット
+  document.getElementById('reportDate').value=r.report_date;
+  document.getElementById('startTime').value=r.start_time;
+  document.getElementById('endTime').value=r.end_time;
+  document.getElementById('memo').value=r.memo||'';
+  state.selectedSites=r.site_ids||[];
+  state.materialQty={};
+  (r.material_ids||[]).forEach(id=>{state.materialQty[id]=(r.material_quantities||{})[id]||1;});
+  setWorkType(r.work_type||'normal');
+  renderSiteChips();renderMaterialRows();updateTimeSummary();
+  // 編集バナー表示
+  document.getElementById('editBanner').style.display='flex';
+  document.getElementById('submitBtn').innerHTML='<span>✓</span> 修正を保存する';
+  switchTab('report');
+  window.scrollTo(0,0);
+}
+function cancelEdit(){
+  editingReportId=null;
+  state.selectedSites=[];state.materialQty={};
+  document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('memo').value='';
+  document.getElementById('editBanner').style.display='none';
+  document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
+  setWorkType('normal');
+  renderSiteChips();renderMaterialRows();
+}
+
 // ===== SUBMIT =====
 async function submitReport(){
   const msg=document.getElementById('validationMsg');
   const date=document.getElementById('reportDate').value;
   const matIds=Object.keys(state.materialQty);
-  if(!state.selectedSites.length||!matIds.length||!date){msg.style.display='block';return;}
+  if(!state.selectedSites.length||!date){msg.style.display='block';return;}
   msg.style.display='none';
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.innerHTML='<span>⏳</span> 送信中...';
@@ -641,33 +716,49 @@ async function submitReport(){
   const end=document.getElementById('endTime').value;
   const{normal,overtime}=calcTime(start,end);
 
-  const{error}=await sb.from('reports').insert({
+  const payload={
     employee_id:state.currentUser.id,
     report_date:date,
     site_ids:state.selectedSites,
     material_ids:matIds,
     material_quantities:state.materialQty,
     start_time:start,end_time:end,
-    normal_mins:normal,
-    overtime_mins:overtime,
+    normal_mins:normal,overtime_mins:overtime,
+    work_type:currentWorkType,
     memo:document.getElementById('memo').value,
     photo_count:state.photos.length
-  });
+  };
 
-  btn.disabled=false;btn.innerHTML='<span>✓</span> 日報を提出する';
-  if(error){
-    alert(error.code==='23505'?'この日の日報はすでに提出済みです。':'送信に失敗しました。もう一度お試しください。');
-    return;
+  let error;
+  if(editingReportId){
+    // 更新
+    const res=await sb.from('reports').update(payload).eq('id',editingReportId);
+    error=res.error;
+  }else{
+    // 新規
+    const res=await sb.from('reports').insert(payload);
+    error=res.error;
   }
 
+  btn.disabled=false;
+  btn.innerHTML=editingReportId?'<span>✓</span> 修正を保存する':'<span>✓</span> 日報を提出する';
+
+  if(error){alert('送信に失敗しました。もう一度お試しください。');return;}
+
   const siteNames=state.selectedSites.map(id=>state.sites.find(s=>s.id===id)?.name).join('・');
-  const matStr=matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・');
-  document.getElementById('successDetail').textContent=`${date}\n${siteNames}\n${matStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
+  const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'材料なし';
+  const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
+  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
   document.getElementById('successOverlay').classList.add('show');
 
+  // リセット
+  editingReportId=null;
   state.selectedSites=[];state.materialQty={};state.photos=[];
   document.getElementById('memo').value='';
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('editBanner').style.display='none';
+  document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
+  setWorkType('normal');
   renderSiteChips();renderMaterialRows();renderPhotos();
   await loadHistory();
 }
@@ -685,18 +776,24 @@ function renderHistory(data){
     const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('・');
     const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);const q=(r.material_quantities||{})[id]||1;return `${m?.name}×${q}`;}).filter(n=>!n.startsWith('undefined')).join('・');
     const nm=r.normal_mins||0,ot=r.overtime_mins||0;
-    return `<div class="report-item" onclick="showDetail(${i})">
-      <div class="report-item-header">
-        <div class="report-item-date">${r.report_date}</div>
+    const wtLabel=r.work_type==='night'?'🌙 夜間緊急':r.work_type==='overtime'?'⏰ 残業':'🌞 通常';
+    const wtClass=r.work_type==='night'?'badge-night':r.work_type==='overtime'?'badge-ot':'badge-normal';
+    return `<div class="report-item">
+      <div class="report-item-header" onclick="showDetail(${i})">
+        <div class="report-item-date">${r.report_date} <span style="font-size:11px;font-weight:400;color:var(--text3);">${r.start_time}〜${r.end_time}</span></div>
         <div class="status-pill ${r.status==='confirmed'?'confirmed':'pending'}">${r.status==='confirmed'?'✓ 確認済':'⏳ 確認待'}</div>
       </div>
-      <div class="report-sites"><span class="report-site-tag">${siteNames||'現場なし'}</span></div>
-      <div class="report-meta">🧱 ${matNames||'-'} ｜ ${r.start_time}〜${r.end_time}</div>
-      <div class="report-time-badges">
-        <span class="badge-normal">通常 ${fmtMins(nm)}</span>
-        ${ot>0?`<span class="badge-ot">残業 ${fmtMins(ot)}</span>`:''}
-        ${r.photo_count>0?`<span class="badge-normal">📷 ${r.photo_count}枚</span>`:''}
+      <div onclick="showDetail(${i})">
+        <div class="report-sites"><span class="report-site-tag">${siteNames||'現場なし'}</span></div>
+        <div class="report-meta">🧱 ${matNames||'材料なし'}</div>
+        <div class="report-time-badges">
+          <span class="${wtClass}">${wtLabel}</span>
+          <span class="badge-normal">通常 ${fmtMins(nm)}</span>
+          ${ot>0?`<span class="badge-ot">残業 ${fmtMins(ot)}</span>`:''}
+          ${r.photo_count>0?`<span class="badge-normal">📷 ${r.photo_count}枚</span>`:''}
+        </div>
       </div>
+      ${r.status!=='confirmed'?`<button onclick="startEdit(${i})" style="width:100%;margin-top:10px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text2);">✏️ 修正する</button>`:''}
     </div>`;
   }).join('');
 }
@@ -705,10 +802,12 @@ function showDetail(i){
   const r=window._historyData[i];
   const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
   const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);const q=(r.material_quantities||{})[id]||1;return `${m?.name}×${q}`;}).join('、');
+  const wtLabel=r.work_type==='night'?'🌙 夜間緊急':r.work_type==='overtime'?'⏰ 残業':'🌞 通常';
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
-    <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames}</span></div>
-    <div class="modal-row"><span class="modal-key">使用材料</span><span class="modal-val">${matNames}</span></div>
+    <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
+    <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">使用材料</span><span class="modal-val">${matNames||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>

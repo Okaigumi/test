@@ -240,6 +240,15 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 /* site info */
 .site-master-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px;cursor:pointer;transition:border-color .2s;}
+
+/* site info panel in report form */
+.site-info-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-top:8px;margin-bottom:4px;border-left:3px solid var(--accent);animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.site-info-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.site-info-row{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--text2);padding:3px 0;}
+.site-info-row .si-icon{flex-shrink:0;font-size:13px;}
+.site-info-row .si-label{color:var(--text3);min-width:42px;flex-shrink:0;}
+.site-info-row .si-val{color:var(--text);font-weight:500;}
 .site-master-card:active{border-color:var(--accent);}
 .site-master-header{display:flex;align-items:center;justify-content:space-between;}
 .site-period{font-size:11px;color:var(--text3);margin-top:3px;font-family:'DM Mono',monospace;}
@@ -359,8 +368,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 現場 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🏗️</span><div><div class="card-title">現場<span class="required">*</span></div><div class="card-subtitle">複数選択可</div></div></div>
-      <div class="card-body"><div class="chips" id="siteChips"></div></div>
+      <div class="card-header"><span class="card-icon">🏗️</span><div><div class="card-title">現場<span class="required">*</span></div><div class="card-subtitle">複数選択可・タップで詳細表示</div></div></div>
+      <div class="card-body">
+        <div class="chips" id="siteChips"></div>
+        <div id="siteInfoPanel"></div>
+      </div>
     </div>
 
     <!-- 材料＋数量 -->
@@ -714,15 +726,39 @@ function getMachinesAtSite(siteId){
 
 function renderSiteChips(){
   document.getElementById('siteChips').innerHTML=state.sites.map(s=>{
-    const machines=getMachinesAtSite(s.id);
-    const machineTag=machines.length?`<span style="font-size:10px;color:var(--accent2);">🚜${machines.join(',')}</span>`:'';
-    const members=getAssignedNames(s.id);
-    const memberTag=members.length?`<span style="font-size:10px;color:var(--text3);">👷${members.length}名</span>`:'';
-    const daysLeft=s.end_date?Math.ceil((new Date(s.end_date)-new Date())/(1000*60*60*24)):null;
-    const daysTag=daysLeft!=null?(daysLeft>0?`<span style="font-size:10px;color:var(--accent);">残${daysLeft}日</span>`:`<span style="font-size:10px;color:var(--danger);">超過</span>`):'';
-    const info=[machineTag,memberTag,daysTag].filter(Boolean).join(' ');
-    return `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}${info?' '+info:''}</div>`;
+    return `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}</div>`;
   }).join('')||'<div style="color:var(--text3);font-size:13px;">現場が登録されていません</div>';
+  renderSiteInfoPanel();
+}
+
+function renderSiteInfoPanel(){
+  const panel=document.getElementById('siteInfoPanel');
+  if(!state.selectedSites.length){panel.innerHTML='';return;}
+
+  panel.innerHTML=state.selectedSites.map(siteId=>{
+    const s=state.sites.find(s=>s.id===siteId);
+    if(!s)return '';
+
+    // 工期
+    const period=(s.start_date&&s.end_date)?`${s.start_date} 〜 ${s.end_date}`:(s.start_date?`${s.start_date} 〜`:'未設定');
+    const daysLeft=s.end_date?Math.ceil((new Date(s.end_date)-new Date())/(1000*60*60*24)):null;
+    const daysStr=daysLeft!=null?(daysLeft>0?`（残${daysLeft}日）`:`（⚠️ 工期超過）`):'';
+
+    // 重機
+    const machines=getMachinesAtSite(siteId);
+    const machineStr=machines.length?machines.map(n=>`🚜${n}`).join('　'):'なし';
+
+    // 配属従業員
+    const members=getAssignedNames(siteId);
+    const memberStr=members.length?members.map(n=>`👷${n}`).join('　'):'なし';
+
+    return `<div class="site-info-box">
+      <div class="site-info-title">🏗️ ${s.name}</div>
+      <div class="site-info-row"><span class="si-icon">📅</span><span class="si-label">工期</span><span class="si-val">${period} ${daysStr}</span></div>
+      <div class="site-info-row"><span class="si-icon">🚜</span><span class="si-label">重機</span><span class="si-val">${machineStr}</span></div>
+      <div class="site-info-row"><span class="si-icon">👷</span><span class="si-label">作業員</span><span class="si-val">${memberStr}</span></div>
+    </div>`;
+  }).join('');
 }
 function toggleSite(id){
   const idx=state.selectedSites.indexOf(id);

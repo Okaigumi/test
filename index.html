@@ -243,6 +243,15 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 /* site info panel in report form */
 .site-info-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-top:8px;margin-bottom:4px;border-left:3px solid var(--accent);animation:fadeIn .2s ease;}
+
+/* transfer row */
+.transfer-item{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;position:relative;}
+.transfer-remove{position:absolute;top:8px;right:8px;background:none;border:none;font-size:14px;color:var(--text3);cursor:pointer;}
+.transfer-remove:hover{color:var(--danger);}
+.transfer-label{font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:500;}
+.transfer-select{width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:'Noto Sans JP',sans-serif;background:var(--surface);color:var(--text);-webkit-appearance:none;margin-bottom:8px;}
+.transfer-select:focus{outline:none;border-color:var(--accent);}
+.transfer-arrow{text-align:center;font-size:16px;color:var(--text3);padding:2px 0;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .site-info-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
 .site-info-row{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--text2);padding:3px 0;}
@@ -379,6 +388,15 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div class="card">
       <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">使用材料</div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
       <div class="card-body"><div id="materialRows"></div></div>
+    </div>
+
+    <!-- 重機回送 -->
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🚛</span><div><div class="card-title">重機回送</div><div class="card-subtitle">任意・回送した重機を記録</div></div></div>
+      <div class="card-body">
+        <div id="transferList"></div>
+        <button onclick="addTransfer()" style="width:100%;padding:10px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text2);margin-top:6px;">＋ 回送を追加</button>
+      </div>
     </div>
 
     <!-- 作業時間 -->
@@ -801,6 +819,71 @@ function changeQty(id,delta){
   document.getElementById('qtynum-'+id).textContent=state.materialQty[id];
 }
 
+// ===== MACHINE TRANSFERS =====
+let transfers=[];
+
+function addTransfer(){
+  transfers.push({machine_id:'',from_site_id:'',to_site_id:''});
+  renderTransfers();
+}
+
+function removeTransfer(i){
+  transfers.splice(i,1);
+  renderTransfers();
+}
+
+function updateTransfer(i,field,val){
+  transfers[i][field]=val;
+}
+
+function renderTransfers(){
+  const el=document.getElementById('transferList');
+  if(!transfers.length){el.innerHTML='';return;}
+
+  const yardOpt='<option value="yard">🏠 ヤード</option>';
+  const siteOpts=state.sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const machineOpts=machinesData.map(m=>`<option value="${m.id}">🚜 ${m.name}</option>`).join('');
+
+  el.innerHTML=transfers.map((t,i)=>{
+    // 重機の現在地を取得
+    const currentLoc=t.machine_id?machineLocations[t.machine_id]:null;
+    const currentSite=currentLoc?.site_id?state.sites.find(s=>s.id===currentLoc.site_id)?.name:'ヤード';
+    const locInfo=t.machine_id?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">現在地：${currentSite||'ヤード'}</div>`:'';
+
+    return `<div class="transfer-item">
+      <button class="transfer-remove" onclick="removeTransfer(${i})">✕</button>
+      <div class="transfer-label">重機</div>
+      <select class="transfer-select" onchange="updateTransfer(${i},'machine_id',this.value);renderTransfers()">
+        <option value="">選択してください</option>
+        ${machineOpts}
+      </select>
+      ${locInfo}
+      <div class="transfer-label">回送元</div>
+      <select class="transfer-select" onchange="updateTransfer(${i},'from_site_id',this.value)">
+        <option value="">選択してください</option>
+        ${yardOpt}${siteOpts}
+      </select>
+      <div class="transfer-arrow">↓</div>
+      <div class="transfer-label">回送先</div>
+      <select class="transfer-select" onchange="updateTransfer(${i},'to_site_id',this.value)">
+        <option value="">選択してください</option>
+        ${yardOpt}${siteOpts}
+      </select>
+    </div>`;
+  }).join('');
+
+  // 選択状態を復元
+  const selects=el.querySelectorAll('.transfer-item');
+  transfers.forEach((t,i)=>{
+    const sels=selects[i]?.querySelectorAll('select');
+    if(sels){
+      if(t.machine_id) sels[0].value=t.machine_id;
+      if(t.from_site_id) sels[1].value=t.from_site_id;
+      if(t.to_site_id) sels[2].value=t.to_site_id;
+    }
+  });
+}
+
 // ===== PHOTOS (resize + compress + Supabase Storage) =====
 const MAX_W=1280, MAX_H=720, JPEG_Q=0.7;
 
@@ -884,8 +967,9 @@ function startEdit(i){
   (r.material_ids||[]).forEach(id=>{state.materialQty[id]=(r.material_quantities||{})[id]||1;});
   // 既存写真を読み込み
   state.photos=(r.photo_urls||[]).map(url=>({blob:null,preview:null,url}));
+  transfers=(r.machine_transfers||[]).map(t=>({...t}));
   setWorkType(r.work_type||'normal');
-  renderSiteChips();renderMaterialRows();renderPhotos();updateTimeSummary();
+  renderSiteChips();renderMaterialRows();renderPhotos();renderTransfers();updateTimeSummary();
   document.getElementById('editBanner').style.display='flex';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 修正を保存する';
   switchTab('report');
@@ -893,7 +977,7 @@ function startEdit(i){
 }
 function cancelEdit(){
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};
+  state.selectedSites=[];state.materialQty={};transfers=[];
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('memo').value='';
   document.getElementById('editBanner').style.display='none';
@@ -916,6 +1000,9 @@ async function submitReport(){
   const end=document.getElementById('endTime').value;
   const{normal,overtime}=calcTime(start,end);
 
+  // 有効な回送データのみ
+  const validTransfers=transfers.filter(t=>t.machine_id&&t.to_site_id);
+
   const payload={
     employee_id:state.currentUser.id,
     report_date:date,
@@ -927,7 +1014,8 @@ async function submitReport(){
     work_type:currentWorkType,
     memo:document.getElementById('memo').value,
     photo_count:state.photos.length,
-    photo_urls:[]
+    photo_urls:[],
+    machine_transfers:validTransfers
   };
 
   let error, reportId=editingReportId;
@@ -946,6 +1034,16 @@ async function submitReport(){
     alert('送信に失敗しました。もう一度お試しください。');return;
   }
 
+  // 重機の配置を自動更新
+  for(const t of validTransfers){
+    await sb.from('machine_locations').insert({
+      machine_id:t.machine_id,
+      site_id:t.to_site_id==='yard'?null:t.to_site_id,
+      moved_by:state.currentUser.id,
+      memo:'日報から回送記録'
+    });
+  }
+
   // 写真アップロード
   if(state.photos.length>0&&reportId){
     btn.innerHTML='<span>⏳</span> 写真アップロード中...';
@@ -959,18 +1057,20 @@ async function submitReport(){
   const siteNames=state.selectedSites.map(id=>state.sites.find(s=>s.id===id)?.name).join('・');
   const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'材料なし';
   const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
-  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
+  const transferStr=validTransfers.length?'\n🚛 回送：'+validTransfers.map(t=>{const m=machinesData.find(m=>m.id===t.machine_id)?.name;const to=t.to_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.to_site_id)?.name;return `${m}→${to}`;}).join('、'):'';
+  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}${transferStr}`;
   document.getElementById('successOverlay').classList.add('show');
 
   // リセット
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};state.photos=[];
+  state.selectedSites=[];state.materialQty={};state.photos=[];transfers=[];
   document.getElementById('memo').value='';
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('editBanner').style.display='none';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
   setWorkType('normal');
-  renderSiteChips();renderMaterialRows();renderPhotos();
+  renderSiteChips();renderMaterialRows();renderPhotos();renderTransfers();
+  await loadMachineLocations();renderSiteChips();
   await loadHistory();
 }
 function closeSuccess(){document.getElementById('successOverlay').classList.remove('show');switchTab('history');}
@@ -1017,6 +1117,14 @@ function showDetail(i){
   const photoHtml=(r.photo_urls&&r.photo_urls.length>0)
     ?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">${r.photo_urls.map((url,j)=>`<a href="${url}" target="_blank" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);"><img src="${url}" alt="写真${j+1}" style="width:100%;display:block;"></a>`).join('')}</div>`
     :'なし';
+  const transferHtml=(r.machine_transfers&&r.machine_transfers.length>0)
+    ?r.machine_transfers.map(t=>{
+      const mName=machinesData.find(m=>m.id===t.machine_id)?.name||'不明';
+      const fromName=t.from_site_id?(t.from_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.from_site_id)?.name||'不明'):'−';
+      const toName=t.to_site_id?(t.to_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.to_site_id)?.name||'不明'):'−';
+      return `🚜${mName}：${fromName} → ${toName}`;
+    }).join('<br>')
+    :'なし';
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
     <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
@@ -1025,6 +1133,7 @@ function showDetail(i){
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>
+    <div class="modal-row"><span class="modal-key">🚛 回送</span><span class="modal-val">${transferHtml}</span></div>
     <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
     <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>

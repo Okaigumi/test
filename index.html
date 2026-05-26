@@ -883,25 +883,82 @@ function renderSubMachinePanel(){
   if(!panel)return;
   if(!state.selectedSubs.length){panel.innerHTML='';return;}
 
+  const yardOpt='<option value="yard">🏠 ヤード</option>';
+  const siteOpts=state.sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+
   panel.innerHTML=state.selectedSubs.map(subId=>{
     const sub=state.subcontractors.find(s=>s.id===subId);
-    const selected=state.subMachines[subId]||[];
+    const entries=state.subMachines[subId]||[];
     return `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;border-left:3px solid var(--accent2);">
-      <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:6px;">🚛 ${sub?.name} — 回送する重機</div>
-      <div class="chips">${machinesData.map(m=>
-        `<div class="chip ${selected.includes(m.id)?'selected':''}" onclick="toggleSubMachine('${subId}','${m.id}')" style="font-size:11px;padding:5px 9px;">${m.name}</div>`
-      ).join('')}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:6px;">🚛 ${sub?.name}</div>
+      <div id="subEntries-${subId}">
+        ${entries.map((e,i)=>{
+          const currentLoc=e.machine_id?machineLocations[e.machine_id]:null;
+          const curSite=currentLoc?.site_id?state.sites.find(s=>s.id===currentLoc.site_id)?.name:'ヤード';
+          const locHint=e.machine_id?`<div style="font-size:10px;color:var(--text3);margin:2px 0;">現在地：${curSite||'ヤード'}</div>`:'';
+          return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px;position:relative;">
+            <button onclick="removeSubEntry('${subId}',${i})" style="position:absolute;top:6px;right:8px;background:none;border:none;font-size:14px;color:var(--text3);cursor:pointer;">✕</button>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">重機</div>
+            <select class="transfer-select" onchange="updateSubEntry('${subId}',${i},'machine_id',this.value)" style="margin-bottom:4px;">
+              <option value="">選択</option>
+              ${machinesData.map(m=>`<option value="${m.id}" ${e.machine_id===m.id?'selected':''}>🚜 ${m.name}</option>`).join('')}
+            </select>
+            ${locHint}
+            <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:center;">
+              <div>
+                <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">発</div>
+                <select class="transfer-select" onchange="updateSubEntry('${subId}',${i},'from_site',this.value)" style="margin:0;font-size:11px;padding:6px;">
+                  <option value="">選択</option>${yardOpt}${siteOpts}
+                </select>
+              </div>
+              <div style="font-size:14px;color:var(--text3);padding-top:14px;">→</div>
+              <div>
+                <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">着</div>
+                <select class="transfer-select" onchange="updateSubEntry('${subId}',${i},'to_site',this.value)" style="margin:0;font-size:11px;padding:6px;">
+                  <option value="">選択</option>${yardOpt}${siteOpts}
+                </select>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button onclick="addSubEntry('${subId}')" style="width:100%;padding:7px;background:none;border:1.5px dashed var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text3);">＋ 重機を追加</button>
     </div>`;
   }).join('');
+
+  // 選択状態を復元
+  state.selectedSubs.forEach(subId=>{
+    const entries=state.subMachines[subId]||[];
+    const container=document.getElementById('subEntries-'+subId);
+    if(!container)return;
+    const cards=container.children;
+    entries.forEach((e,i)=>{
+      if(!cards[i])return;
+      const sels=cards[i].querySelectorAll('select');
+      if(sels[1]&&e.from_site) sels[1].value=e.from_site;
+      if(sels[2]&&e.to_site) sels[2].value=e.to_site;
+    });
+  });
 }
 
-function toggleSubMachine(subId,machineId){
+function addSubEntry(subId){
   if(!state.subMachines[subId]) state.subMachines[subId]=[];
-  const arr=state.subMachines[subId];
-  const idx=arr.indexOf(machineId);
-  idx>=0?arr.splice(idx,1):arr.push(machineId);
+  state.subMachines[subId].push({machine_id:'',from_site:'',to_site:''});
   renderSubMachinePanel();
 }
+
+function removeSubEntry(subId,idx){
+  state.subMachines[subId].splice(idx,1);
+  renderSubMachinePanel();
+}
+
+function updateSubEntry(subId,idx,field,val){
+  if(!state.subMachines[subId]||!state.subMachines[subId][idx])return;
+  state.subMachines[subId][idx][field]=val;
+  if(field==='machine_id') renderSubMachinePanel();
+}
+
+function toggleSubMachine(){}
 
 // ===== SITE CHIPS =====
 function getMachinesAtSite(siteId){
@@ -953,39 +1010,20 @@ function toggleSite(id){
   renderSiteChips();
 }
 
-// ===== MATERIAL ROWS WITH QTY =====
+// ===== MATERIAL (外注) CHIPS =====
 function renderMaterialRows(){
-  document.getElementById('materialRows').innerHTML='<div class="mat-grid">'+state.materials.map(m=>{
-    const sel=!!state.materialQty[m.id];
-    const qty=state.materialQty[m.id]||1;
-    return `<div class="mat-row" id="matrow-${m.id}">
-      <button class="mat-chip ${sel?'selected':''}" onclick="toggleMat('${m.id}')">${m.name}</button>
-      <div class="qty-box ${sel?'show':''}" id="qty-${m.id}">
-        <button class="qty-btn" onclick="changeQty('${m.id}',-1)">−</button>
-        <div class="qty-num" id="qtynum-${m.id}">${qty}</div>
-        <button class="qty-btn" onclick="changeQty('${m.id}',1)">＋</button>
-      </div>
-    </div>`;
-  }).join('')+'</div>'||'<div style="color:var(--text3);font-size:13px;">外注が登録されていません</div>';
+  document.getElementById('materialRows').innerHTML='<div class="chips">'+state.materials.map(m=>
+    `<div class="chip ${state.materialQty[m.id]?'selected':''}" onclick="toggleMat('${m.id}')" style="font-size:12px;padding:5px 10px;">${m.name}</div>`
+  ).join('')+'</div>'||'<div style="color:var(--text3);font-size:13px;">外注が登録されていません</div>';
 }
 
 function toggleMat(id){
   if(state.materialQty[id]){
     delete state.materialQty[id];
-    document.querySelector(`#matrow-${id} .mat-chip`).classList.remove('selected');
-    document.getElementById('qty-'+id).classList.remove('show');
   }else{
     state.materialQty[id]=1;
-    document.querySelector(`#matrow-${id} .mat-chip`).classList.add('selected');
-    document.getElementById('qty-'+id).classList.add('show');
-    document.getElementById('qtynum-'+id).textContent=1;
   }
-}
-
-function changeQty(id,delta){
-  if(!state.materialQty[id])return;
-  state.materialQty[id]=Math.max(1,state.materialQty[id]+delta);
-  document.getElementById('qtynum-'+id).textContent=state.materialQty[id];
+  renderMaterialRows();
 }
 
 // ===== MACHINE TRANSFERS =====
@@ -1216,9 +1254,16 @@ async function submitReport(){
   const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'外注なし';
   const subStr=state.selectedSubs.length?'\n🚛 回送：'+state.selectedSubs.map(subId=>{
     const subName=state.subcontractors.find(s=>s.id===subId)?.name;
-    const mNames=(state.subMachines[subId]||[]).map(mid=>machinesData.find(m=>m.id===mid)?.name).filter(Boolean).join(',');
-    return `${subName}(${mNames||'重機未選択'})`;
-  }).join('・'):'';
+    const entries=state.subMachines[subId]||[];
+    if(!entries.length) return subName;
+    const details=entries.map(e=>{
+      const mName=machinesData.find(m=>m.id===e.machine_id)?.name||'?';
+      const fromName=e.from_site?(e.from_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.from_site)?.name||'?'):'?';
+      const toName=e.to_site?(e.to_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.to_site)?.name||'?'):'?';
+      return `${mName}(${fromName}→${toName})`;
+    }).join(', ');
+    return `${subName}: ${details}`;
+  }).join('\n'):'';
   const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
   document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}${subStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
   document.getElementById('successOverlay').classList.add('show');
@@ -1280,8 +1325,15 @@ function showDetail(i){
     :'なし';
   const subInfo=(r.subcontractor_ids||[]).map(subId=>{
     const subName=state.subcontractors.find(s=>s.id===subId)?.name||'';
-    const mNames=((r.sub_machines||{})[subId]||[]).map(mid=>machinesData.find(m=>m.id===mid)?.name).filter(Boolean).join(', ');
-    return `${subName}${mNames?' → 🚜'+mNames:''}`;
+    const entries=(r.sub_machines||{})[subId]||[];
+    if(!entries.length) return subName;
+    const details=entries.map(e=>{
+      const mName=machinesData.find(m=>m.id===e.machine_id)?.name||'?';
+      const fromName=e.from_site?(e.from_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.from_site)?.name||'?'):'?';
+      const toName=e.to_site?(e.to_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.to_site)?.name||'?'):'?';
+      return `🚜${mName} ${fromName}→${toName}`;
+    }).join('<br>');
+    return `${subName}<br>${details}`;
   }).filter(Boolean).join('<br>')||'なし';
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`

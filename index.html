@@ -384,19 +384,16 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       </div>
     </div>
 
-    <!-- 材料＋数量 -->
+    <!-- 外注 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">使用材料</div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
+      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">外注</div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
       <div class="card-body"><div id="materialRows"></div></div>
     </div>
 
-    <!-- 重機回送 -->
+    <!-- 外注先 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🚛</span><div><div class="card-title">重機回送</div><div class="card-subtitle">任意・回送した重機を記録</div></div></div>
-      <div class="card-body">
-        <div id="transferList"></div>
-        <button onclick="addTransfer()" style="width:100%;padding:10px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text2);margin-top:6px;">＋ 回送を追加</button>
-      </div>
+      <div class="card-header"><span class="card-icon">🏢</span><div><div class="card-title">外注先</div><div class="card-subtitle">複数選択可</div></div></div>
+      <div class="card-body"><div class="chips" id="subChips"></div></div>
     </div>
 
     <!-- 作業時間 -->
@@ -509,7 +506,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div id="statsEmployeeList"><div class="empty-msg">読み込み中...</div></div>
     <div class="stats-section-title">現場別 稼働日数</div>
     <div id="statsSiteList"><div class="empty-msg">読み込み中...</div></div>
-    <div class="stats-section-title">材料 使用数量</div>
+    <div class="stats-section-title">外注 使用数量</div>
     <div id="statsMaterialList"><div class="empty-msg">読み込み中...</div></div>
     <button class="csv-btn" onclick="exportCSV()">📥 CSVダウンロード</button>
     <div style="height:24px;"></div>
@@ -531,7 +528,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div id="sdEmployeeList"></div>
       <div class="stats-section-title">🚜 配置中の重機</div>
       <div id="sdMachineList"></div>
-      <div class="stats-section-title">使用材料</div>
+      <div class="stats-section-title">外注</div>
       <div id="sdMaterialList"></div>
       <div class="stats-section-title">日別一覧</div>
       <div id="sdDayList"></div>
@@ -552,11 +549,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">材料マスタ</div></div></div>
+      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">外注マスタ</div></div></div>
       <div class="card-body">
         <div class="master-list" id="masterMaterialList"></div>
         <div class="master-add-row">
-          <input class="master-add-input" id="newMaterialInput" placeholder="材料名を入力" type="text">
+          <input class="master-add-input" id="newMaterialInput" placeholder="外注名を入力" type="text">
           <button class="master-add-btn" onclick="addMaterial()">追加</button>
         </div>
       </div>
@@ -617,7 +614,7 @@ const NORMAL_END=17*60;    // 17:00
 const BREAK_MINS=120;      // 休憩2時間
 const NORMAL_WORK=NORMAL_END-NORMAL_START-BREAK_MINS; // 420分=7h
 
-let state={currentUser:null,sites:[],materials:[],selectedSites:[],materialQty:{},photos:[],pin:''};
+let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSites:[],selectedSubs:[],materialQty:{},photos:[],pin:''};
 
 // ===== 時間計算 =====
 function toMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -698,7 +695,7 @@ async function startApp(){
     ['tab-admin','tab-stats','tab-master'].forEach(id=>document.getElementById(id).style.display='');
   }
 
-  await Promise.all([loadSites(),loadMaterials(),loadNotice(),loadMachineLocations(),loadAllEmployees(),loadSiteAssignments()]);
+  await Promise.all([loadSites(),loadMaterials(),loadNotice(),loadMachineLocations(),loadAllEmployees(),loadSiteAssignments(),loadSubcontractors()]);
   await loadHistory();
   if(state.currentUser.role==='admin')await loadAdminData();
 
@@ -732,6 +729,26 @@ async function loadNotice(){
     document.getElementById('noticeText').innerHTML=data.map(n=>`<div style="padding:4px 0;border-bottom:1px solid #e8d88a;">${n.content}</div>`).join('').replace(/border-bottom:[^"]+(?="[^>]*><\/div>$)/,'');
     document.getElementById('noticeCard').style.display='block';
   }
+}
+
+async function loadSubcontractors(){
+  const{data}=await sb.from('subcontractors').select('*').eq('is_active',true).order('name');
+  state.subcontractors=data||[];
+  renderSubChips();
+}
+
+function renderSubChips(){
+  const el=document.getElementById('subChips');
+  if(!el)return;
+  el.innerHTML=state.subcontractors.map(s=>
+    `<div class="chip ${state.selectedSubs.includes(s.id)?'selected':''}" onclick="toggleSub('${s.id}')">${s.name}</div>`
+  ).join('')||'<div style="color:var(--text3);font-size:13px;">外注先が登録されていません</div>';
+}
+
+function toggleSub(id){
+  const idx=state.selectedSubs.indexOf(id);
+  idx>=0?state.selectedSubs.splice(idx,1):state.selectedSubs.push(id);
+  renderSubChips();
 }
 
 // ===== SITE CHIPS =====
@@ -967,9 +984,9 @@ function startEdit(i){
   (r.material_ids||[]).forEach(id=>{state.materialQty[id]=(r.material_quantities||{})[id]||1;});
   // 既存写真を読み込み
   state.photos=(r.photo_urls||[]).map(url=>({blob:null,preview:null,url}));
-  transfers=(r.machine_transfers||[]).map(t=>({...t}));
+  state.selectedSubs=r.subcontractor_ids||[];
   setWorkType(r.work_type||'normal');
-  renderSiteChips();renderMaterialRows();renderPhotos();renderTransfers();updateTimeSummary();
+  renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();updateTimeSummary();
   document.getElementById('editBanner').style.display='flex';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 修正を保存する';
   switchTab('report');
@@ -977,7 +994,7 @@ function startEdit(i){
 }
 function cancelEdit(){
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};transfers=[];
+  state.selectedSites=[];state.materialQty={};state.selectedSubs=[];
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('memo').value='';
   document.getElementById('editBanner').style.display='none';
@@ -1000,22 +1017,19 @@ async function submitReport(){
   const end=document.getElementById('endTime').value;
   const{normal,overtime}=calcTime(start,end);
 
-  // 有効な回送データのみ
-  const validTransfers=transfers.filter(t=>t.machine_id&&t.to_site_id);
-
   const payload={
     employee_id:state.currentUser.id,
     report_date:date,
     site_ids:state.selectedSites,
     material_ids:matIds,
     material_quantities:state.materialQty,
+    subcontractor_ids:state.selectedSubs,
     start_time:start,end_time:end,
     normal_mins:normal,overtime_mins:overtime,
     work_type:currentWorkType,
     memo:document.getElementById('memo').value,
     photo_count:state.photos.length,
-    photo_urls:[],
-    machine_transfers:validTransfers
+    photo_urls:[]
   };
 
   let error, reportId=editingReportId;
@@ -1034,16 +1048,6 @@ async function submitReport(){
     alert('送信に失敗しました。もう一度お試しください。');return;
   }
 
-  // 重機の配置を自動更新
-  for(const t of validTransfers){
-    await sb.from('machine_locations').insert({
-      machine_id:t.machine_id,
-      site_id:t.to_site_id==='yard'?null:t.to_site_id,
-      moved_by:state.currentUser.id,
-      memo:'日報から回送記録'
-    });
-  }
-
   // 写真アップロード
   if(state.photos.length>0&&reportId){
     btn.innerHTML='<span>⏳</span> 写真アップロード中...';
@@ -1055,22 +1059,21 @@ async function submitReport(){
   btn.innerHTML=editingReportId?'<span>✓</span> 修正を保存する':'<span>✓</span> 日報を提出する';
 
   const siteNames=state.selectedSites.map(id=>state.sites.find(s=>s.id===id)?.name).join('・');
-  const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'材料なし';
+  const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'外注なし';
+  const subStr=state.selectedSubs.length?'\n🏢 外注先：'+state.selectedSubs.map(id=>state.subcontractors.find(s=>s.id===id)?.name).join('・'):'';
   const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
-  const transferStr=validTransfers.length?'\n🚛 回送：'+validTransfers.map(t=>{const m=machinesData.find(m=>m.id===t.machine_id)?.name;const to=t.to_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.to_site_id)?.name;return `${m}→${to}`;}).join('、'):'';
-  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}${transferStr}`;
+  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}${subStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
   document.getElementById('successOverlay').classList.add('show');
 
   // リセット
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};state.photos=[];transfers=[];
+  state.selectedSites=[];state.materialQty={};state.photos=[];state.selectedSubs=[];
   document.getElementById('memo').value='';
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('editBanner').style.display='none';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
   setWorkType('normal');
-  renderSiteChips();renderMaterialRows();renderPhotos();renderTransfers();
-  await loadMachineLocations();renderSiteChips();
+  renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();
   await loadHistory();
 }
 function closeSuccess(){document.getElementById('successOverlay').classList.remove('show');switchTab('history');}
@@ -1117,23 +1120,16 @@ function showDetail(i){
   const photoHtml=(r.photo_urls&&r.photo_urls.length>0)
     ?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">${r.photo_urls.map((url,j)=>`<a href="${url}" target="_blank" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);"><img src="${url}" alt="写真${j+1}" style="width:100%;display:block;"></a>`).join('')}</div>`
     :'なし';
-  const transferHtml=(r.machine_transfers&&r.machine_transfers.length>0)
-    ?r.machine_transfers.map(t=>{
-      const mName=machinesData.find(m=>m.id===t.machine_id)?.name||'不明';
-      const fromName=t.from_site_id?(t.from_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.from_site_id)?.name||'不明'):'−';
-      const toName=t.to_site_id?(t.to_site_id==='yard'?'ヤード':state.sites.find(s=>s.id===t.to_site_id)?.name||'不明'):'−';
-      return `🚜${mName}：${fromName} → ${toName}`;
-    }).join('<br>')
-    :'なし';
+  const subNames=(r.subcontractor_ids||[]).map(id=>state.subcontractors.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
     <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
     <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames||'なし'}</span></div>
-    <div class="modal-row"><span class="modal-key">使用材料</span><span class="modal-val">${matNames||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">外注</span><span class="modal-val">${matNames||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">🏢 外注先</span><span class="modal-val">${subNames||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>
-    <div class="modal-row"><span class="modal-key">🚛 回送</span><span class="modal-val">${transferHtml}</span></div>
     <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
     <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>

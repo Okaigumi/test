@@ -356,6 +356,16 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <button class="edit-cancel" onclick="cancelEdit()">キャンセル</button>
     </div>
 
+    <!-- 前日コピーバナー -->
+    <div id="copyBanner" style="display:none;background:var(--accent-light);border:1.5px solid var(--accent);border-radius:var(--radius-sm);padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);display:none;align-items:center;gap:6px;">
+      <span>📋 前日のデータを読み込みました。内容を確認して提出してください。</span>
+    </div>
+
+    <!-- 前日と同じボタン -->
+    <button onclick="copyFromYesterday()" id="copyYesterdayBtn" style="width:100%;padding:11px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;">
+      📋 前日と同じ内容を入力
+    </button>
+
     <!-- 日付 -->
     <div class="card">
       <div class="card-header"><span class="card-icon">📅</span><div><div class="card-title">作業日<span class="required">*</span></div></div></div>
@@ -1183,6 +1193,54 @@ function startEdit(i){
   switchTab('report');
   window.scrollTo(0,0);
 }
+async function copyFromYesterday(){
+  const btn=document.getElementById('copyYesterdayBtn');
+  btn.textContent='⏳ 読み込み中...';
+  btn.disabled=true;
+
+  // 直近1件の自分の日報を取得（今日より前）
+  const today=new Date().toISOString().split('T')[0];
+  const{data}=await sb.from('reports')
+    .select('*')
+    .eq('employee_id',state.currentUser.id)
+    .lt('report_date',today)
+    .order('report_date',{ascending:false})
+    .limit(1);
+
+  btn.textContent='📋 前日と同じ内容を入力';
+  btn.disabled=false;
+
+  if(!data||!data.length){
+    alert('前回の日報が見つかりませんでした。');return;
+  }
+
+  const r=data[0];
+
+  // フォームに値をセット（日付は今日のまま）
+  state.selectedSites=r.site_ids||[];
+  state.materialQty={};
+  (r.material_ids||[]).forEach(id=>{state.materialQty[id]=1;});
+  state.selectedSubs=r.subcontractor_ids||[];
+  state.subMachines=r.sub_machines||{};
+  document.getElementById('startTime').value=r.start_time||'08:00';
+  document.getElementById('endTime').value=r.end_time||'17:00';
+  document.getElementById('memo').value='';// メモは引き継がない
+  setWorkType(r.work_type||'normal');
+
+  renderSiteChips();
+  renderMaterialRows();
+  renderSubChips();
+  updateTimeSummary();
+
+  // バナー表示
+  const banner=document.getElementById('copyBanner');
+  banner.style.display='flex';
+  setTimeout(()=>banner.style.display='none',5000);
+
+  // 上にスクロール
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
 function cancelEdit(){
   editingReportId=null;
   state.selectedSites=[];state.materialQty={};state.selectedSubs=[];state.subMachines={};

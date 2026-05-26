@@ -268,6 +268,25 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
 .notice-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .notice-label { font-size: 11px; font-weight: 700; color: #8a6200; letter-spacing: 0.04em; }
 .notice-text { font-size: 13px; color: #5a4000; line-height: 1.6; }
+
+/* Stats */
+.month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.month-nav-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; font-size: 18px; cursor: pointer; }
+.month-nav-btn:active { background: var(--surface2); }
+.month-label { font-size: 16px; font-weight: 700; color: var(--text); }
+.stats-section-title { font-size: 12px; font-weight: 700; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; margin: 16px 0 8px; }
+.stats-bar-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 6px; }
+.stats-bar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.stats-bar-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.stats-bar-val { font-size: 13px; font-weight: 700; color: var(--accent); font-family: 'DM Mono', monospace; }
+.stats-bar-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.stats-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s ease; }
+.stats-top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.stats-top-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; text-align: center; }
+.stats-top-num { font-size: 22px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--accent); }
+.stats-top-label { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.csv-btn { width: 100%; background: var(--surface); border: 1.5px solid var(--accent); color: var(--accent); border-radius: var(--radius); padding: 12px; font-size: 14px; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.csv-btn:active { background: var(--accent-light); }
 </style>
 </head>
 <body>
@@ -336,6 +355,9 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
     </button>
     <button class="tab-btn" onclick="switchTab('admin')" id="tab-admin" style="display:none;">
       <span class="tab-icon">👥</span>管理
+    </button>
+    <button class="tab-btn" onclick="switchTab('stats')" id="tab-stats" style="display:none;">
+      <span class="tab-icon">📊</span>集計
     </button>
     <button class="tab-btn" onclick="switchTab('master')" id="tab-master" style="display:none;">
       <span class="tab-icon">⚙️</span>設定
@@ -425,6 +447,27 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
       <div class="summary-stat"><div class="stat-num orange" id="pendingCount">-</div><div class="stat-label">未提出</div></div>
     </div>
     <div id="staffList"><div class="empty-msg">読み込み中...</div></div>
+  </div>
+
+  <!-- 集計 -->
+  <div class="content" id="content-stats">
+    <div class="month-nav">
+      <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+      <div class="month-label" id="statsMonthLabel"></div>
+      <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="stats-top-row">
+      <div class="stats-top-card"><div class="stats-top-num" id="statsTotalDays">-</div><div class="stats-top-label">総稼働日数</div></div>
+      <div class="stats-top-card"><div class="stats-top-num" id="statsTotalHours">-</div><div class="stats-top-label">総作業時間</div></div>
+    </div>
+    <div class="stats-section-title">従業員別 作業日数</div>
+    <div id="statsEmployeeList"><div class="empty-msg">読み込み中...</div></div>
+    <div class="stats-section-title">現場別 稼働日数</div>
+    <div id="statsSiteList"><div class="empty-msg">読み込み中...</div></div>
+    <div class="stats-section-title">材料 使用回数</div>
+    <div id="statsMaterialList"><div class="empty-msg">読み込み中...</div></div>
+    <button class="csv-btn" onclick="exportCSV()">📥 CSVダウンロード</button>
+    <div style="height:24px;"></div>
   </div>
 
   <!-- 設定 -->
@@ -562,6 +605,7 @@ async function startApp() {
   // 管理者タブ表示
   if (state.currentUser.role === 'admin') {
     document.getElementById('tab-admin').style.display = '';
+    document.getElementById('tab-stats').style.display = '';
     document.getElementById('tab-master').style.display = '';
   }
 
@@ -827,12 +871,137 @@ async function deleteMaterial(id) {
   await loadMaterials();
 }
 
-// ===== TAB =====
+// ===== STATS =====
+let statsMonth = new Date();
+
+function changeMonth(delta) {
+  statsMonth.setMonth(statsMonth.getMonth() + delta);
+  loadStats();
+}
+
 function switchTab(name) {
   document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('content-'+name).classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'stats') loadStats();
+}
+
+async function loadStats() {
+  const y = statsMonth.getFullYear();
+  const m = String(statsMonth.getMonth() + 1).padStart(2, '0');
+  document.getElementById('statsMonthLabel').textContent = `${y}年${statsMonth.getMonth()+1}月`;
+
+  const from = `${y}-${m}-01`;
+  const last = new Date(y, statsMonth.getMonth()+1, 0).getDate();
+  const to = `${y}-${m}-${String(last).padStart(2,'0')}`;
+
+  const { data: reports } = await sb.from('report_summary').select('*').gte('report_date', from).lte('report_date', to);
+  if (!reports || reports.length === 0) {
+    document.getElementById('statsTotalDays').textContent = '0';
+    document.getElementById('statsTotalHours').textContent = '0h';
+    document.getElementById('statsEmployeeList').innerHTML = '<div class="empty-msg">データがありません</div>';
+    document.getElementById('statsSiteList').innerHTML = '<div class="empty-msg">データがありません</div>';
+    document.getElementById('statsMaterialList').innerHTML = '<div class="empty-msg">データがありません</div>';
+    return;
+  }
+
+  // 総稼働日数・総時間
+  const totalDays = new Set(reports.map(r => r.report_date)).size;
+  let totalMins = 0;
+  reports.forEach(r => {
+    const [sh, sm] = r.start_time.split(':').map(Number);
+    const [eh, em] = r.end_time.split(':').map(Number);
+    totalMins += (eh*60+em) - (sh*60+sm);
+  });
+  document.getElementById('statsTotalDays').textContent = totalDays;
+  document.getElementById('statsTotalHours').textContent = Math.round(totalMins/60) + 'h';
+
+  // 従業員別
+  const empMap = {};
+  reports.forEach(r => {
+    if (!empMap[r.employee_name]) empMap[r.employee_name] = { days: 0, mins: 0 };
+    empMap[r.employee_name].days++;
+    const [sh,sm] = r.start_time.split(':').map(Number);
+    const [eh,em] = r.end_time.split(':').map(Number);
+    empMap[r.employee_name].mins += (eh*60+em)-(sh*60+sm);
+  });
+  const maxEmpDays = Math.max(...Object.values(empMap).map(e => e.days));
+  document.getElementById('statsEmployeeList').innerHTML = Object.entries(empMap)
+    .sort((a,b) => b[1].days - a[1].days)
+    .map(([name, d]) => `
+      <div class="stats-bar-item">
+        <div class="stats-bar-header">
+          <span class="stats-bar-name">${name}</span>
+          <span class="stats-bar-val">${d.days}日 / ${Math.round(d.mins/60)}h</span>
+        </div>
+        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(d.days/maxEmpDays*100)}%"></div></div>
+      </div>`).join('');
+
+  // 現場別
+  const siteMap = {};
+  reports.forEach(r => {
+    (r.site_ids || []).forEach(id => {
+      const name = state.sites.find(s => s.id === id)?.name || id;
+      siteMap[name] = (siteMap[name] || 0) + 1;
+    });
+  });
+  const maxSite = Math.max(...Object.values(siteMap), 1);
+  document.getElementById('statsSiteList').innerHTML = Object.keys(siteMap).length
+    ? Object.entries(siteMap).sort((a,b)=>b[1]-a[1]).map(([name,cnt]) => `
+      <div class="stats-bar-item">
+        <div class="stats-bar-header">
+          <span class="stats-bar-name">🏗️ ${name}</span>
+          <span class="stats-bar-val">${cnt}日</span>
+        </div>
+        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(cnt/maxSite*100)}%"></div></div>
+      </div>`).join('')
+    : '<div class="empty-msg">データがありません</div>';
+
+  // 材料別
+  const matMap = {};
+  reports.forEach(r => {
+    (r.material_ids || []).forEach(id => {
+      const name = state.materials.find(m => m.id === id)?.name || id;
+      matMap[name] = (matMap[name] || 0) + 1;
+    });
+  });
+  const maxMat = Math.max(...Object.values(matMap), 1);
+  document.getElementById('statsMaterialList').innerHTML = Object.keys(matMap).length
+    ? Object.entries(matMap).sort((a,b)=>b[1]-a[1]).map(([name,cnt]) => `
+      <div class="stats-bar-item">
+        <div class="stats-bar-header">
+          <span class="stats-bar-name">🧱 ${name}</span>
+          <span class="stats-bar-val">${cnt}回</span>
+        </div>
+        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(cnt/maxMat*100)}%"></div></div>
+      </div>`).join('')
+    : '<div class="empty-msg">データがありません</div>';
+
+  window._statsReports = reports;
+}
+
+function exportCSV() {
+  const reports = window._statsReports || [];
+  if (!reports.length) { alert('データがありません'); return; }
+  const header = ['日付','従業員','開始','終了','現場','材料','メモ'];
+  const rows = reports.map(r => [
+    r.report_date,
+    r.employee_name,
+    r.start_time,
+    r.end_time,
+    (r.site_ids||[]).map(id => state.sites.find(s=>s.id===id)?.name||'').join('・'),
+    (r.material_ids||[]).map(id => state.materials.find(m=>m.id===id)?.name||'').join('・'),
+    (r.memo||'').replace(/,/g,'、')
+  ]);
+  const csv = '\uFEFF' + [header, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const y = statsMonth.getFullYear();
+  const m = String(statsMonth.getMonth()+1).padStart(2,'0');
+  a.download = `日報集計_${y}${m}.csv`;
+  a.click();
 }
 
 // ===== START =====

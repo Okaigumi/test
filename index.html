@@ -397,8 +397,38 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 外注 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">外注</div><div class="card-subtitle">タップで選択・数量を入力</div></div></div>
+      <div class="card-header"><span class="card-icon">🧱</span><div><div class="card-title">外注</div><div class="card-subtitle">タップで選択</div></div></div>
       <div class="card-body"><div id="materialRows"></div></div>
+    </div>
+
+    <!-- 大型ダンプ・警備員 -->
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🚚</span><div><div class="card-title">大型ダンプ・警備員</div><div class="card-subtitle">台数・人数を入力</div></div></div>
+      <div class="card-body">
+        <div style="margin-bottom:12px;">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">🚚 大型ダンプ常用</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button id="dump-co-none" onclick="setDumpCompany('')" class="chip selected" style="font-size:12px;padding:5px 10px;">未選択</button>
+            <button id="dump-co-oosuka" onclick="setDumpCompany('大須賀商店')" class="chip" style="font-size:12px;padding:5px 10px;">大須賀商店</button>
+            <button id="dump-co-takase" onclick="setDumpCompany('高瀬興行')" class="chip" style="font-size:12px;padding:5px 10px;">高瀬興行</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="changeDump(-1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+            <div id="dumpCount" style="flex:1;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);">0</div>
+            <button onclick="changeDump(1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">＋</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:2px;">台</div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">🦺 警備員</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="changeGuard(-1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+            <div id="guardCount" style="flex:1;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);">0</div>
+            <button onclick="changeGuard(1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">＋</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:2px;">人</div>
+        </div>
+      </div>
     </div>
 
     <!-- 重機回送 -->
@@ -738,13 +768,49 @@ const SUPABASE_URL='https://fblecreevjtrqnkhmwuk.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
+// 日本時間で今日の日付を返す
+function localToday(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ===== DUMP & GUARD COUNTERS =====
+function changeDump(delta){
+  state.dumpCount=Math.max(0,state.dumpCount+delta);
+  document.getElementById('dumpCount').textContent=state.dumpCount;
+}
+function changeGuard(delta){
+  state.guardCount=Math.max(0,state.guardCount+delta);
+  document.getElementById('guardCount').textContent=state.guardCount;
+}
+function setDumpCompany(company){
+  state.dumpCompany=company;
+  ['','大須賀商店','高瀬興行'].forEach(c=>{
+    const id='dump-co-'+(c===''?'none':c==='大須賀商店'?'oosuka':'takase');
+    const el=document.getElementById(id);
+    if(el) el.className='chip'+(c===company?' selected':'');
+  });
+}
+function resetCounters(){
+  state.dumpCount=0;state.guardCount=0;state.dumpCompany='';
+  document.getElementById('dumpCount').textContent=0;
+  document.getElementById('guardCount').textContent=0;
+  setDumpCompany('');
+}
+function setCounters(dump,guard,company){
+  state.dumpCount=dump||0;state.guardCount=guard||0;state.dumpCompany=company||'';
+  document.getElementById('dumpCount').textContent=state.dumpCount;
+  document.getElementById('guardCount').textContent=state.guardCount;
+  setDumpCompany(state.dumpCompany);
+}
+
 // 通常勤務ルール
 const NORMAL_START=8*60;   // 08:00
 const NORMAL_END=17*60;    // 17:00
 const BREAK_MINS=120;      // 休憩2時間
 const NORMAL_WORK=NORMAL_END-NORMAL_START-BREAK_MINS; // 420分=7h
 
-let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSites:[],selectedSubs:[],subMachines:{},materialQty:{},photos:[],pin:''};
+let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSites:[],selectedSubs:[],subMachines:{},materialQty:{},photos:[],pin:'',dumpCount:0,guardCount:0,dumpCompany:''};
 
 // ===== 時間計算 =====
 function toMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -814,8 +880,9 @@ async function startApp(){
   document.getElementById('headerDate').textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
   document.getElementById('roleBadge').textContent=state.currentUser.role==='admin'?'管理者':'従業員';
 
-  // 今日の日付をデフォルトセット
-  document.getElementById('reportDate').value=d.toISOString().split('T')[0];
+  // 今日の日付をデフォルトセット（ローカル時間で正確に）
+  const today=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('reportDate').value=today;
 
   // 作業時間のデフォルト 8:00-17:00
   document.getElementById('startTime').value='08:00';
@@ -1187,6 +1254,7 @@ function startEdit(i){
   state.selectedSubs=r.subcontractor_ids||[];
   state.subMachines=r.sub_machines||{};
   setWorkType(r.work_type||'normal');
+  setCounters(r.dump_count||0,r.guard_count||0,r.dump_company||'');
   renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();updateTimeSummary();
   document.getElementById('editBanner').style.display='flex';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 修正を保存する';
@@ -1199,7 +1267,7 @@ async function copyFromYesterday(){
   btn.disabled=true;
 
   // 直近1件の自分の日報を取得（今日より前）
-  const today=new Date().toISOString().split('T')[0];
+  const today=localToday();
   const{data}=await sb.from('reports')
     .select('*')
     .eq('employee_id',state.currentUser.id)
@@ -1226,6 +1294,7 @@ async function copyFromYesterday(){
   document.getElementById('endTime').value=r.end_time||'17:00';
   document.getElementById('memo').value='';// メモは引き継がない
   setWorkType(r.work_type||'normal');
+  setCounters(r.dump_count||0,r.guard_count||0,r.dump_company||'');
 
   renderSiteChips();
   renderMaterialRows();
@@ -1244,7 +1313,7 @@ async function copyFromYesterday(){
 function cancelEdit(){
   editingReportId=null;
   state.selectedSites=[];state.materialQty={};state.selectedSubs=[];state.subMachines={};
-  document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('reportDate').value=localToday();
   document.getElementById('memo').value='';
   document.getElementById('editBanner').style.display='none';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
@@ -1279,7 +1348,10 @@ async function submitReport(){
     work_type:currentWorkType,
     memo:document.getElementById('memo').value,
     photo_count:state.photos.length,
-    photo_urls:[]
+    photo_urls:[],
+    dump_count:state.dumpCount,
+    guard_count:state.guardCount,
+    dump_company:state.dumpCompany
   };
 
   let error, reportId=editingReportId;
@@ -1323,17 +1395,18 @@ async function submitReport(){
     return `${subName}: ${details}`;
   }).join('\n'):'';
   const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
-  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}${subStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
+  const dumpGuardStr=(state.dumpCount>0||state.guardCount>0)?`\n🚚 大型ダンプ${state.dumpCount}台${state.dumpCompany?' ('+state.dumpCompany+')':''} ｜ 🦺 警備員${state.guardCount}人`:'';
+  document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}${subStr}${dumpGuardStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
   document.getElementById('successOverlay').classList.add('show');
 
   // リセット
   editingReportId=null;
   state.selectedSites=[];state.materialQty={};state.photos=[];state.selectedSubs=[];state.subMachines={};
   document.getElementById('memo').value='';
-  document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('reportDate').value=localToday();
   document.getElementById('editBanner').style.display='none';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
-  setWorkType('normal');
+  setWorkType('normal');resetCounters();
   renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();
   await loadHistory();
 }
@@ -1402,6 +1475,8 @@ function showDetail(i){
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>
+    <div class="modal-row"><span class="modal-key">🚚 大型ダンプ</span><span class="modal-val">${r.dump_count||0}台${r.dump_company?' ('+r.dump_company+')':''}</span></div>
+    <div class="modal-row"><span class="modal-key">🦺 警備員</span><span class="modal-val">${r.guard_count||0}人</span></div>
     <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
     <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>
@@ -1412,7 +1487,7 @@ function closeDetail(e){if(e.target===document.getElementById('detailModal'))doc
 
 // ===== ADMIN =====
 async function loadAdminData(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=localToday();
   const{data:employees}=await sb.from('employees').select('*').eq('is_active',true).neq('role','admin');
   const{data:todayReports}=await sb.from('report_summary').select('*').eq('report_date',today);
   const submitted=(todayReports||[]).map(r=>r.employee_id);
@@ -1962,7 +2037,7 @@ function setLeaveType(type){
 }
 
 function openLeaveRequest(){
-  document.getElementById('leaveDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('leaveDate').value=localToday();
   document.getElementById('leaveReason').value='';
   setLeaveType('full');
   document.getElementById('leaveModal').classList.add('show');

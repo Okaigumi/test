@@ -605,9 +605,9 @@ async function loadMaterials() {
 }
 
 async function loadNotice() {
-  const { data } = await sb.from('notices').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(1);
+  const { data } = await sb.from('notices').select('*').eq('is_active', true).order('created_at', { ascending: false });
   if (data && data.length > 0) {
-    document.getElementById('noticeText').textContent = data[0].content;
+    document.getElementById('noticeText').innerHTML = data.map(n => `<div style="padding:4px 0; border-bottom:1px solid #e8d88a;">${n.content}</div>`).join('').replace(/(<div[^>]*>.*<\/div>)(?=\s*$)/, s => s.replace(' border-bottom:1px solid #e8d88a;', ''));
     document.getElementById('noticeCard').style.display = 'block';
   }
 }

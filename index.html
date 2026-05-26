@@ -646,19 +646,64 @@ function changeQty(id,delta){
   document.getElementById('qtynum-'+id).textContent=state.materialQty[id];
 }
 
-// ===== PHOTOS =====
-function handlePhotos(e){
-  Array.from(e.target.files).slice(0,5-state.photos.length).forEach(f=>{
-    const r=new FileReader();r.onload=ev=>{state.photos.push(ev.target.result);renderPhotos();};r.readAsDataURL(f);
-  });e.target.value='';
+// ===== PHOTOS (resize + compress + Supabase Storage) =====
+const MAX_W=1280, MAX_H=720, JPEG_Q=0.7;
+
+function resizeImage(file){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width, h=img.height;
+      if(w>MAX_W||h>MAX_H){
+        const ratio=Math.min(MAX_W/w, MAX_H/h);
+        w=Math.round(w*ratio); h=Math.round(h*ratio);
+      }
+      const c=document.createElement('canvas');
+      c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(blob=>resolve(blob),'image/jpeg',JPEG_Q);
+    };
+    img.src=URL.createObjectURL(file);
+  });
 }
+
+async function handlePhotos(e){
+  const files=Array.from(e.target.files).slice(0,5-state.photos.length);
+  for(const f of files){
+    const blob=await resizeImage(f);
+    const preview=URL.createObjectURL(blob);
+    state.photos.push({blob,preview,url:null});
+    renderPhotos();
+  }
+  e.target.value='';
+}
+
+async function uploadPhotos(reportId){
+  const urls=[];
+  for(let i=0;i<state.photos.length;i++){
+    const p=state.photos[i];
+    if(p.url){urls.push(p.url);continue;}
+    const path=`${reportId}/${Date.now()}_${i}.jpg`;
+    const{error}=await sb.storage.from('photos').upload(path,p.blob,{contentType:'image/jpeg'});
+    if(!error){
+      const{data}=sb.storage.from('photos').getPublicUrl(path);
+      urls.push(data.publicUrl);
+    }
+  }
+  return urls;
+}
+
 function renderPhotos(){
-  document.getElementById('photoGrid').innerHTML=state.photos.map((p,i)=>
-    `<div class="photo-thumb"><img src="${p}" alt="写真${i+1}"><button class="photo-remove" onclick="removePhoto(${i})">✕</button></div>`
-  ).join('');
+  document.getElementById('photoGrid').innerHTML=state.photos.map((p,i)=>{
+    const src=p.preview||p.url||p;
+    return `<div class="photo-thumb"><img src="${src}" alt="写真${i+1}"><button class="photo-remove" onclick="removePhoto(${i})">✕</button></div>`;
+  }).join('');
   document.getElementById('photoCount').textContent=state.photos.length>0?`${state.photos.length}/5枚`:'';
 }
-function removePhoto(i){state.photos.splice(i,1);renderPhotos();}
+function removePhoto(i){
+  if(state.photos[i]?.preview) URL.revokeObjectURL(state.photos[i].preview);
+  state.photos.splice(i,1);renderPhotos();
+}
 
 // ===== WORK TYPE =====
 let currentWorkType='normal';
@@ -675,7 +720,6 @@ let editingReportId=null;
 function startEdit(i){
   const r=window._historyData[i];
   editingReportId=r.id;
-  // フォームに値をセット
   document.getElementById('reportDate').value=r.report_date;
   document.getElementById('startTime').value=r.start_time;
   document.getElementById('endTime').value=r.end_time;
@@ -683,9 +727,10 @@ function startEdit(i){
   state.selectedSites=r.site_ids||[];
   state.materialQty={};
   (r.material_ids||[]).forEach(id=>{state.materialQty[id]=(r.material_quantities||{})[id]||1;});
+  // 既存写真を読み込み
+  state.photos=(r.photo_urls||[]).map(url=>({blob:null,preview:null,url}));
   setWorkType(r.work_type||'normal');
-  renderSiteChips();renderMaterialRows();updateTimeSummary();
-  // 編集バナー表示
+  renderSiteChips();renderMaterialRows();renderPhotos();updateTimeSummary();
   document.getElementById('editBanner').style.display='flex';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 修正を保存する';
   switchTab('report');
@@ -726,24 +771,35 @@ async function submitReport(){
     normal_mins:normal,overtime_mins:overtime,
     work_type:currentWorkType,
     memo:document.getElementById('memo').value,
-    photo_count:state.photos.length
+    photo_count:state.photos.length,
+    photo_urls:[]
   };
 
-  let error;
+  let error, reportId=editingReportId;
   if(editingReportId){
-    // 更新
     const res=await sb.from('reports').update(payload).eq('id',editingReportId);
     error=res.error;
   }else{
-    // 新規
-    const res=await sb.from('reports').insert(payload);
+    const res=await sb.from('reports').insert(payload).select('id').single();
     error=res.error;
+    if(res.data) reportId=res.data.id;
+  }
+
+  if(error){
+    btn.disabled=false;
+    btn.innerHTML=editingReportId?'<span>✓</span> 修正を保存する':'<span>✓</span> 日報を提出する';
+    alert('送信に失敗しました。もう一度お試しください。');return;
+  }
+
+  // 写真アップロード
+  if(state.photos.length>0&&reportId){
+    btn.innerHTML='<span>⏳</span> 写真アップロード中...';
+    const urls=await uploadPhotos(reportId);
+    await sb.from('reports').update({photo_urls:urls,photo_count:urls.length}).eq('id',reportId);
   }
 
   btn.disabled=false;
   btn.innerHTML=editingReportId?'<span>✓</span> 修正を保存する':'<span>✓</span> 日報を提出する';
-
-  if(error){alert('送信に失敗しました。もう一度お試しください。');return;}
 
   const siteNames=state.selectedSites.map(id=>state.sites.find(s=>s.id===id)?.name).join('・');
   const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'材料なし';
@@ -803,6 +859,9 @@ function showDetail(i){
   const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
   const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);const q=(r.material_quantities||{})[id]||1;return `${m?.name}×${q}`;}).join('、');
   const wtLabel=r.work_type==='night'?'🌙 夜間緊急':r.work_type==='overtime'?'⏰ 残業':'🌞 通常';
+  const photoHtml=(r.photo_urls&&r.photo_urls.length>0)
+    ?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">${r.photo_urls.map((url,j)=>`<a href="${url}" target="_blank" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);"><img src="${url}" alt="写真${j+1}" style="width:100%;display:block;"></a>`).join('')}</div>`
+    :'なし';
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
     <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
@@ -811,9 +870,9 @@ function showDetail(i){
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>
-    <div class="modal-row"><span class="modal-key">写真</span><span class="modal-val">${r.photo_count>0?r.photo_count+'枚':'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
+    <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>
   `;
   document.getElementById('detailModal').classList.add('show');
 }

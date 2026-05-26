@@ -234,6 +234,18 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 /* night badge */
 .badge-night{font-size:11px;padding:2px 8px;background:#EDE9FE;color:#7C3AED;border-radius:12px;font-weight:500;}
+
+/* machine cards */
+.machine-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .2s;}
+.machine-card:active{border-color:var(--accent);}
+.machine-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.machine-name{font-size:16px;font-weight:700;}
+.machine-site{font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;}
+.machine-site.at-site{background:var(--accent-light);color:var(--accent);}
+.machine-site.at-yard{background:var(--warn-bg);color:var(--warn);}
+.machine-meta{font-size:11px;color:var(--text3);}
+.machine-hist-item{font-size:12px;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border);}
+.machine-hist-item:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -289,6 +301,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <nav class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('report')" id="tab-report"><span class="tab-icon">✏️</span>日報入力</button>
     <button class="tab-btn" onclick="switchTab('history')" id="tab-history"><span class="tab-icon">📅</span>履歴</button>
+    <button class="tab-btn" onclick="switchTab('machine')" id="tab-machine"><span class="tab-icon">🚜</span>重機</button>
     <button class="tab-btn" onclick="switchTab('admin')" id="tab-admin" style="display:none;"><span class="tab-icon">👥</span>管理</button>
     <button class="tab-btn" onclick="switchTab('stats')" id="tab-stats" style="display:none;"><span class="tab-icon">📊</span>集計</button>
     <button class="tab-btn" onclick="switchTab('master')" id="tab-master" style="display:none;"><span class="tab-icon">⚙️</span>設定</button>
@@ -388,6 +401,37 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <!-- 履歴 -->
   <div class="content" id="content-history">
     <div id="historyList"><div class="empty-msg">読み込み中...</div></div>
+  </div>
+
+  <!-- 重機管理 -->
+  <div class="content" id="content-machine">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px;">🚜 重機配置一覧</div>
+    <div id="machineList"><div class="empty-msg">読み込み中...</div></div>
+  </div>
+
+  <!-- 重機移動モーダル -->
+  <div class="modal-overlay" id="machineModal" onclick="if(event.target===this)this.classList.remove('show')">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="machineMoveTitle">🚜 移動先を選択</div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">移動先の現場</div>
+        <div class="chips" id="machineSiteChips"></div>
+        <div style="margin-top:10px;">
+          <button class="chip" id="machineYardBtn" onclick="selectMachineYard()" style="background:var(--warn-bg);border-color:var(--warn);color:var(--warn);">🏠 ヤード（現場なし）</button>
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">メモ（任意）</div>
+        <textarea class="memo-area" id="machineMemo" placeholder="移動理由など" style="min-height:50px;"></textarea>
+      </div>
+      <button class="submit-btn" onclick="confirmMachineMove()" id="machineMoveBtn">移動を記録する</button>
+      <div style="margin-top:12px;">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">移動履歴</div>
+        <div id="machineHistory"></div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('machineModal').classList.remove('show')">閉じる</button>
+    </div>
   </div>
 
   <!-- 管理 -->
@@ -1110,6 +1154,152 @@ function exportCSV(){
   a.click();
 }
 
+// ===== MACHINES =====
+let machinesData=[];
+let machineLocations={};
+let selectedMachineId=null;
+let selectedMoveSiteId=null;
+
+async function loadMachines(){
+  const{data:machines}=await sb.from('machines').select('*').eq('is_active',true).order('name');
+  machinesData=machines||[];
+
+  // 各重機の最新配置を取得
+  machineLocations={};
+  for(const m of machinesData){
+    const{data}=await sb.from('machine_locations').select('*').eq('machine_id',m.id).order('moved_at',{ascending:false}).limit(1);
+    if(data&&data.length>0) machineLocations[m.id]=data[0];
+  }
+  renderMachines();
+}
+
+function renderMachines(){
+  // 現場ごとにグループ化
+  const bySite={};
+  const atYard=[];
+  machinesData.forEach(m=>{
+    const loc=machineLocations[m.id];
+    if(loc&&loc.site_id){
+      const siteName=state.sites.find(s=>s.id===loc.site_id)?.name||'不明な現場';
+      if(!bySite[siteName])bySite[siteName]=[];
+      bySite[siteName].push({machine:m,loc});
+    }else{
+      atYard.push({machine:m,loc});
+    }
+  });
+
+  let html='';
+
+  // 現場に配置されている重機
+  Object.entries(bySite).forEach(([siteName,items])=>{
+    html+=`<div style="font-size:12px;font-weight:700;color:var(--accent);margin:14px 0 6px;">🏗️ ${siteName}</div>`;
+    items.forEach(({machine:m,loc})=>{
+      const when=loc?timeAgo(loc.moved_at):'';
+      html+=`<div class="machine-card" onclick="openMachineMove('${m.id}')">
+        <div class="machine-card-header">
+          <span class="machine-name">🚜 ${m.name}</span>
+          <span class="machine-site at-site">${siteName}</span>
+        </div>
+        <div class="machine-meta">${when}${loc?.memo?' ｜ '+loc.memo:''}</div>
+      </div>`;
+    });
+  });
+
+  // ヤードにある重機
+  if(atYard.length){
+    html+=`<div style="font-size:12px;font-weight:700;color:var(--warn);margin:14px 0 6px;">🏠 ヤード</div>`;
+    atYard.forEach(({machine:m,loc})=>{
+      const when=loc?timeAgo(loc.moved_at):'';
+      html+=`<div class="machine-card" onclick="openMachineMove('${m.id}')">
+        <div class="machine-card-header">
+          <span class="machine-name">🚜 ${m.name}</span>
+          <span class="machine-site at-yard">ヤード</span>
+        </div>
+        <div class="machine-meta">${when||'未配置'}${loc?.memo?' ｜ '+loc.memo:''}</div>
+      </div>`;
+    });
+  }
+
+  if(!html) html='<div class="empty-msg">重機が登録されていません</div>';
+  document.getElementById('machineList').innerHTML=html;
+}
+
+function timeAgo(ts){
+  const d=new Date(ts),now=new Date();
+  const diff=Math.floor((now-d)/60000);
+  if(diff<60) return `${diff}分前に移動`;
+  if(diff<1440) return `${Math.floor(diff/60)}時間前に移動`;
+  return `${Math.floor(diff/1440)}日前に移動`;
+}
+
+async function openMachineMove(machineId){
+  selectedMachineId=machineId;
+  selectedMoveSiteId=null;
+  const m=machinesData.find(m=>m.id===machineId);
+  document.getElementById('machineMoveTitle').textContent=`🚜 ${m.name} を移動`;
+  document.getElementById('machineMemo').value='';
+  document.getElementById('machineYardBtn').className='chip';
+
+  // 現場チップ
+  document.getElementById('machineSiteChips').innerHTML=state.sites.map(s=>
+    `<div class="chip" id="msite-${s.id}" onclick="selectMachineSite('${s.id}')">${s.name}</div>`
+  ).join('');
+
+  // 移動履歴を取得
+  const{data:hist}=await sb.from('machine_locations').select('*').eq('machine_id',machineId).order('moved_at',{ascending:false}).limit(10);
+  document.getElementById('machineHistory').innerHTML=(hist||[]).map(h=>{
+    const siteName=h.site_id?state.sites.find(s=>s.id===h.site_id)?.name||'不明':'ヤード';
+    const d=new Date(h.moved_at);
+    const dateStr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="machine-hist-item">${dateStr} → ${siteName}${h.memo?' ｜ '+h.memo:''}</div>`;
+  }).join('')||'<div style="font-size:12px;color:var(--text3);">履歴なし</div>';
+
+  document.getElementById('machineModal').classList.add('show');
+}
+
+function selectMachineSite(siteId){
+  selectedMoveSiteId=siteId;
+  // チップの選択状態を更新
+  state.sites.forEach(s=>{
+    const el=document.getElementById('msite-'+s.id);
+    if(el) el.className='chip'+(s.id===siteId?' selected':'');
+  });
+  document.getElementById('machineYardBtn').className='chip';
+  document.getElementById('machineYardBtn').style.background='';
+  document.getElementById('machineYardBtn').style.borderColor='';
+  document.getElementById('machineYardBtn').style.color='';
+}
+
+function selectMachineYard(){
+  selectedMoveSiteId='yard';
+  state.sites.forEach(s=>{
+    const el=document.getElementById('msite-'+s.id);
+    if(el) el.className='chip';
+  });
+  const yb=document.getElementById('machineYardBtn');
+  yb.className='chip selected';
+  yb.style.background='var(--warn-bg)';
+  yb.style.borderColor='var(--warn)';
+  yb.style.color='var(--warn)';
+}
+
+async function confirmMachineMove(){
+  if(!selectedMoveSiteId){alert('移動先を選択してください');return;}
+  const btn=document.getElementById('machineMoveBtn');
+  btn.disabled=true;btn.textContent='記録中...';
+
+  await sb.from('machine_locations').insert({
+    machine_id:selectedMachineId,
+    site_id:selectedMoveSiteId==='yard'?null:selectedMoveSiteId,
+    moved_by:state.currentUser.id,
+    memo:document.getElementById('machineMemo').value||null
+  });
+
+  btn.disabled=false;btn.textContent='移動を記録する';
+  document.getElementById('machineModal').classList.remove('show');
+  await loadMachines();
+}
+
 // ===== TAB =====
 function switchTab(name){
   document.querySelectorAll('.content').forEach(c=>c.classList.remove('active'));
@@ -1117,6 +1307,7 @@ function switchTab(name){
   document.getElementById('content-'+name).classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
   if(name==='stats')loadStats();
+  if(name==='machine')loadMachines();
 }
 
 window.addEventListener('DOMContentLoaded',init);

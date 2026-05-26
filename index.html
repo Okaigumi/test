@@ -237,6 +237,21 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 /* machine cards */
 .machine-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .2s;}
+
+/* site info */
+.site-master-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px;cursor:pointer;transition:border-color .2s;}
+.site-master-card:active{border-color:var(--accent);}
+.site-master-header{display:flex;align-items:center;justify-content:space-between;}
+.site-period{font-size:11px;color:var(--text3);margin-top:3px;font-family:'DM Mono',monospace;}
+.site-members{font-size:11px;color:var(--accent2);margin-top:3px;}
+.assign-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.assign-row:last-child{border-bottom:none;}
+.assign-name{font-size:14px;font-weight:500;}
+.assign-toggle{width:44px;height:26px;border-radius:13px;border:none;cursor:pointer;position:relative;transition:background .2s;}
+.assign-toggle.on{background:var(--accent);}
+.assign-toggle.off{background:var(--border);}
+.assign-toggle::after{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:white;top:3px;left:3px;transition:transform .2s;}
+.assign-toggle.on::after{transform:translateX(18px);}
 .machine-card:active{border-color:var(--accent);}
 .machine-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
 .machine-name{font-size:16px;font-weight:700;}
@@ -497,7 +512,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <!-- 設定 -->
   <div class="content" id="content-master">
     <div class="card">
-      <div class="card-header"><span class="card-icon">🏗️</span><div><div class="card-title">現場マスタ</div></div></div>
+      <div class="card-header"><span class="card-icon">🏗️</span><div><div class="card-title">現場マスタ</div><div class="card-subtitle">タップで工期・配属を設定</div></div></div>
       <div class="card-body">
         <div class="master-list" id="masterSiteList"></div>
         <div class="master-add-row">
@@ -516,6 +531,28 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 現場設定モーダル -->
+<div class="modal-overlay" id="siteSettingModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="siteSettingTitle">🏗️ 現場設定</div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">工期</div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">
+        <input type="date" class="date-input" id="siteStartDate">
+        <span style="color:var(--text3);">〜</span>
+        <input type="date" class="date-input" id="siteEndDate">
+      </div>
+      <button onclick="saveSitePeriod()" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">工期を保存</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">従業員の配属</div>
+      <div id="siteAssignList"></div>
+    </div>
+    <button class="modal-close" onclick="document.getElementById('siteSettingModal').classList.remove('show')">閉じる</button>
   </div>
 </div>
 
@@ -631,7 +668,7 @@ async function startApp(){
     ['tab-admin','tab-stats','tab-master'].forEach(id=>document.getElementById(id).style.display='');
   }
 
-  await Promise.all([loadSites(),loadMaterials(),loadNotice(),loadMachineLocations()]);
+  await Promise.all([loadSites(),loadMaterials(),loadNotice(),loadMachineLocations(),loadAllEmployees(),loadSiteAssignments()]);
   await loadHistory();
   if(state.currentUser.role==='admin')await loadAdminData();
 
@@ -678,8 +715,13 @@ function getMachinesAtSite(siteId){
 function renderSiteChips(){
   document.getElementById('siteChips').innerHTML=state.sites.map(s=>{
     const machines=getMachinesAtSite(s.id);
-    const machineTag=machines.length?` <span style="font-size:10px;color:var(--accent2);">🚜${machines.join(',')}</span>`:'';
-    return `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}${machineTag}</div>`;
+    const machineTag=machines.length?`<span style="font-size:10px;color:var(--accent2);">🚜${machines.join(',')}</span>`:'';
+    const members=getAssignedNames(s.id);
+    const memberTag=members.length?`<span style="font-size:10px;color:var(--text3);">👷${members.length}名</span>`:'';
+    const daysLeft=s.end_date?Math.ceil((new Date(s.end_date)-new Date())/(1000*60*60*24)):null;
+    const daysTag=daysLeft!=null?(daysLeft>0?`<span style="font-size:10px;color:var(--accent);">残${daysLeft}日</span>`:`<span style="font-size:10px;color:var(--danger);">超過</span>`):'';
+    const info=[machineTag,memberTag,daysTag].filter(Boolean).join(' ');
+    return `<div class="chip ${state.selectedSites.includes(s.id)?'selected':''}" onclick="toggleSite('${s.id}')">${s.name}${info?' '+info:''}</div>`;
   }).join('')||'<div style="color:var(--text3);font-size:13px;">現場が登録されていません</div>';
 }
 function toggleSite(id){
@@ -978,14 +1020,97 @@ async function loadAdminData(){
 }
 
 // ===== MASTER =====
+let allEmployees=[];
+let siteAssignments={};
+
+async function loadAllEmployees(){
+  const{data}=await sb.from('employees').select('*').eq('is_active',true).order('name');
+  allEmployees=data||[];
+}
+
+async function loadSiteAssignments(){
+  const{data}=await sb.from('site_assignments').select('*').eq('is_active',true);
+  siteAssignments={};
+  (data||[]).forEach(a=>{
+    if(!siteAssignments[a.site_id])siteAssignments[a.site_id]=[];
+    siteAssignments[a.site_id].push(a.employee_id);
+  });
+}
+
+function getAssignedNames(siteId){
+  const ids=siteAssignments[siteId]||[];
+  return ids.map(id=>{const e=allEmployees.find(e=>e.id===id);return e?e.name:null;}).filter(Boolean);
+}
+
 function renderMaster(){
-  document.getElementById('masterSiteList').innerHTML=state.sites.map(s=>
-    `<div class="master-item"><span class="master-item-name">🏗️ ${s.name}</span><button class="master-delete" onclick="deleteSite('${s.id}')">🗑️</button></div>`
-  ).join('');
+  document.getElementById('masterSiteList').innerHTML=state.sites.map(s=>{
+    const period=(s.start_date&&s.end_date)?`📅 ${s.start_date}〜${s.end_date}`:(s.start_date?`📅 ${s.start_date}〜`:'');
+    const members=getAssignedNames(s.id);
+    const memberStr=members.length?`👷 ${members.join('、')}`:'';
+    const daysLeft=s.end_date?Math.ceil((new Date(s.end_date)-new Date())/(1000*60*60*24)):null;
+    const daysTag=daysLeft!=null?(daysLeft>0?`<span style="font-size:10px;color:var(--accent);">残${daysLeft}日</span>`:`<span style="font-size:10px;color:var(--danger);">工期超過</span>`):'';
+    return `<div class="site-master-card" onclick="openSiteSetting('${s.id}')">
+      <div class="site-master-header">
+        <span class="master-item-name">🏗️ ${s.name} ${daysTag}</span>
+        <button class="master-delete" onclick="event.stopPropagation();deleteSite('${s.id}')">🗑️</button>
+      </div>
+      ${period?`<div class="site-period">${period}</div>`:''}
+      ${memberStr?`<div class="site-members">${memberStr}</div>`:''}
+    </div>`;
+  }).join('')||'<div class="empty-msg">現場が登録されていません</div>';
+
   document.getElementById('masterMaterialList').innerHTML=state.materials.map(m=>
     `<div class="master-item"><span class="master-item-name">🧱 ${m.name}</span><button class="master-delete" onclick="deleteMaterial('${m.id}')">🗑️</button></div>`
   ).join('');
 }
+
+let editingSiteId=null;
+
+async function openSiteSetting(siteId){
+  editingSiteId=siteId;
+  const s=state.sites.find(s=>s.id===siteId);
+  document.getElementById('siteSettingTitle').textContent=`🏗️ ${s.name} の設定`;
+  document.getElementById('siteStartDate').value=s.start_date||'';
+  document.getElementById('siteEndDate').value=s.end_date||'';
+
+  if(!allEmployees.length) await loadAllEmployees();
+  await loadSiteAssignments();
+
+  const assigned=siteAssignments[siteId]||[];
+  document.getElementById('siteAssignList').innerHTML=allEmployees.filter(e=>e.role!=='admin').map(e=>{
+    const isOn=assigned.includes(e.id);
+    return `<div class="assign-row">
+      <span class="assign-name">${e.name}</span>
+      <button class="assign-toggle ${isOn?'on':'off'}" onclick="toggleAssign('${siteId}','${e.id}',this)"></button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('siteSettingModal').classList.add('show');
+}
+
+async function saveSitePeriod(){
+  const sd=document.getElementById('siteStartDate').value||null;
+  const ed=document.getElementById('siteEndDate').value||null;
+  await sb.from('sites').update({start_date:sd,end_date:ed}).eq('id',editingSiteId);
+  const s=state.sites.find(s=>s.id===editingSiteId);
+  if(s){s.start_date=sd;s.end_date=ed;}
+  renderMaster();renderSiteChips();
+  alert('工期を保存しました');
+}
+
+async function toggleAssign(siteId,empId,btn){
+  const isOn=btn.classList.contains('on');
+  if(isOn){
+    await sb.from('site_assignments').delete().eq('site_id',siteId).eq('employee_id',empId);
+    btn.className='assign-toggle off';
+  }else{
+    await sb.from('site_assignments').upsert({site_id:siteId,employee_id:empId,is_active:true},{onConflict:'site_id,employee_id'});
+    btn.className='assign-toggle on';
+  }
+  await loadSiteAssignments();
+  renderMaster();
+}
+
 async function addSite(){const v=document.getElementById('newSiteInput').value.trim();if(!v)return;await sb.from('sites').insert({name:v});document.getElementById('newSiteInput').value='';await loadSites();}
 async function deleteSite(id){if(!confirm('削除しますか？'))return;await sb.from('sites').update({is_active:false}).eq('id',id);await loadSites();}
 async function addMaterial(){const v=document.getElementById('newMaterialInput').value.trim();if(!v)return;await sb.from('materials').insert({name:v});document.getElementById('newMaterialInput').value='';await loadMaterials();}
@@ -1080,8 +1205,12 @@ function showSiteDetail(siteId){
   if(!siteReports.length)return;
 
   const y=statsMonth.getFullYear(),m=statsMonth.getMonth()+1;
+  const siteObj=state.sites.find(s=>s.id===siteId);
+  const periodStr=(siteObj?.start_date&&siteObj?.end_date)?` ｜ 工期：${siteObj.start_date}〜${siteObj.end_date}`:'';
+  const assignedMembers=getAssignedNames(siteId);
+  const memberStr=assignedMembers.length?` ｜ 👷 ${assignedMembers.join('、')}`:'';
   document.getElementById('siteDetailName').textContent=`🏗️ ${siteName}`;
-  document.getElementById('siteDetailPeriod').textContent=`${y}年${m}月`;
+  document.getElementById('siteDetailPeriod').textContent=`${y}年${m}月${periodStr}${memberStr}`;
 
   const days=new Set(siteReports.map(r=>r.report_date)).size;
   let totalM=0,normalM=0,otM=0;

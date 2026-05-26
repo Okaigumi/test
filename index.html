@@ -76,17 +76,17 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .chip.selected::before{content:'✓ ';font-size:11px;}
 
 /* Material rows with quantity */
-.mat-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);}
-.mat-row:last-child{border-bottom:none;}
-.mat-chip{flex:1;padding:8px 12px;border-radius:20px;border:1.5px solid var(--border);font-size:13px;font-family:'Noto Sans JP',sans-serif;background:var(--surface);color:var(--text2);cursor:pointer;transition:all .15s;text-align:left;}
+.mat-row{display:flex;align-items:center;gap:6px;padding:4px 0;}
+.mat-chip{padding:5px 10px;border-radius:16px;border:1.5px solid var(--border);font-size:12px;font-family:'Noto Sans JP',sans-serif;background:var(--surface);color:var(--text2);cursor:pointer;transition:all .15s;text-align:left;white-space:nowrap;}
 .mat-chip:active{transform:scale(.97);}
 .mat-chip.selected{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:500;}
 .mat-chip.selected::before{content:'✓ ';}
-.qty-box{display:flex;align-items:center;gap:4px;opacity:0;pointer-events:none;transition:opacity .2s;}
+.qty-box{display:flex;align-items:center;gap:2px;opacity:0;pointer-events:none;transition:opacity .2s;}
 .qty-box.show{opacity:1;pointer-events:all;}
-.qty-btn{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;}
+.qty-btn{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;}
 .qty-btn:active{background:var(--accent-light);}
-.qty-num{width:30px;text-align:center;font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);}
+.qty-num{width:24px;text-align:center;font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);}
+.mat-grid{display:flex;flex-wrap:wrap;gap:4px;}
 
 /* Date input */
 .date-input{width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:16px;font-family:'DM Mono',monospace;color:var(--text);background:var(--surface2);-webkit-appearance:none;}
@@ -391,10 +391,13 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div class="card-body"><div id="materialRows"></div></div>
     </div>
 
-    <!-- 外注先 -->
+    <!-- 重機回送 -->
     <div class="card">
-      <div class="card-header"><span class="card-icon">🏢</span><div><div class="card-title">外注先</div><div class="card-subtitle">複数選択可</div></div></div>
-      <div class="card-body"><div class="chips" id="subChips"></div></div>
+      <div class="card-header"><span class="card-icon">🚛</span><div><div class="card-title">重機回送</div><div class="card-subtitle">回送業者を選択→重機を指定</div></div></div>
+      <div class="card-body">
+        <div class="chips" id="subChips"></div>
+        <div id="subMachinePanel"></div>
+      </div>
     </div>
 
     <!-- 作業時間 -->
@@ -731,7 +734,7 @@ const NORMAL_END=17*60;    // 17:00
 const BREAK_MINS=120;      // 休憩2時間
 const NORMAL_WORK=NORMAL_END-NORMAL_START-BREAK_MINS; // 420分=7h
 
-let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSites:[],selectedSubs:[],materialQty:{},photos:[],pin:''};
+let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSites:[],selectedSubs:[],subMachines:{},materialQty:{},photos:[],pin:''};
 
 // ===== 時間計算 =====
 function toMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -859,13 +862,45 @@ function renderSubChips(){
   if(!el)return;
   el.innerHTML=state.subcontractors.map(s=>
     `<div class="chip ${state.selectedSubs.includes(s.id)?'selected':''}" onclick="toggleSub('${s.id}')">${s.name}</div>`
-  ).join('')||'<div style="color:var(--text3);font-size:13px;">外注先が登録されていません</div>';
+  ).join('')||'<div style="color:var(--text3);font-size:13px;">回送業者が登録されていません</div>';
+  renderSubMachinePanel();
 }
 
 function toggleSub(id){
   const idx=state.selectedSubs.indexOf(id);
-  idx>=0?state.selectedSubs.splice(idx,1):state.selectedSubs.push(id);
+  if(idx>=0){
+    state.selectedSubs.splice(idx,1);
+    delete state.subMachines[id];
+  }else{
+    state.selectedSubs.push(id);
+    state.subMachines[id]=[];
+  }
   renderSubChips();
+}
+
+function renderSubMachinePanel(){
+  const panel=document.getElementById('subMachinePanel');
+  if(!panel)return;
+  if(!state.selectedSubs.length){panel.innerHTML='';return;}
+
+  panel.innerHTML=state.selectedSubs.map(subId=>{
+    const sub=state.subcontractors.find(s=>s.id===subId);
+    const selected=state.subMachines[subId]||[];
+    return `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;border-left:3px solid var(--accent2);">
+      <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:6px;">🚛 ${sub?.name} — 回送する重機</div>
+      <div class="chips">${machinesData.map(m=>
+        `<div class="chip ${selected.includes(m.id)?'selected':''}" onclick="toggleSubMachine('${subId}','${m.id}')" style="font-size:11px;padding:5px 9px;">${m.name}</div>`
+      ).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSubMachine(subId,machineId){
+  if(!state.subMachines[subId]) state.subMachines[subId]=[];
+  const arr=state.subMachines[subId];
+  const idx=arr.indexOf(machineId);
+  idx>=0?arr.splice(idx,1):arr.push(machineId);
+  renderSubMachinePanel();
 }
 
 // ===== SITE CHIPS =====
@@ -920,7 +955,7 @@ function toggleSite(id){
 
 // ===== MATERIAL ROWS WITH QTY =====
 function renderMaterialRows(){
-  document.getElementById('materialRows').innerHTML=state.materials.map(m=>{
+  document.getElementById('materialRows').innerHTML='<div class="mat-grid">'+state.materials.map(m=>{
     const sel=!!state.materialQty[m.id];
     const qty=state.materialQty[m.id]||1;
     return `<div class="mat-row" id="matrow-${m.id}">
@@ -931,7 +966,7 @@ function renderMaterialRows(){
         <button class="qty-btn" onclick="changeQty('${m.id}',1)">＋</button>
       </div>
     </div>`;
-  }).join('')||'<div style="color:var(--text3);font-size:13px;">材料が登録されていません</div>';
+  }).join('')+'</div>'||'<div style="color:var(--text3);font-size:13px;">外注が登録されていません</div>';
 }
 
 function toggleMat(id){
@@ -1102,6 +1137,7 @@ function startEdit(i){
   // 既存写真を読み込み
   state.photos=(r.photo_urls||[]).map(url=>({blob:null,preview:null,url}));
   state.selectedSubs=r.subcontractor_ids||[];
+  state.subMachines=r.sub_machines||{};
   setWorkType(r.work_type||'normal');
   renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();updateTimeSummary();
   document.getElementById('editBanner').style.display='flex';
@@ -1111,7 +1147,7 @@ function startEdit(i){
 }
 function cancelEdit(){
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};state.selectedSubs=[];
+  state.selectedSites=[];state.materialQty={};state.selectedSubs=[];state.subMachines={};
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('memo').value='';
   document.getElementById('editBanner').style.display='none';
@@ -1141,6 +1177,7 @@ async function submitReport(){
     material_ids:matIds,
     material_quantities:state.materialQty,
     subcontractor_ids:state.selectedSubs,
+    sub_machines:state.subMachines,
     start_time:start,end_time:end,
     normal_mins:normal,overtime_mins:overtime,
     work_type:currentWorkType,
@@ -1177,14 +1214,18 @@ async function submitReport(){
 
   const siteNames=state.selectedSites.map(id=>state.sites.find(s=>s.id===id)?.name).join('・');
   const matStr=matIds.length?matIds.map(id=>`${state.materials.find(m=>m.id===id)?.name}×${state.materialQty[id]}`).join('・'):'外注なし';
-  const subStr=state.selectedSubs.length?'\n🏢 外注先：'+state.selectedSubs.map(id=>state.subcontractors.find(s=>s.id===id)?.name).join('・'):'';
+  const subStr=state.selectedSubs.length?'\n🚛 回送：'+state.selectedSubs.map(subId=>{
+    const subName=state.subcontractors.find(s=>s.id===subId)?.name;
+    const mNames=(state.subMachines[subId]||[]).map(mid=>machinesData.find(m=>m.id===mid)?.name).filter(Boolean).join(',');
+    return `${subName}(${mNames||'重機未選択'})`;
+  }).join('・'):'';
   const wtLabel=currentWorkType==='night'?'🌙 夜間緊急':currentWorkType==='overtime'?'⏰ 残業':'🌞 通常';
   document.getElementById('successDetail').textContent=`${date} ${wtLabel}\n${siteNames}\n${matStr}${subStr}\n${start}〜${end}\n通常:${fmtMins(normal)} 残業:${fmtMins(overtime)}`;
   document.getElementById('successOverlay').classList.add('show');
 
   // リセット
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};state.photos=[];state.selectedSubs=[];
+  state.selectedSites=[];state.materialQty={};state.photos=[];state.selectedSubs=[];state.subMachines={};
   document.getElementById('memo').value='';
   document.getElementById('reportDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('editBanner').style.display='none';
@@ -1237,13 +1278,17 @@ function showDetail(i){
   const photoHtml=(r.photo_urls&&r.photo_urls.length>0)
     ?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">${r.photo_urls.map((url,j)=>`<a href="${url}" target="_blank" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);"><img src="${url}" alt="写真${j+1}" style="width:100%;display:block;"></a>`).join('')}</div>`
     :'なし';
-  const subNames=(r.subcontractor_ids||[]).map(id=>state.subcontractors.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
+  const subInfo=(r.subcontractor_ids||[]).map(subId=>{
+    const subName=state.subcontractors.find(s=>s.id===subId)?.name||'';
+    const mNames=((r.sub_machines||{})[subId]||[]).map(mid=>machinesData.find(m=>m.id===mid)?.name).filter(Boolean).join(', ');
+    return `${subName}${mNames?' → 🚜'+mNames:''}`;
+  }).filter(Boolean).join('<br>')||'なし';
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
     <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
     <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames||'なし'}</span></div>
     <div class="modal-row"><span class="modal-key">外注</span><span class="modal-val">${matNames||'なし'}</span></div>
-    <div class="modal-row"><span class="modal-key">🏢 外注先</span><span class="modal-val">${subNames||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">🚛 重機回送</span><span class="modal-val">${subInfo}</span></div>
     <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>

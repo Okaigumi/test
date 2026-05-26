@@ -424,6 +424,28 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div id="statsMaterialList"><div class="empty-msg">読み込み中...</div></div>
     <button class="csv-btn" onclick="exportCSV()">📥 CSVダウンロード</button>
     <div style="height:24px;"></div>
+
+    <!-- 現場別詳細（タップで表示） -->
+    <div id="siteDetailView" style="display:none;">
+      <button onclick="closeSiteDetail()" style="background:none;border:none;font-size:14px;color:var(--accent);cursor:pointer;margin-bottom:12px;font-family:'Noto Sans JP',sans-serif;font-weight:500;">← 集計に戻る</button>
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px;" id="siteDetailName"></div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;" id="siteDetailPeriod"></div>
+      <div class="stats-top-row">
+        <div class="stats-top-card"><div class="stats-top-num" id="sdDays">-</div><div class="stats-top-label">稼働日数</div></div>
+        <div class="stats-top-card"><div class="stats-top-num" id="sdHours">-</div><div class="stats-top-label">総作業時間</div></div>
+      </div>
+      <div class="stats-top-row" style="margin-top:8px;">
+        <div class="stats-top-card"><div class="stats-top-num" id="sdNormal">-</div><div class="stats-top-label">通常時間</div></div>
+        <div class="stats-top-card"><div class="stats-top-num ot" id="sdOT">-</div><div class="stats-top-label">残業時間</div></div>
+      </div>
+      <div class="stats-section-title">従業員別</div>
+      <div id="sdEmployeeList"></div>
+      <div class="stats-section-title">使用材料</div>
+      <div id="sdMaterialList"></div>
+      <div class="stats-section-title">日別一覧</div>
+      <div id="sdDayList"></div>
+      <div style="height:24px;"></div>
+    </div>
   </div>
 
   <!-- 設定 -->
@@ -555,9 +577,9 @@ async function startApp(){
   // 今日の日付をデフォルトセット
   document.getElementById('reportDate').value=d.toISOString().split('T')[0];
 
-  // 現在時刻をセット
-  const now=new Date();
-  document.getElementById('endTime').value=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  // 作業時間のデフォルト 8:00-17:00
+  document.getElementById('startTime').value='08:00';
+  document.getElementById('endTime').value='17:00';
 
   if(state.currentUser.role==='admin'){
     ['tab-admin','tab-stats','tab-master'].forEach(id=>document.getElementById(id).style.display='');
@@ -962,13 +984,16 @@ async function loadStats(){
 
   // 現場別
   const siteMap={};
-  reports.forEach(r=>(r.site_ids||[]).forEach(id=>{const n=state.sites.find(s=>s.id===id)?.name||id;siteMap[n]=(siteMap[n]||0)+1;}));
-  const maxSite=Math.max(...Object.values(siteMap),1);
+  reports.forEach(r=>(r.site_ids||[]).forEach(id=>{
+    if(!siteMap[id])siteMap[id]={name:state.sites.find(s=>s.id===id)?.name||id,cnt:0};
+    siteMap[id].cnt++;
+  }));
+  const maxSite=Math.max(...Object.values(siteMap).map(s=>s.cnt),1);
   document.getElementById('statsSiteList').innerHTML=Object.keys(siteMap).length
-    ?Object.entries(siteMap).sort((a,b)=>b[1]-a[1]).map(([name,cnt])=>`
-      <div class="stats-bar-item">
-        <div class="stats-bar-header"><span class="stats-bar-name">🏗️ ${name}</span><span class="stats-bar-val">${cnt}日</span></div>
-        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(cnt/maxSite*100)}%"></div></div>
+    ?Object.entries(siteMap).sort((a,b)=>b[1].cnt-a[1].cnt).map(([id,s])=>`
+      <div class="stats-bar-item" onclick="showSiteDetail('${id}')" style="cursor:pointer;">
+        <div class="stats-bar-header"><span class="stats-bar-name">🏗️ ${s.name}</span><span class="stats-bar-val">${s.cnt}日 ›</span></div>
+        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(s.cnt/maxSite*100)}%"></div></div>
       </div>`).join('')
     :'<div class="empty-msg">データがありません</div>';
 
@@ -988,6 +1013,82 @@ async function loadStats(){
     :'<div class="empty-msg">データがありません</div>';
 
   window._statsReports=reports;
+  // 詳細ビューが開いていたら閉じる
+  document.getElementById('siteDetailView').style.display='none';
+}
+
+function showSiteDetail(siteId){
+  const reports=window._statsReports||[];
+  const siteName=state.sites.find(s=>s.id===siteId)?.name||siteId;
+  const siteReports=reports.filter(r=>(r.site_ids||[]).includes(siteId));
+
+  if(!siteReports.length)return;
+
+  const y=statsMonth.getFullYear(),m=statsMonth.getMonth()+1;
+  document.getElementById('siteDetailName').textContent=`🏗️ ${siteName}`;
+  document.getElementById('siteDetailPeriod').textContent=`${y}年${m}月`;
+
+  const days=new Set(siteReports.map(r=>r.report_date)).size;
+  let totalM=0,normalM=0,otM=0;
+  siteReports.forEach(r=>{
+    const{total}=calcTime(r.start_time,r.end_time);
+    totalM+=total;normalM+=(r.normal_mins||0);otM+=(r.overtime_mins||0);
+  });
+  document.getElementById('sdDays').textContent=days;
+  document.getElementById('sdHours').textContent=fmtMins(totalM);
+  document.getElementById('sdNormal').textContent=fmtMins(normalM);
+  document.getElementById('sdOT').textContent=fmtMins(otM);
+
+  // 従業員別
+  const empMap={};
+  siteReports.forEach(r=>{
+    if(!empMap[r.employee_name])empMap[r.employee_name]={days:0,normal:0,ot:0};
+    empMap[r.employee_name].days++;
+    empMap[r.employee_name].normal+=(r.normal_mins||0);
+    empMap[r.employee_name].ot+=(r.overtime_mins||0);
+  });
+  const maxEmp=Math.max(...Object.values(empMap).map(e=>e.days),1);
+  document.getElementById('sdEmployeeList').innerHTML=Object.entries(empMap).sort((a,b)=>b[1].days-a[1].days).map(([name,d])=>`
+    <div class="stats-bar-item">
+      <div class="stats-bar-header"><span class="stats-bar-name">${name}</span><span class="stats-bar-val">${d.days}日 / ${fmtMins(d.normal)} <span class="ot">残${fmtMins(d.ot)}</span></span></div>
+      <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(d.days/maxEmp*100)}%"></div></div>
+    </div>`).join('');
+
+  // 材料別
+  const matMap={};
+  siteReports.forEach(r=>{
+    const qty=r.material_quantities||{};
+    (r.material_ids||[]).forEach(id=>{const n=state.materials.find(m=>m.id===id)?.name||id;matMap[n]=(matMap[n]||0)+(qty[id]||1);});
+  });
+  const maxMat=Math.max(...Object.values(matMap),1);
+  document.getElementById('sdMaterialList').innerHTML=Object.keys(matMap).length
+    ?Object.entries(matMap).sort((a,b)=>b[1]-a[1]).map(([name,cnt])=>`
+      <div class="stats-bar-item">
+        <div class="stats-bar-header"><span class="stats-bar-name">🧱 ${name}</span><span class="stats-bar-val">${cnt}</span></div>
+        <div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.round(cnt/maxMat*100)}%"></div></div>
+      </div>`).join('')
+    :'<div class="empty-msg">データがありません</div>';
+
+  // 日別一覧
+  const byDate={};
+  siteReports.forEach(r=>{
+    if(!byDate[r.report_date])byDate[r.report_date]=[];
+    byDate[r.report_date].push(r);
+  });
+  document.getElementById('sdDayList').innerHTML=Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0])).map(([date,reps])=>`
+    <div class="stats-bar-item">
+      <div style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;margin-bottom:4px;">${date}</div>
+      ${reps.map(r=>`<div style="font-size:12px;color:var(--text2);padding:2px 0;">${r.employee_name} ｜ ${r.start_time}〜${r.end_time} ｜ 通常${fmtMins(r.normal_mins||0)} 残業${fmtMins(r.overtime_mins||0)}</div>`).join('')}
+    </div>`).join('');
+
+  // 表示切替
+  document.getElementById('siteDetailView').style.display='block';
+  document.getElementById('siteDetailView').scrollIntoView({behavior:'smooth'});
+}
+
+function closeSiteDetail(){
+  document.getElementById('siteDetailView').style.display='none';
+  window.scrollTo(0,0);
 }
 
 function exportCSV(){

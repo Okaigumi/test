@@ -891,65 +891,61 @@ async function loadData(){
   // 現場選択時のヒーローパネル
   const selectedSiteId=document.getElementById('siteFilter').value;
   const hero=document.getElementById('siteBudgetHero');
-  if(selectedSiteId&&budgetMap[selectedSiteId]!==undefined){
+  if(selectedSiteId){
     const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
     const siteName=siteObj.name||'';
     const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
     const location=siteObj.location?`📍 ${siteObj.location}`:'';
-    const siteBudget=budgetMap[selectedSiteId];
-    const siteCost=grandTotal;
-    const siteDiff=siteBudget-siteCost;
-    const over=siteDiff<0;
-    const pct=Math.min(Math.round(siteCost/siteBudget*100),999);
-    const barW=Math.min(pct,100);
-    document.getElementById('siteBudgetHeroInner').innerHTML=`
+
+    // 現場情報カード（常に表示）
+    const siteInfoHtml=`
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
         <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🏗️ ${siteName}</div>
-        ${location?`<div style="font-size:12px;color:var(--text2);margin-bottom:3px;">${location}</div>`:''}
-        ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
-      </div>
-      <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-          <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
-            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
-          </div>
-          <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;opacity:.8;margin-bottom:4px;">現在原価</div>
-            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,.2);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
-          <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
-          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-size:12px;opacity:.8;">消化率</span>
-          <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 超過':''}</span>
-        </div>
-        <div style="height:10px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden;margin-bottom:10px;">
-          <div style="height:100%;width:${barW}%;background:white;border-radius:5px;transition:width .5s;"></div>
-        </div>
-        <div style="text-align:right;">
-          <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="font-size:11px;padding:5px 14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
-        </div>
+        ${location?`<div style="font-size:13px;color:var(--text2);margin-bottom:3px;">${location}</div>`:'<div style="font-size:12px;color:var(--text3);margin-bottom:3px;">工事場所：未設定</div>'}
+        ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:'<div style="font-size:12px;color:var(--text3);">工期：未設定</div>'}
       </div>`;
-    hero.style.display='block';
-  }else if(selectedSiteId&&budgetMap[selectedSiteId]===undefined){
-    const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
-    const siteName=siteObj.name||'';
-    const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
-    const location=siteObj.location?`📍 ${siteObj.location}`:'';
-    document.getElementById('siteBudgetHeroInner').innerHTML=`
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
-        <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🏗️ ${siteName}</div>
-        ${location?`<div style="font-size:12px;color:var(--text2);margin-bottom:3px;">${location}</div>`:''}
-        ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
-      </div>
-      <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">
-        <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">実行予算が未設定です</div>
-        <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
-      </div>`;
+
+    if(budgetMap[selectedSiteId]!==undefined){
+      const siteBudget=budgetMap[selectedSiteId];
+      const siteCost=grandTotal;
+      const siteDiff=siteBudget-siteCost;
+      const over=siteDiff<0;
+      const pct=Math.min(Math.round(siteCost/siteBudget*100),999);
+      const barW=Math.min(pct,100);
+      document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
+        <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
+              <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
+              <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
+            </div>
+            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
+              <div style="font-size:10px;opacity:.8;margin-bottom:4px;">現在原価</div>
+              <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
+            </div>
+          </div>
+          <div style="background:rgba(255,255,255,.2);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
+            <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
+            <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12px;opacity:.8;">消化率</span>
+            <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 超過':''}</span>
+          </div>
+          <div style="height:10px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden;margin-bottom:10px;">
+            <div style="height:100%;width:${barW}%;background:white;border-radius:5px;transition:width .5s;"></div>
+          </div>
+          <div style="text-align:right;">
+            <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="font-size:11px;padding:5px 14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
+          </div>
+        </div>`;
+    }else{
+      document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
+        <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">
+          <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">実行予算が未設定です</div>
+          <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
+        </div>`;
+    }
     hero.style.display='block';
   }else{
     hero.style.display='none';

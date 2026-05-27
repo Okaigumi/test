@@ -308,6 +308,64 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 </div>
 
+<!-- 請求書編集モーダル -->
+<div id="invEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeInvEdit()">
+  <div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:640px;max-height:85vh;overflow-y:auto;padding:20px;animation:slideUp .25s ease;">
+    <div style="width:40px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px;"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;">✏️ 請求書を修正</div>
+    <div style="display:grid;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">請求日</div>
+          <input type="date" class="rate-input" id="editInvDate" style="width:100%;text-align:left;font-size:14px;">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">現場</div>
+          <select class="filter-select" id="editInvSite" style="width:100%;"><option value="">指定なし</option></select>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">業者名・取引先</div>
+        <input type="text" class="rate-input" id="editInvVendor" style="width:100%;text-align:left;font-size:14px;">
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">カテゴリ</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;" id="editInvCatBtns">
+          <button class="inv-cat-btn" data-cat="subcontract" onclick="setEditInvCat('subcontract')">🧱 外注費</button>
+          <button class="inv-cat-btn" data-cat="material" onclick="setEditInvCat('material')">📦 材料費</button>
+          <button class="inv-cat-btn" data-cat="machine_lease" onclick="setEditInvCat('machine_lease')">🚜 重機リース</button>
+          <button class="inv-cat-btn" data-cat="other" onclick="setEditInvCat('other')">📋 その他</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">品目・内容</div>
+        <input type="text" class="rate-input" id="editInvDesc" style="width:100%;text-align:left;font-size:14px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;">
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">金額</div>
+          <input type="number" class="rate-input" id="editInvAmount" step="1000" min="0" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">税</div>
+          <select class="filter-select" id="editInvTax">
+            <option value="true">税込</option>
+            <option value="false">税抜</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">メモ</div>
+        <input type="text" class="rate-input" id="editInvMemo" style="width:100%;text-align:left;font-size:14px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button onclick="closeInvEdit()" style="padding:13px;background:var(--surface2);color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">キャンセル</button>
+        <button onclick="updateInvoice()" style="padding:13px;background:var(--accent);color:white;border:none;border-radius:var(--radius);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">保存する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL='https://fblecreevjtrqnkhmwuk.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
@@ -467,6 +525,7 @@ async function loadInvoices(){
           <div class="inv-amount" style="color:${info.color};">${fmt(inv.amount)}</div>
           <div style="font-size:10px;color:var(--text3);text-align:right;">${taxStr}</div>
         </div>
+        <button class="inv-del" onclick="editInvoice('${inv.id}')" style="color:var(--accent);">✏️</button>
         <button class="inv-del" onclick="deleteInvoice('${inv.id}')">🗑️</button>
       </div>`;
     }).join('')}
@@ -476,6 +535,70 @@ async function loadInvoices(){
 async function deleteInvoice(id){
   if(!confirm('この請求書を削除しますか？'))return;
   await sb.from('invoices').delete().eq('id',id);
+  await loadInvoices();
+}
+
+// ===== EDIT INVOICE =====
+let editingInvId=null;
+let editInvCat='subcontract';
+
+function setEditInvCat(cat){
+  editInvCat=cat;
+  document.querySelectorAll('#editInvCatBtns .inv-cat-btn').forEach(b=>{
+    b.classList.toggle('selected',b.dataset.cat===cat);
+  });
+}
+
+async function editInvoice(id){
+  const{data}=await sb.from('invoices').select('*').eq('id',id).single();
+  if(!data)return;
+  editingInvId=id;
+
+  document.getElementById('editInvDate').value=data.invoice_date;
+  document.getElementById('editInvVendor').value=data.vendor_name;
+  document.getElementById('editInvDesc').value=data.description||'';
+  document.getElementById('editInvAmount').value=data.amount;
+  document.getElementById('editInvTax').value=String(data.tax_included);
+  document.getElementById('editInvMemo').value=data.memo||'';
+
+  // 現場セレクト
+  const sel=document.getElementById('editInvSite');
+  if(sel.options.length<=1){
+    sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
+  }
+  sel.value=data.site_id||'';
+
+  setEditInvCat(data.category||'subcontract');
+
+  const modal=document.getElementById('invEditModal');
+  modal.style.display='flex';
+}
+
+function closeInvEdit(){
+  document.getElementById('invEditModal').style.display='none';
+  editingInvId=null;
+}
+
+async function updateInvoice(){
+  if(!editingInvId)return;
+  const date=document.getElementById('editInvDate').value;
+  const vendor=document.getElementById('editInvVendor').value.trim();
+  const amount=parseInt(document.getElementById('editInvAmount').value)||0;
+  if(!date||!vendor||!amount){alert('請求日・業者名・金額は必須です');return;}
+
+  const{error}=await sb.from('invoices').update({
+    invoice_date:date,
+    site_id:document.getElementById('editInvSite').value||null,
+    vendor_name:vendor,
+    category:editInvCat,
+    description:document.getElementById('editInvDesc').value||null,
+    amount:amount,
+    tax_included:document.getElementById('editInvTax').value==='true',
+    memo:document.getElementById('editInvMemo').value||null
+  }).eq('id',editingInvId);
+
+  if(error){alert('更新に失敗しました');return;}
+  closeInvEdit();
   await loadInvoices();
 }
 

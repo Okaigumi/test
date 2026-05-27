@@ -33,12 +33,12 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
-.app-header{background:var(--accent);color:white;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:12px;}
-.header-title{font-size:18px;font-weight:700;}
+.app-header{background:var(--accent);color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:8px;}
+.header-title{font-size:15px;font-weight:700;white-space:nowrap;}
 .header-sub{font-size:11px;opacity:.7;margin-top:2px;}
-.header-right{display:flex;gap:8px;align-items:center;}
-.btn-print{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
-.btn-back{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 12px;border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-decoration:none;}
+.header-right{display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.btn-print{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;}
+.btn-back{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-decoration:none;white-space:nowrap;}
 
 .container{max-width:960px;margin:0 auto;padding:20px 16px;}
 
@@ -905,32 +905,32 @@ async function loadData(){
     const pct=Math.min(Math.round(siteCost/siteBudget*100),999);
     const barW=Math.min(pct,100);
     document.getElementById('siteBudgetHeroInner').innerHTML=`
-      <div style="background:${over?'var(--danger)':'var(--accent)'};padding:20px;color:white;">
-        <div style="font-size:13px;opacity:.8;margin-bottom:4px;">🏗️ ${siteName}</div>
-        <div style="font-size:12px;opacity:.7;margin-bottom:16px;">${currentMonth.getFullYear()}年度 実行予算</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;text-align:center;">
-          <div>
-            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">実行予算</div>
-            <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
+      <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
+        <div style="font-size:13px;opacity:.8;margin-bottom:2px;">🏗️ ${siteName}</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:14px;">${currentMonth.getFullYear()}年度 実行予算</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
           </div>
-          <div>
-            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">現在原価</div>
-            <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
-          </div>
-          <div>
-            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">${over?'⚠️ 超過額':'✅ 残額'}</div>
-            <div style="font-size:24px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
+          <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:10px;opacity:.8;margin-bottom:4px;">現在原価</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <div style="background:rgba(255,255,255,.2);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
+          <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
+          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <span style="font-size:12px;opacity:.8;">消化率</span>
-          <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 予算超過':''}</span>
+          <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 超過':''}</span>
         </div>
-        <div style="height:12px;background:rgba(255,255,255,.25);border-radius:6px;overflow:hidden;">
-          <div style="height:100%;width:${barW}%;background:white;border-radius:6px;transition:width .5s;"></div>
+        <div style="height:10px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden;margin-bottom:10px;">
+          <div style="height:100%;width:${barW}%;background:white;border-radius:5px;transition:width .5s;"></div>
         </div>
-        <div style="text-align:right;margin-top:8px;">
-          <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
+        <div style="text-align:right;">
+          <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="font-size:11px;padding:5px 14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
         </div>
       </div>`;
     hero.style.display='block';

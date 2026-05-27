@@ -439,14 +439,43 @@ async function saveSite(){
       }
     }
   }
+  // 先にデータ更新・画面再描画してからモーダルを閉じる
+  const{data:newSites}=await sb.from('sites').select('*,site_assignments(employee_id)').eq('is_active',true).order('name');
+  _sites=newSites||[];
+  const newHtml=`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">総現場数</div><div class="stat-val blue">${_sites.length}</div></div>
+      <div class="stat-card"><div class="stat-label">工期設定済</div><div class="stat-val green">${_sites.filter(s=>s.start_date).length}</div></div>
+      <div class="stat-card"><div class="stat-label">住所設定済</div><div class="stat-val orange">${_sites.filter(s=>s.location).length}</div></div>
+      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>s.site_assignments?.length>0).length}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">現場一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>現場名</th><th>住所・工事場所</th><th>工期</th><th>配属人数</th><th>操作</th></tr></thead>
+        <tbody>${_sites.map(s=>`
+          <tr>
+            <td><div style="font-weight:600;">${s.name}</div></td>
+            <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${s.location||'未設定'}</div></td>
+            <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
+            <td><span class="badge badge-blue">${s.site_assignments?.length||0}名</span></td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}','${s.name}')">削除</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=newHtml;
   closeModal();
-  await pageSites();
 }
 
 async function deleteSite(id,name){
   if(!confirm(`「${name}」を削除しますか？`))return;
   await sb.from('sites').update({is_active:false}).eq('id',id);
   await pageSites();
+  showPage('sites');
 }
 
 // ===== INVOICES PAGE =====

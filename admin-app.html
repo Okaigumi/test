@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理コンソール</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0F1117;--surface:#1A1D27;--surface2:#232736;--surface3:#2C3148;
+  --accent:#4F8EF7;--accent-light:rgba(79,142,247,.15);
+  --green:#34D399;--green-bg:rgba(52,211,153,.12);
+  --orange:#FB923C;--orange-bg:rgba(251,146,60,.12);
+  --red:#F87171;--red-bg:rgba(248,113,113,.12);
+  --purple:#A78BFA;--purple-bg:rgba(167,139,250,.12);
+  --text:#F1F3F9;--text2:#8B91A8;--text3:#4A5068;
+  --border:#2C3148;--radius:10px;--radius-sm:6px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;}
+.sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
+.logo-title{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.02em;}
+.logo-sub{font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Mono',monospace;}
+.sidebar-nav{flex:1;padding:12px 10px;overflow-y:auto;}
+.nav-section{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:12px 10px 6px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text2);transition:all .15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left;font-family:'Noto Sans JP',sans-serif;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:500;}
+.nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0;}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border);}
+.user-info{display:flex;align-items:center;gap:10px;}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);}
+.user-name{font-size:13px;font-weight:500;}
+.user-role{font-size:11px;color:var(--text3);}
+.logout-btn{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:4px;}
+.logout-btn:hover{color:var(--red);}
+
+/* ===== MAIN ===== */
+.main{margin-left:240px;flex:1;min-height:100vh;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:90;}
+.page-title{font-size:18px;font-weight:700;}
+.page-sub{font-size:12px;color:var(--text3);margin-top:2px;}
+.content{padding:28px;}
+
+/* ===== CARDS ===== */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:14px;font-weight:700;}
+.card-body{padding:20px;}
+
+/* ===== STATS ===== */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;}
+.stat-label{font-size:11px;color:var(--text3);margin-bottom:8px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;}
+.stat-val{font-size:26px;font-weight:700;font-family:'DM Mono',monospace;}
+.stat-val.blue{color:var(--accent);}
+.stat-val.green{color:var(--green);}
+.stat-val.orange{color:var(--orange);}
+.stat-val.purple{color:var(--purple);}
+.stat-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+
+/* ===== TABLE ===== */
+.data-table{width:100%;border-collapse:collapse;}
+.data-table th{background:var(--surface2);padding:10px 14px;font-size:11px;font-weight:700;color:var(--text3);text-align:left;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid var(--border);}
+.data-table td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:top;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:var(--surface2);}
+.money{font-family:'DM Mono',monospace;}
+
+/* ===== FORM ===== */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-full{grid-column:1/-1;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-label{font-size:12px;font-weight:500;color:var(--text2);}
+.form-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:'Noto Sans JP',monospace;color:var(--text);transition:border-color .15s;}
+.form-input:focus{outline:none;border-color:var(--accent);}
+.form-input::placeholder{color:var(--text3);}
+select.form-input{cursor:pointer;}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;border:none;transition:all .15s;}
+.btn-primary{background:var(--accent);color:white;}
+.btn-primary:hover{background:#3d7ae8;}
+.btn-secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border);}
+.btn-secondary:hover{color:var(--text);border-color:var(--text3);}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(248,113,113,.2);}
+.btn-danger:hover{background:var(--red);color:white;}
+.btn-success{background:var(--green-bg);color:var(--green);border:1px solid rgba(52,211,153,.2);}
+.btn-success:hover{background:var(--green);color:white;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+
+/* ===== BADGES ===== */
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;}
+.badge-blue{background:var(--accent-light);color:var(--accent);}
+.badge-green{background:var(--green-bg);color:var(--green);}
+.badge-orange{background:var(--orange-bg);color:var(--orange);}
+.badge-red{background:var(--red-bg);color:var(--red);}
+.badge-purple{background:var(--purple-bg);color:var(--purple);}
+
+/* ===== MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-width:90vw;max-height:85vh;overflow-y:auto;}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
+.modal-body{padding:24px;}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+
+/* ===== TABS ===== */
+.page-tabs{display:flex;gap:4px;background:var(--surface2);border-radius:var(--radius-sm);padding:4px;margin-bottom:24px;width:fit-content;}
+.page-tab{padding:7px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;color:var(--text2);background:none;border:none;font-family:'Noto Sans JP',sans-serif;transition:all .15s;}
+.page-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3);}
+
+/* ===== LOGIN ===== */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;width:100%;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;width:380px;}
+.login-logo{font-size:32px;margin-bottom:16px;}
+.login-title{font-size:22px;font-weight:700;margin-bottom:6px;}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:28px;}
+.login-error{color:var(--red);font-size:13px;margin-top:10px;display:none;}
+
+/* ===== MISC ===== */
+.empty{text-align:center;padding:48px;color:var(--text3);font-size:14px;}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title-lg{font-size:15px;font-weight:700;}
+.divider{height:1px;background:var(--border);margin:20px 0;}
+.tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;font-size:11px;color:var(--text2);margin:1px;}
+
+/* ===== LOADING ===== */
+.loading-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;width:100%;flex-direction:column;gap:12px;}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* PIN */
+.pin-display{display:flex;gap:12px;justify-content:center;margin:20px 0;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all .15s;}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:200px;margin:0 auto;}
+.pin-key{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;font-size:18px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;color:var(--text);transition:all .1s;}
+.pin-key:hover{background:var(--surface3);border-color:var(--accent);}
+.pin-key:active{transform:scale(.95);}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-wrap" id="loadingWrap">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--text3);">読み込み中...</div>
+</div>
+
+<!-- Login -->
+<div class="login-wrap" id="loginWrap" style="display:none;">
+  <div class="login-card">
+    <div class="login-logo">⚙️</div>
+    <div class="login-title">管理コンソール</div>
+    <div class="login-sub">管理者専用ページです</div>
+    <div class="form-group" style="margin-bottom:16px;">
+      <label class="form-label">管理者を選択</label>
+      <select class="form-input" id="loginName"><option value="">選択してください</option></select>
+    </div>
+    <div class="form-label" style="margin-bottom:8px;">PINコード</div>
+    <div class="pin-display">
+      <div class="pin-dot" id="p0"></div><div class="pin-dot" id="p1"></div>
+      <div class="pin-dot" id="p2"></div><div class="pin-dot" id="p3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="aPin('1')">1</button>
+      <button class="pin-key" onclick="aPin('2')">2</button>
+      <button class="pin-key" onclick="aPin('3')">3</button>
+      <button class="pin-key" onclick="aPin('4')">4</button>
+      <button class="pin-key" onclick="aPin('5')">5</button>
+      <button class="pin-key" onclick="aPin('6')">6</button>
+      <button class="pin-key" onclick="aPin('7')">7</button>
+      <button class="pin-key" onclick="aPin('8')">8</button>
+      <button class="pin-key" onclick="aPin('9')">9</button>
+      <button class="pin-key" onclick="aPinClear()">C</button>
+      <button class="pin-key" onclick="aPin('0')">0</button>
+      <button class="pin-key" onclick="aPinBack()">⌫</button>
+    </div>
+    <div class="login-error" id="loginError">名前またはPINが正しくありません</div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appWrap" style="display:none;width:100%;">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-title">⚙️ 管理コンソール</div>
+      <div class="logo-sub">Admin Console</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">現場管理</div>
+      <button class="nav-item active" onclick="showPage('sites')" id="nav-sites"><span class="nav-icon">🏗️</span>現場一覧</button>
+      <div class="nav-section">財務</div>
+      <button class="nav-item" onclick="showPage('invoices')" id="nav-invoices"><span class="nav-icon">📄</span>請求書</button>
+      <button class="nav-item" onclick="showPage('rates')" id="nav-rates"><span class="nav-icon">💴</span>単価設定</button>
+      <button class="nav-item" onclick="showPage('budgets')" id="nav-budgets"><span class="nav-icon">📋</span>実行予算</button>
+      <div class="nav-section">人員</div>
+      <button class="nav-item" onclick="showPage('employees')" id="nav-employees"><span class="nav-icon">👷</span>従業員</button>
+      <button class="nav-item" onclick="showPage('admins')" id="nav-admins"><span class="nav-icon">🔐</span>管理者</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="sidebarAvatar"></div>
+        <div><div class="user-name" id="sidebarName"></div><div class="user-role">管理者</div></div>
+        <button class="logout-btn" onclick="aLogout()" title="ログアウト">⏻</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div><div class="page-title" id="pageTitle">現場一覧</div><div class="page-sub" id="pageSub"></div></div>
+      <div id="topbarActions"></div>
+    </div>
+    <div class="content" id="pageContent"></div>
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle"></div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<script>
+const SB_URL='https://fblecreevjtrqnkhmwuk.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+let currentUser=null;
+let aPin_str='';
+let _sites=[],_employees=[],_subcontractors=[],_machines=[],_unitRates={};
+
+function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function fmt(n){return '¥'+(n||0).toLocaleString();}
+
+// ===== AUTH =====
+async function init(){
+  const saved=sessionStorage.getItem('adminUser');
+  if(saved){currentUser=JSON.parse(saved);await startApp();return;}
+  const{data}=await sb.from('genka_admins').select('id,name').eq('is_active',true).order('name');
+  const sel=document.getElementById('loginName');
+  (data||[]).forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=a.name;sel.appendChild(o);});
+  document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('loginWrap').style.display='flex';
+}
+
+function aPin(n){if(aPin_str.length>=4)return;aPin_str+=n;updatePinDots();if(aPin_str.length===4)setTimeout(tryLogin,200);}
+function aPinBack(){aPin_str=aPin_str.slice(0,-1);updatePinDots();}
+function aPinClear(){aPin_str='';updatePinDots();}
+function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('p'+i).classList.toggle('filled',i<aPin_str.length);}
+
+async function tryLogin(){
+  const id=document.getElementById('loginName').value;
+  if(!id){document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();return;}
+  const{data}=await sb.from('genka_admins').select('*').eq('id',id).eq('pin',aPin_str).eq('is_active',true).single();
+  if(data){
+    currentUser=data;sessionStorage.setItem('adminUser',JSON.stringify(data));
+    document.getElementById('loginError').style.display='none';
+    document.getElementById('loginWrap').style.display='none';
+    document.getElementById('loadingWrap').style.display='flex';
+    await startApp();
+  }else{document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();}
+}
+
+function aLogout(){sessionStorage.removeItem('adminUser');location.reload();}
+
+async function startApp(){
+  const[sRes,eRes,subRes,mRes,urRes]=await Promise.all([
+    sb.from('sites').select('*').eq('is_active',true).order('name'),
+    sb.from('employees').select('*').eq('is_active',true).order('name'),
+    sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
+    sb.from('machines').select('*').eq('is_active',true).order('name'),
+    sb.from('unit_rates').select('*')
+  ]);
+  _sites=sRes.data||[];
+  _employees=eRes.data||[];
+  _subcontractors=subRes.data||[];
+  _machines=mRes.data||[];
+  (urRes.data||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
+
+  document.getElementById('sidebarAvatar').textContent=currentUser.name.slice(0,1);
+  document.getElementById('sidebarName').textContent=currentUser.name;
+  document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('appWrap').style.display='flex';
+  showPage('sites');
+}
+
+// ===== NAVIGATION =====
+function showPage(name){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('nav-'+name)?.classList.add('active');
+  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者'};
+  document.getElementById('pageTitle').textContent=titles[name]||'';
+  document.getElementById('pageSub').textContent='';
+  document.getElementById('topbarActions').innerHTML='';
+  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins};
+  if(pages[name]) pages[name]();
+}
+
+// ===== MODAL =====
+function openModal(title,body,footer=''){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=body;
+  document.getElementById('modalFooter').innerHTML=footer;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show');}
+
+// ===== SITES PAGE =====
+async function pageSites(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openSiteModal()">＋ 現場を追加</button>`;
+  const{data}=await sb.from('sites').select('*,site_assignments(employee_id)').eq('is_active',true).order('name');
+  _sites=(data||[]);
+
+  const html=`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">総現場数</div><div class="stat-val blue">${_sites.length}</div></div>
+      <div class="stat-card"><div class="stat-label">工期設定済</div><div class="stat-val green">${_sites.filter(s=>s.start_date).length}</div></div>
+      <div class="stat-card"><div class="stat-label">住所設定済</div><div class="stat-val orange">${_sites.filter(s=>s.location).length}</div></div>
+      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>s.site_assignments?.length>0).length}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">現場一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>現場名</th><th>住所・工事場所</th><th>工期</th><th>配属人数</th><th>操作</th></tr></thead>
+        <tbody>${_sites.map(s=>`
+          <tr>
+            <td><div style="font-weight:600;">${s.name}</div></td>
+            <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${s.location||'未設定'}</div></td>
+            <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
+            <td><span class="badge badge-blue">${s.site_assignments?.length||0}名</span></td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}','${s.name}')">削除</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openSiteModal(siteId=null){
+  const s=siteId?_sites.find(x=>x.id===siteId):null;
+  const{data:assigns}=siteId?await sb.from('site_assignments').select('employee_id').eq('site_id',siteId).eq('is_active',true):{data:[]};
+  const assignedIds=(assigns||[]).map(a=>a.employee_id);
+
+  const empChecks=_employees.filter(e=>e.role!=='admin').map(e=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+      <input type="checkbox" value="${e.id}" ${assignedIds.includes(e.id)?'checked':''} style="width:15px;height:15px;accent-color:var(--accent);">
+      <span style="font-size:13px;">${e.name}</span>
+    </label>`).join('');
+
+  const body=`
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="form-group form-full">
+        <label class="form-label">現場名 *</label>
+        <input class="form-input" id="f-name" value="${s?.name||''}" placeholder="例：〇〇ビル3F">
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">住所・工事場所</label>
+        <input class="form-input" id="f-location" value="${s?.location||''}" placeholder="例：静岡県浜松市中央区〇〇町1-2-3">
+      </div>
+      <div class="form-group">
+        <label class="form-label">工期 開始</label>
+        <input type="date" class="form-input" id="f-start" value="${s?.start_date||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">工期 終了</label>
+        <input type="date" class="form-input" id="f-end" value="${s?.end_date||''}">
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div class="form-label" style="margin-bottom:8px;">従業員の配属</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;max-height:180px;overflow-y:auto;">
+        ${empChecks||'<div style="color:var(--text3);font-size:13px;">従業員がいません</div>'}
+      </div>
+    </div>`;
+
+  openModal(s?`🏗️ ${s.name} を編集`:'🏗️ 新規現場を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveSite('${siteId||''}')">保存</button>`);
+}
+
+async function saveSite(siteId){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){alert('現場名を入力してください');return;}
+  const payload={
+    name,
+    location:document.getElementById('f-location').value||null,
+    start_date:document.getElementById('f-start').value||null,
+    end_date:document.getElementById('f-end').value||null,
+    is_active:true
+  };
+  let id=siteId;
+  if(siteId){
+    await sb.from('sites').update(payload).eq('id',siteId);
+  }else{
+    const{data}=await sb.from('sites').insert(payload).select('id').single();
+    id=data?.id;
+  }
+  // 配属更新
+  if(id){
+    const checks=document.querySelectorAll('#modalBody input[type=checkbox]');
+    await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
+    for(const c of checks){
+      if(c.checked){
+        await sb.from('site_assignments').upsert({site_id:id,employee_id:c.value,is_active:true},{onConflict:'site_id,employee_id'});
+      }
+    }
+  }
+  closeModal();await pageSites();
+}
+
+async function deleteSite(id,name){
+  if(!confirm(`「${name}」を削除しますか？`))return;
+  await sb.from('sites').update({is_active:false}).eq('id',id);
+  await pageSites();
+}
+
+// ===== INVOICES PAGE =====
+async function pageInvoices(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openInvoiceModal()">＋ 請求書を追加</button>`;
+  const{data}=await sb.from('invoices').select('*').order('invoice_date',{ascending:false}).limit(200);
+  const invs=data||[];
+  const catInfo={subcontract:{label:'外注費',cls:'badge-orange'},material:{label:'材料費',cls:'badge-purple'},machine_lease:{label:'重機リース',cls:'badge-blue'},other:{label:'その他',cls:'badge-green'}};
+  const totalAmt=invs.reduce((s,i)=>s+i.amount,0);
+
+  const html=`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">総件数</div><div class="stat-val blue">${invs.length}</div></div>
+      <div class="stat-card"><div class="stat-label">合計金額</div><div class="stat-val green" style="font-size:20px;">${fmt(totalAmt)}</div></div>
+      <div class="stat-card"><div class="stat-label">外注費</div><div class="stat-val orange" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='subcontract').reduce((s,i)=>s+i.amount,0))}</div></div>
+      <div class="stat-card"><div class="stat-label">材料費</div><div class="stat-val purple" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='material').reduce((s,i)=>s+i.amount,0))}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">請求書一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
+        <tbody>${invs.map(i=>{
+          const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
+          const site=_sites.find(s=>s.id===i.site_id);
+          return `<tr>
+            <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.invoice_date}</td>
+            <td><div style="font-weight:500;">${i.vendor_name}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${i.description}</div>`:''}</td>
+            <td><span class="badge ${c.cls}">${c.label}</span></td>
+            <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
+            <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
+            <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="openInvoiceModal('${i.id}')">編集</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteInvoice('${i.id}')">削除</button>
+            </td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openInvoiceModal(invId=null){
+  let inv=null;
+  if(invId){const{data}=await sb.from('invoices').select('*').eq('id',invId).single();inv=data;}
+  const siteOpts=_sites.map(s=>`<option value="${s.id}" ${inv?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
+  const cats=[['subcontract','🧱 外注費'],['material','📦 材料費'],['machine_lease','🚜 重機リース'],['other','📋 その他']];
+  const body=`
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">請求日 *</label>
+        <input type="date" class="form-input" id="fi-date" value="${inv?.invoice_date||localDate()}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">現場</label>
+        <select class="form-input" id="fi-site"><option value="">指定なし</option>${siteOpts}</select>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">業者名・取引先 *</label>
+        <input class="form-input" id="fi-vendor" value="${inv?.vendor_name||''}" placeholder="例：岡井重機">
+      </div>
+      <div class="form-group">
+        <label class="form-label">カテゴリ</label>
+        <select class="form-input" id="fi-cat">${cats.map(([v,l])=>`<option value="${v}" ${inv?.category===v?'selected':''}>${l}</option>`).join('')}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">税</label>
+        <select class="form-input" id="fi-tax">
+          <option value="true" ${inv?.tax_included!==false?'selected':''}>税込</option>
+          <option value="false" ${inv?.tax_included===false?'selected':''}>税抜</option>
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">品目・内容</label>
+        <input class="form-input" id="fi-desc" value="${inv?.description||''}" placeholder="例：8月分重機回送費">
+      </div>
+      <div class="form-group">
+        <label class="form-label">金額 *</label>
+        <input type="number" class="form-input" id="fi-amount" value="${inv?.amount||''}" step="1000" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">メモ</label>
+        <input class="form-input" id="fi-memo" value="${inv?.memo||''}" placeholder="任意">
+      </div>
+    </div>`;
+  openModal(inv?'📄 請求書を編集':'📄 請求書を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveInvoice('${invId||''}')">保存</button>`);
+}
+
+async function saveInvoice(invId){
+  const date=document.getElementById('fi-date').value;
+  const vendor=document.getElementById('fi-vendor').value.trim();
+  const amount=parseInt(document.getElementById('fi-amount').value)||0;
+  if(!date||!vendor||!amount){alert('日付・業者名・金額は必須です');return;}
+  const payload={
+    invoice_date:date,vendor_name:vendor,amount,
+    site_id:document.getElementById('fi-site').value||null,
+    category:document.getElementById('fi-cat').value,
+    tax_included:document.getElementById('fi-tax').value==='true',
+    description:document.getElementById('fi-desc').value||null,
+    memo:document.getElementById('fi-memo').value||null
+  };
+  if(invId) await sb.from('invoices').update(payload).eq('id',invId);
+  else await sb.from('invoices').insert(payload);
+  closeModal();await pageInvoices();
+}
+
+async function deleteInvoice(id){
+  if(!confirm('削除しますか？'))return;
+  await sb.from('invoices').delete().eq('id',id);
+  await pageInvoices();
+}
+
+// ===== RATES PAGE =====
+async function pageRates(){
+  const{data:erData}=await sb.from('employee_rates').select('*');
+  const erMap={};
+  (erData||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1).forEach(r=>{if(!erMap[r.employee_id])erMap[r.employee_id]=r;});
+  const{data:urData}=await sb.from('unit_rates').select('*');
+  (urData||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
+
+  const html=`
+    <div class="form-grid">
+      <div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">👷 従業員日給</div></div>
+          <div class="card-body">
+            ${_employees.filter(e=>e.role!=='admin').map(e=>`
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+                <div style="flex:1;font-size:13px;font-weight:500;">${e.name}</div>
+                <input type="number" class="form-input" id="er-${e.id}" value="${erMap[e.id]?.daily_rate||22000}" step="1000" style="width:120px;text-align:right;">
+                <span style="font-size:12px;color:var(--text3);">/日</span>
+                <button class="btn btn-success btn-sm" onclick="saveEmpRate('${e.id}')">保存</button>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🚚 大型ダンプ単価（1台/日）</div></div>
+          <div class="card-body">
+            ${['大須賀商店','高瀬興行','未選択'].map(name=>`
+              <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+                <div style="flex:1;font-size:13px;font-weight:500;">${name}</div>
+                <input type="number" class="form-input" id="dr-${name}" value="${_unitRates['dump:'+name]?.unit_price||0}" step="1000" style="width:120px;text-align:right;">
+                <span style="font-size:12px;color:var(--text3);">/台</span>
+                <button class="btn btn-success btn-sm" onclick="saveUnitRate('dump','${name}','dr-${name}','台')">保存</button>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🦺 警備員単価（1人/日）</div></div>
+          <div class="card-body">
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
+              <div style="flex:1;font-size:13px;font-weight:500;">警備員</div>
+              <input type="number" class="form-input" id="gr-guard" value="${_unitRates['guard:警備員']?.unit_price||0}" step="1000" style="width:120px;text-align:right;">
+              <span style="font-size:12px;color:var(--text3);">/人</span>
+              <button class="btn btn-success btn-sm" onclick="saveUnitRate('guard','警備員','gr-guard','人')">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function saveEmpRate(empId){
+  const val=parseInt(document.getElementById('er-'+empId).value)||0;
+  const d=localDate();
+  await sb.from('employee_rates').upsert({employee_id:empId,daily_rate:val,effective_from:d},{onConflict:'employee_id,effective_from'});
+  alert('保存しました');
+}
+
+async function saveUnitRate(cat,name,inputId,unit){
+  const val=parseInt(document.getElementById(inputId).value)||0;
+  await sb.from('unit_rates').upsert({category:cat,name,unit_price:val,unit,updated_at:new Date().toISOString()},{onConflict:'category,name'});
+  _unitRates[`${cat}:${name}`]={unit_price:val};
+  alert('保存しました');
+}
+
+// ===== BUDGETS PAGE =====
+async function pageBudgets(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openBudgetModal()">＋ 予算を追加</button>`;
+  const year=new Date().getFullYear();
+  const{data}=await sb.from('site_budgets').select('*').order('year',{ascending:false});
+  const budgets=data||[];
+
+  const html=`
+    <div class="card">
+      <div class="card-header"><div class="card-title">実行予算一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>現場</th><th>年度</th><th>年間予算</th><th>メモ</th><th>操作</th></tr></thead>
+        <tbody>${budgets.map(b=>{
+          const site=_sites.find(s=>s.id===b.site_id);
+          return `<tr>
+            <td style="font-weight:500;">${site?.name||'不明'}</td>
+            <td style="font-family:'DM Mono',monospace;">${b.year}年</td>
+            <td class="money" style="font-weight:600;color:var(--accent);">${fmt(b.budget)}</td>
+            <td style="font-size:12px;color:var(--text2);">${b.memo||'-'}</td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="openBudgetModal('${b.id}')">編集</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteBudget('${b.id}')">削除</button>
+            </td>
+          </tr>`;}).join('')||'<tr><td colspan="5" class="empty">予算が登録されていません</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openBudgetModal(budgetId=null){
+  let b=null;
+  if(budgetId){const{data}=await sb.from('site_budgets').select('*').eq('id',budgetId).single();b=data;}
+  const siteOpts=_sites.map(s=>`<option value="${s.id}" ${b?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
+  const body=`
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">現場 *</label>
+        <select class="form-input" id="fb-site"><option value="">選択してください</option>${siteOpts}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">年度 *</label>
+        <input type="number" class="form-input" id="fb-year" value="${b?.year||new Date().getFullYear()}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">年間予算額 *</label>
+        <input type="number" class="form-input" id="fb-amount" value="${b?.budget||''}" step="100000" placeholder="0">
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">メモ</label>
+        <input class="form-input" id="fb-memo" value="${b?.memo||''}" placeholder="例：〇〇工事全体予算">
+      </div>
+    </div>`;
+  openModal(b?'📋 予算を編集':'📋 予算を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveBudget('${budgetId||''}')">保存</button>`);
+}
+
+async function saveBudget(budgetId){
+  const site=document.getElementById('fb-site').value;
+  const year=parseInt(document.getElementById('fb-year').value);
+  const amount=parseInt(document.getElementById('fb-amount').value)||0;
+  if(!site||!year||!amount){alert('現場・年度・金額は必須です');return;}
+  const payload={site_id:site,year,month:null,budget:amount,memo:document.getElementById('fb-memo').value||null,updated_at:new Date().toISOString()};
+  if(budgetId) await sb.from('site_budgets').update(payload).eq('id',budgetId);
+  else await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
+  closeModal();await pageBudgets();
+}
+
+async function deleteBudget(id){
+  if(!confirm('削除しますか？'))return;
+  await sb.from('site_budgets').delete().eq('id',id);
+  await pageBudgets();
+}
+
+// ===== EMPLOYEES PAGE =====
+async function pageEmployees(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openEmployeeModal()">＋ 従業員を追加</button>`;
+  const{data}=await sb.from('employees').select('*').order('name');
+  const html=`
+    <div class="card">
+      <div class="card-header"><div class="card-title">従業員一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>名前</th><th>役割</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
+        <tbody>${(data||[]).map(e=>`<tr>
+          <td style="font-weight:500;">${e.name}</td>
+          <td><span class="badge ${e.role==='admin'?'badge-orange':'badge-blue'}">${e.role==='admin'?'管理者':'作業員'}</span></td>
+          <td style="font-family:'DM Mono',monospace;color:var(--text3);">****</td>
+          <td><span class="badge ${e.is_active?'badge-green':'badge-red'}">${e.is_active?'有効':'無効'}</span></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="openEmployeeModal('${e.id}')">編集</button>
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openEmployeeModal(empId=null){
+  let e=null;
+  if(empId){const{data}=await sb.from('employees').select('*').eq('id',empId).single();e=data;}
+  const body=`
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">名前 *</label>
+        <input class="form-input" id="fe-name" value="${e?.name||''}" placeholder="例：田中 一郎">
+      </div>
+      <div class="form-group">
+        <label class="form-label">役割</label>
+        <select class="form-input" id="fe-role">
+          <option value="worker" ${e?.role==='worker'||!e?'selected':''}>作業員</option>
+          <option value="admin" ${e?.role==='admin'?'selected':''}>管理者</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">PIN（4桁） ${empId?'変更する場合のみ入力':' *'}</label>
+        <input type="password" class="form-input" id="fe-pin" maxlength="4" placeholder="****">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ステータス</label>
+        <select class="form-input" id="fe-active">
+          <option value="true" ${e?.is_active!==false?'selected':''}>有効</option>
+          <option value="false" ${e?.is_active===false?'selected':''}>無効</option>
+        </select>
+      </div>
+    </div>`;
+  openModal(e?`👷 ${e.name} を編集`:'👷 従業員を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveEmployee('${empId||''}')">保存</button>`);
+}
+
+async function saveEmployee(empId){
+  const name=document.getElementById('fe-name').value.trim();
+  const pin=document.getElementById('fe-pin').value;
+  const role=document.getElementById('fe-role').value;
+  const is_active=document.getElementById('fe-active').value==='true';
+  if(!name){alert('名前を入力してください');return;}
+  if(!empId&&!pin){alert('新規登録にはPINが必要です');return;}
+  if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
+  const payload={name,role,is_active};
+  if(pin) payload.pin=pin;
+  if(empId) await sb.from('employees').update(payload).eq('id',empId);
+  else await sb.from('employees').insert({...payload,pin});
+  closeModal();await pageEmployees();
+}
+
+// ===== ADMINS PAGE =====
+async function pageAdmins(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openAdminModal()">＋ 管理者を追加</button>`;
+  const{data}=await sb.from('genka_admins').select('*').order('name');
+  const html=`
+    <div class="card">
+      <div class="card-header"><div class="card-title">管理者一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>名前</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
+        <tbody>${(data||[]).map(a=>`<tr>
+          <td style="font-weight:500;">${a.name}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--text3);">****</td>
+          <td><span class="badge ${a.is_active?'badge-green':'badge-red'}">${a.is_active?'有効':'無効'}</span></td>
+          <td><button class="btn btn-secondary btn-sm" onclick="openAdminModal('${a.id}')">編集</button></td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openAdminModal(adminId=null){
+  let a=null;
+  if(adminId){const{data}=await sb.from('genka_admins').select('*').eq('id',adminId).single();a=data;}
+  const body=`
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">名前 *</label>
+        <input class="form-input" id="fa-name" value="${a?.name||''}" placeholder="例：管理者">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PIN（4桁） ${adminId?'変更する場合のみ':'*'}</label>
+        <input type="password" class="form-input" id="fa-pin" maxlength="4" placeholder="****">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ステータス</label>
+        <select class="form-input" id="fa-active">
+          <option value="true" ${a?.is_active!==false?'selected':''}>有効</option>
+          <option value="false" ${a?.is_active===false?'selected':''}>無効</option>
+        </select>
+      </div>
+    </div>`;
+  openModal(a?`🔐 ${a.name} を編集`:'🔐 管理者を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveAdmin('${adminId||''}')">保存</button>`);
+}
+
+async function saveAdmin(adminId){
+  const name=document.getElementById('fa-name').value.trim();
+  const pin=document.getElementById('fa-pin').value;
+  const is_active=document.getElementById('fa-active').value==='true';
+  if(!name){alert('名前を入力してください');return;}
+  if(!adminId&&!pin){alert('新規登録にはPINが必要です');return;}
+  if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
+  const payload={name,is_active};
+  if(pin) payload.pin=pin;
+  if(adminId) await sb.from('genka_admins').update(payload).eq('id',adminId);
+  else await sb.from('genka_admins').insert({...payload,pin});
+  closeModal();await pageAdmins();
+}
+
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

@@ -974,35 +974,47 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={})
     const budget=budgetMap[sid]||0;
     const diff=budget-total;
     const budgetPct=budget>0?Math.min(Math.round(total/budget*100),100):0;
-    const budgetHtml=budget>0?`
-      <div style="margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:11px;color:var(--text3);">予算 ${fmt(budget)}</span>
-          <span style="font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:${diff>=0?'var(--accent)':'var(--danger)'};">
-            ${diff>=0?'残 '+fmt(diff):'超過 '+fmt(Math.abs(diff))}（消化率${Math.round(total/budget*100)}%）
-          </span>
+    const over=budget>0&&diff<0;
+    const cardBorder=budget>0?(over?'border:2px solid var(--danger);':'border:2px solid var(--accent);'):'';
+
+    const budgetBlock=budget>0?`
+      <div style="background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;text-align:center;">
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">実行予算</div>
+            <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:#1D4ED8;">${fmt(budget)}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">現在原価</div>
+            <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text);">${fmt(total)}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
+            <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${fmt(Math.abs(diff))}</div>
+          </div>
         </div>
-        <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${budgetPct}%;background:${diff>=0?'var(--accent)':'var(--danger)'};border-radius:4px;transition:width .4s;"></div>
+        <div style="margin-bottom:4px;display:flex;justify-content:space-between;">
+          <span style="font-size:11px;color:var(--text2);">消化率</span>
+          <span style="font-size:11px;font-weight:700;color:${over?'var(--danger)':'var(--accent)'};">${Math.round(total/budget*100)}%</span>
+        </div>
+        <div style="height:10px;background:rgba(255,255,255,.5);border-radius:5px;overflow:hidden;">
+          <div style="height:100%;width:${budgetPct}%;background:${over?'var(--danger)':'var(--accent)'};border-radius:5px;transition:width .4s;"></div>
         </div>
       </div>`
-    :`<div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:11px;color:var(--text3);">予算未設定</span>
-        <button onclick="openBudgetModal('${sid}','${site.name}')" style="font-size:11px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;" class="no-print">📋 予算を設定</button>
+    :`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <span style="font-size:12px;color:var(--text3);">📋 実行予算未設定</span>
+        <button onclick="openBudgetModal('${sid}','${site.name}')" style="font-size:12px;padding:5px 12px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:500;" class="no-print">予算を設定する</button>
       </div>`;
 
-    return `<div class="site-card print-card">
-      <div class="site-card-header" onclick="toggleDetail('${sid}')">
+    return `<div class="site-card print-card" style="${cardBorder}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
         <div>
           <div class="site-card-title">🏗️ ${site.name}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人${hasInv?' ｜ 📄請求書あり':''}</div>
         </div>
-        <div>
-          <div class="site-card-total">${fmt(total)}</div>
-          ${budget>0?`<button onclick="event.stopPropagation();openBudgetModal('${sid}','${site.name}')" style="font-size:10px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;display:block;margin-top:4px;text-align:center;" class="no-print">予算編集</button>`:''}
-        </div>
+        ${budget>0?`<button onclick="openBudgetModal('${sid}','${site.name}')" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;flex-shrink:0;" class="no-print">予算編集</button>`:''}
       </div>
-      ${budgetHtml}
+      ${budgetBlock}
       <div class="cost-breakdown">
         <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(laborTotal)}</div><div class="bi-sub">${s.laborDays}人日</div></div>
         <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div>${s.invSub>0?`<div class="bi-sub">うち請求書 ${fmt(s.invSub)}</div>`:''}</div>
@@ -1012,7 +1024,6 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={})
         ${invMat>0?`<div class="breakdown-item"><div class="bi-label">📦 材料費</div><div class="bi-val" style="color:#7C3AED;">${fmt(invMat)}</div><div class="bi-sub">請求書</div></div>`:''}
         ${invOth>0?`<div class="breakdown-item"><div class="bi-label">📋 その他</div><div class="bi-val">${fmt(invOth)}</div><div class="bi-sub">請求書</div></div>`:''}
       </div>
-      <div class="cost-bar-wrap"><div class="cost-bar" style="width:${pct}%;background:var(--accent);"></div></div>
       <div id="detail-${sid}" style="display:none;margin-top:12px;overflow-x:auto;">
         <table class="daily-table">
           <thead><tr><th>日付</th><th>従業員</th><th class="right">労務費</th><th class="right">外注費</th><th class="right">ダンプ</th><th class="right">警備員</th></tr></thead>

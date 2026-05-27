@@ -326,6 +326,8 @@ function closeModal(){document.getElementById('modalOverlay').classList.remove('
 // ===== SITES PAGE =====
 async function pageSites(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openSiteModal()">＋ 現場を追加</button>`;
+
+  // Supabaseから最新データを取得してキャッシュ更新
   const{data}=await sb.from('sites').select('*,site_assignments(employee_id)').eq('is_active',true).order('name');
   _sites=(data||[]);
 
@@ -358,7 +360,12 @@ async function pageSites(){
 }
 
 async function openSiteModal(siteId=null){
-  const s=siteId?_sites.find(x=>x.id===siteId):null;
+  // 最新データをSupabaseから取得
+  let s=null;
+  if(siteId){
+    const{data}=await sb.from('sites').select('*').eq('id',siteId).single();
+    s=data;
+  }
   const{data:assigns}=siteId?await sb.from('site_assignments').select('employee_id').eq('site_id',siteId).eq('is_active',true):{data:[]};
   const assignedIds=(assigns||[]).map(a=>a.employee_id);
 

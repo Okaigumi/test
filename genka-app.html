@@ -436,7 +436,7 @@ async function init(){
     return;
   }
   // ログイン画面を表示
-  const{data:emps}=await sb.from('employees').select('id,name,role').eq('is_active',true).order('name');
+  const{data:emps}=await sb.from('genka_admins').select('id,name').eq('is_active',true).order('name');
   const sel=document.getElementById('loginName');
   (emps||[]).forEach(e=>{
     const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);
@@ -460,7 +460,7 @@ function updateGPinDots(){
 async function tryGLogin(){
   const empId=document.getElementById('loginName').value;
   if(!empId){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
-  const{data}=await sb.from('employees').select('*').eq('id',empId).eq('pin',gPin).eq('is_active',true).single();
+  const{data}=await sb.from('genka_admins').select('*').eq('id',empId).eq('pin',gPin).eq('is_active',true).single();
   if(data){
     gCurrentUser=data;
     sessionStorage.setItem('genkaUser',JSON.stringify(data));

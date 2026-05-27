@@ -56,6 +56,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   .filter-select{width:100%;}
   .btn-filter{width:100%;}
   .month-nav{justify-content:center;}
+  .btn-print{display:none;}
 }
 
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
@@ -281,13 +282,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div id="rateGuardList"></div>
     </div>
 
-    <!-- 外注先単価 -->
-    <div class="rate-card">
-      <div class="rate-section-title">🧱 外注先 単価（1日あたり）</div>
-      <div id="rateSubList"></div>
-    </div>
-
-    <div style="font-size:12px;color:var(--text3);margin-top:4px;">※ 従業員の時間単価 = 日給 ÷ 8時間で自動計算されます</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px;">※ 従業員の時間単価 = 日給 ÷ 8時間で自動計算されます</div>
   </div>
 
   <!-- 請求書 -->
@@ -897,7 +892,9 @@ async function loadData(){
   const selectedSiteId=document.getElementById('siteFilter').value;
   const hero=document.getElementById('siteBudgetHero');
   if(selectedSiteId&&budgetMap[selectedSiteId]!==undefined){
-    const siteName=sites.find(s=>s.id===selectedSiteId)?.name||'';
+    const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
+    const siteName=siteObj.name||'';
+    const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
     const siteBudget=budgetMap[selectedSiteId];
     const siteCost=grandTotal;
     const siteDiff=siteBudget-siteCost;
@@ -905,9 +902,11 @@ async function loadData(){
     const pct=Math.min(Math.round(siteCost/siteBudget*100),999);
     const barW=Math.min(pct,100);
     document.getElementById('siteBudgetHeroInner').innerHTML=`
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;margin-bottom:4px;">🏗️ ${siteName}</div>
+        ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
+      </div>
       <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
-        <div style="font-size:13px;opacity:.8;margin-bottom:2px;">🏗️ ${siteName}</div>
-        <div style="font-size:11px;opacity:.7;margin-bottom:14px;">${currentMonth.getFullYear()}年度 実行予算</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
           <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
             <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
@@ -935,10 +934,16 @@ async function loadData(){
       </div>`;
     hero.style.display='block';
   }else if(selectedSiteId&&budgetMap[selectedSiteId]===undefined){
-    const siteName=sites.find(s=>s.id===selectedSiteId)?.name||'';
+    const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
+    const siteName=siteObj.name||'';
+    const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
     document.getElementById('siteBudgetHeroInner').innerHTML=`
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;margin-bottom:4px;">🏗️ ${siteName}</div>
+        ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
+      </div>
       <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">
-        <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">🏗️ ${siteName} の実行予算が未設定です</div>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">実行予算が未設定です</div>
         <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
       </div>`;
     hero.style.display='block';
@@ -1136,17 +1141,6 @@ function renderRateEditor(){
       <div class="rate-unit">/人</div>
       <button class="rate-save" onclick="saveUnitRate('guard','警備員','guard-警備員',1)">保存</button>
     </div>`;
-
-  // 外注先
-  const subNames=['岡井重機','大須賀商店','高瀬興行'];
-  document.getElementById('rateSubList').innerHTML=subNames.map(name=>
-    `<div class="rate-row">
-      <div class="rate-name">${name}</div>
-      <input type="number" class="rate-input" id="rate-sub-${name}" value="${unitRates['subcontractor:'+name]||0}" step="1000" min="0">
-      <div class="rate-unit">/日</div>
-      <button class="rate-save" onclick="saveUnitRate('subcontractor','${name}','sub-${name}',1)">保存</button>
-    </div>`
-  ).join('');
 }
 
 async function saveEmpRate(empId){

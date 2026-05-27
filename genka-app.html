@@ -19,7 +19,6 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 
-/* ===== PRINT ===== */
 @media print{
   body{background:white;font-size:11px;}
   .no-print{display:none!important;}
@@ -30,74 +29,57 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   .cost-table th,.cost-table td{padding:5px 8px;}
 }
 
-/* ===== LOADING ===== */
 .loading-screen{position:fixed;inset:0;background:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;color:white;gap:12px;}
 .spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
-/* ===== HEADER ===== */
 .app-header{background:var(--accent);color:white;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:12px;}
 .header-title{font-size:18px;font-weight:700;}
 .header-sub{font-size:11px;opacity:.7;margin-top:2px;}
 .header-right{display:flex;gap:8px;align-items:center;}
 .btn-print{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
-.btn-print:hover{background:rgba(255,255,255,.25);}
 .btn-back{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 12px;border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-decoration:none;}
 
-/* ===== CONTAINER ===== */
 .container{max-width:960px;margin:0 auto;padding:20px 16px;}
 
-/* ===== FILTERS ===== */
 .filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
 .filter-label{font-size:12px;color:var(--text3);font-weight:500;}
 .filter-select{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:14px;font-family:'Noto Sans JP',sans-serif;background:var(--surface2);color:var(--text);cursor:pointer;}
-.filter-select:focus{outline:none;border-color:var(--accent);}
 .btn-filter{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
 .month-nav{display:flex;align-items:center;gap:8px;}
 .month-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:16px;cursor:pointer;}
 .month-label{font-size:15px;font-weight:700;min-width:80px;text-align:center;}
 
-/* ===== SUMMARY CARDS ===== */
-.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
 .sum-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
-.sum-card.accent{border-left:4px solid var(--accent);}
-.sum-card.orange{border-left:4px solid var(--accent2);}
-.sum-card.warn{border-left:4px solid var(--warn);}
-.sum-card.danger{border-left:4px solid var(--danger);}
+.sum-card.c-green{border-left:4px solid var(--accent);}
+.sum-card.c-orange{border-left:4px solid var(--accent2);}
+.sum-card.c-warn{border-left:4px solid var(--warn);}
+.sum-card.c-purple{border-left:4px solid #7C3AED;}
+.sum-card.c-blue{border-left:4px solid #1D4ED8;}
+.sum-card.c-red{border-left:4px solid var(--danger);}
 .sum-label{font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;}
-.sum-val{font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text);}
+.sum-val{font-size:20px;font-weight:700;font-family:'DM Mono',monospace;}
 .sum-val.green{color:var(--accent);}
 .sum-val.orange{color:var(--accent2);}
 .sum-val.warn{color:var(--warn);}
+.sum-val.purple{color:#7C3AED;}
+.sum-val.blue{color:#1D4ED8;}
+.sum-val.red{color:var(--danger);}
 .sum-sub{font-size:11px;color:var(--text3);margin-top:3px;}
 
-/* ===== TABS ===== */
 .tab-nav{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;}
-.tab-btn{flex:1;padding:12px;font-size:13px;font-weight:500;color:var(--text3);background:none;border:none;cursor:pointer;font-family:'Noto Sans JP',sans-serif;border-bottom:2.5px solid transparent;transition:all .2s;}
+.tab-btn{flex:1;padding:12px 8px;font-size:13px;font-weight:500;color:var(--text3);background:none;border:none;cursor:pointer;font-family:'Noto Sans JP',sans-serif;border-bottom:2.5px solid transparent;}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--accent-light);}
 
-/* ===== SECTION ===== */
 .section-title{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
 .section-title .badge{font-size:11px;padding:2px 8px;border-radius:12px;background:var(--accent-light);color:var(--accent);font-weight:500;}
 
-/* ===== COST TABLE ===== */
-.cost-table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);margin-bottom:20px;}
-.cost-table th{background:var(--surface2);padding:10px 14px;font-size:12px;font-weight:700;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);}
-.cost-table th.right,.cost-table td.right{text-align:right;}
-.cost-table td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:top;}
-.cost-table tr:last-child td{border-bottom:none;}
-.cost-table tr:hover td{background:var(--surface2);}
-.cost-table tfoot td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);}
-.money{font-family:'DM Mono',monospace;}
-.cost-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:4px;}
-.cost-bar{height:100%;border-radius:3px;transition:width .4s;}
-
-/* ===== SITE DETAIL ===== */
-.site-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;print-break-inside:avoid;}
-.site-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;}
+.site-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+.site-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;cursor:pointer;gap:8px;}
 .site-card-title{font-size:15px;font-weight:700;}
-.site-card-total{font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);}
-.cost-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}
+.site-card-total{font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);white-space:nowrap;}
+.cost-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px;}
 .breakdown-item{background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;}
 .bi-label{font-size:11px;color:var(--text3);margin-bottom:4px;}
 .bi-val{font-size:15px;font-weight:700;font-family:'DM Mono',monospace;}
@@ -106,31 +88,37 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .bi-val.machine{color:var(--warn);}
 .bi-val.dump{color:#7C3AED;}
 .bi-val.guard{color:#1D4ED8;}
+.bi-sub{font-size:10px;color:var(--text3);margin-top:2px;}
 
-/* ===== DAILY DETAIL ===== */
+.cost-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-bottom:8px;}
+.cost-bar{height:100%;border-radius:3px;transition:width .4s;}
+
 .daily-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
 .daily-table th{background:var(--surface2);padding:6px 10px;font-weight:500;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);}
 .daily-table td{padding:6px 10px;border-bottom:1px solid var(--border);}
 .daily-table tr:last-child td{border-bottom:none;}
+.daily-table tfoot td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);}
+.right{text-align:right;}
+.money{font-family:'DM Mono',monospace;}
 .toggle-detail{background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 10px;font-size:11px;color:var(--text3);cursor:pointer;margin-top:4px;}
 
-/* ===== EMPLOYEE LIST ===== */
-.emp-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);}
+.emp-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);}
 .emp-row:last-child{border-bottom:none;}
-.emp-name{font-size:14px;font-weight:500;width:120px;flex-shrink:0;}
-.emp-days{font-size:13px;color:var(--text2);width:60px;flex-shrink:0;}
+.emp-name{font-size:14px;font-weight:500;width:100px;flex-shrink:0;}
+.emp-days{font-size:12px;color:var(--text2);width:45px;flex-shrink:0;}
 .emp-bar-wrap{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:0 12px;}
 .emp-bar{height:100%;background:var(--accent);border-radius:4px;}
-.emp-cost{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right;min-width:80px;}
+.emp-cost{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right;min-width:90px;}
 
-/* ===== RATE EDITOR ===== */
-.rate-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;}
-.rate-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+.rate-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+.rate-section-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.rate-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
 .rate-row:last-child{border-bottom:none;}
-.rate-name{font-size:14px;font-weight:500;flex:1;}
-.rate-input{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:15px;font-family:'DM Mono',monospace;width:120px;text-align:right;}
+.rate-name{font-size:13px;font-weight:500;flex:1;}
+.rate-unit{font-size:11px;color:var(--text3);width:24px;}
+.rate-input{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:'DM Mono',monospace;width:110px;text-align:right;}
 .rate-input:focus{outline:none;border-color:var(--accent);}
-.rate-save{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:7px 14px;font-size:13px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
+.rate-save{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:7px 12px;font-size:12px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;}
 
 .empty-msg{text-align:center;color:var(--text3);padding:40px;font-size:14px;}
 </style>
@@ -150,13 +138,12 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   </div>
   <div class="header-right">
     <button class="btn-print" onclick="window.print()">🖨️ A4印刷</button>
-    <a class="btn-back" href="javascript:history.back()">← 日報へ</a>
+    <a class="btn-back" href="index.html">← 日報へ</a>
   </div>
 </header>
 
 <div class="container">
 
-  <!-- フィルター -->
   <div class="filter-bar no-print">
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="filter-label">月</span>
@@ -168,51 +155,67 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="filter-label">現場</span>
-      <select class="filter-select" id="siteFilter">
-        <option value="">全現場</option>
-      </select>
+      <select class="filter-select" id="siteFilter"><option value="">全現場</option></select>
     </div>
     <button class="btn-filter" onclick="loadData()">集計する</button>
   </div>
 
   <!-- サマリー -->
-  <div class="summary-grid" id="summaryGrid">
-    <div class="sum-card accent"><div class="sum-label">👷 労務費合計</div><div class="sum-val green" id="sumLabor">-</div><div class="sum-sub" id="sumLaborDays"></div></div>
-    <div class="sum-card orange"><div class="sum-label">🧱 外注費合計</div><div class="sum-val orange" id="sumSub">-</div></div>
-    <div class="sum-card warn"><div class="sum-label">🚜 重機費合計</div><div class="sum-val warn" id="sumMachine">-</div></div>
-    <div class="sum-card"><div class="sum-label">🚚 大型ダンプ</div><div class="sum-val" id="sumDump">-</div><div class="sum-sub" id="sumDumpDays"></div></div>
-    <div class="sum-card"><div class="sum-label">🦺 警備員</div><div class="sum-val" id="sumGuard">-</div><div class="sum-sub" id="sumGuardDays"></div></div>
-    <div class="sum-card danger"><div class="sum-label">💰 総原価</div><div class="sum-val" style="color:var(--danger);" id="sumTotal">-</div></div>
+  <div class="summary-grid">
+    <div class="sum-card c-green"><div class="sum-label">👷 労務費</div><div class="sum-val green" id="sumLabor">-</div><div class="sum-sub" id="sumLaborSub"></div></div>
+    <div class="sum-card c-orange"><div class="sum-label">🧱 外注費</div><div class="sum-val orange" id="sumSub">-</div><div class="sum-sub" id="sumSubSub"></div></div>
+    <div class="sum-card c-warn"><div class="sum-label">🚜 重機リース</div><div class="sum-val warn" id="sumMachine">-</div></div>
+    <div class="sum-card c-purple"><div class="sum-label">🚚 大型ダンプ</div><div class="sum-val purple" id="sumDump">-</div><div class="sum-sub" id="sumDumpSub"></div></div>
+    <div class="sum-card c-blue"><div class="sum-label">🦺 警備員</div><div class="sum-val blue" id="sumGuard">-</div><div class="sum-sub" id="sumGuardSub"></div></div>
+    <div class="sum-card c-red"><div class="sum-label">💰 総原価</div><div class="sum-val red" id="sumTotal">-</div></div>
   </div>
 
-  <!-- タブ -->
   <div class="tab-nav no-print">
     <button class="tab-btn active" onclick="switchTab('site')" id="tab-site">現場別</button>
     <button class="tab-btn" onclick="switchTab('employee')" id="tab-employee">従業員別</button>
     <button class="tab-btn" onclick="switchTab('rate')" id="tab-rate">⚙️ 単価設定</button>
   </div>
 
-  <!-- 現場別 -->
   <div id="content-site">
     <div class="section-title">現場別 原価明細 <span class="badge" id="siteCount"></span></div>
     <div id="siteList"><div class="empty-msg">集計ボタンを押してください</div></div>
   </div>
 
-  <!-- 従業員別 -->
   <div id="content-employee" style="display:none;">
     <div class="section-title">従業員別 労務費</div>
-    <div class="cost-table" style="overflow:hidden;border-radius:var(--radius);">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
       <div id="employeeList"><div class="empty-msg">集計ボタンを押してください</div></div>
     </div>
   </div>
 
-  <!-- 単価設定 -->
   <div id="content-rate" style="display:none;">
-    <div class="section-title">従業員単価設定（日給）</div>
+    <div class="section-title">単価設定</div>
+
+    <!-- 従業員単価 -->
     <div class="rate-card">
-      <div id="rateList"><div class="empty-msg">読み込み中...</div></div>
+      <div class="rate-section-title">👷 従業員 日給</div>
+      <div id="rateEmpList"></div>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-top:8px;">※ 時間単価 = 日給 ÷ 8時間で自動計算されます</div>
+
+    <!-- ダンプ単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🚚 大型ダンプ常用 単価（1台/日）</div>
+      <div id="rateDumpList"></div>
+    </div>
+
+    <!-- 警備員単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🦺 警備員 単価（1人/日）</div>
+      <div id="rateGuardList"></div>
+    </div>
+
+    <!-- 外注先単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🧱 外注先 単価（1日あたり）</div>
+      <div id="rateSubList"></div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);margin-top:4px;">※ 従業員の時間単価 = 日給 ÷ 8時間で自動計算されます</div>
   </div>
 
 </div>
@@ -223,37 +226,40 @@ const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 let currentMonth=new Date();
-let sites=[],employees=[],rates={},subcontractors=[],machines=[];
+let sites=[],employees=[],machines=[],subcontractors=[];
+let empRates={};      // employee_id → daily_rate
+let unitRates={};     // 'dump:大須賀商店' → price など
 
-function localMonth(){
-  return `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()+1).padStart(2,'0')}`;
-}
-function fmt(n){return '¥'+Math.round(n).toLocaleString();}
-function fmtMins(m){if(!m||m<=0)return '-';const h=Math.floor(m/60),min=m%60;return min>0?`${h}h${min}m`:`${h}h`;}
+function fmt(n){return n>0?'¥'+Math.round(n).toLocaleString():'¥0';}
 
+// ===== INIT =====
 async function init(){
-  // 並列でマスタデータ取得
-  const[sRes,eRes,rRes,subRes,mRes]=await Promise.all([
+  const[sRes,eRes,erRes,mRes,subRes,urRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true),
     sb.from('employees').select('*').eq('is_active',true),
     sb.from('employee_rates').select('*'),
+    sb.from('machines').select('*').eq('is_active',true),
     sb.from('subcontractors').select('*').eq('is_active',true),
-    sb.from('machines').select('*').eq('is_active',true)
+    sb.from('unit_rates').select('*')
   ]);
   sites=sRes.data||[];
   employees=eRes.data||[];
-  subcontractors=subRes.data||[];
   machines=mRes.data||[];
-  // 単価マップ（最新を優先）
-  const ratesArr=(rRes.data||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1);
-  ratesArr.forEach(r=>{if(!rates[r.employee_id])rates[r.employee_id]=r.daily_rate;});
+  subcontractors=subRes.data||[];
+
+  // 従業員単価マップ
+  const arr=(erRes.data||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1);
+  arr.forEach(r=>{if(!empRates[r.employee_id])empRates[r.employee_id]=r.daily_rate;});
+
+  // 単価マップ（category:name → price）
+  (urRes.data||[]).forEach(r=>{unitRates[`${r.category}:${r.name}`]=r.unit_price||0;});
 
   // 現場セレクト
   const sel=document.getElementById('siteFilter');
   sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
 
   updateMonthLabel();
-  await loadRates();
+  renderRateEditor();
   await loadData();
   document.getElementById('loadingScreen').style.display='none';
 }
@@ -263,18 +269,21 @@ function updateMonthLabel(){
   document.getElementById('monthLabel').textContent=`${m.getFullYear()}/${m.getMonth()+1}`;
   document.getElementById('headerPeriod').textContent=`${m.getFullYear()}年${m.getMonth()+1}月`;
 }
-
 function changeMonth(delta){
   currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+delta,1);
   updateMonthLabel();
 }
-
 function switchTab(name){
   ['site','employee','rate'].forEach(t=>{
     document.getElementById('content-'+t).style.display=t===name?'block':'none';
     document.getElementById('tab-'+t).classList.toggle('active',t===name);
   });
 }
+
+// ===== COST CALC HELPERS =====
+function getDumpPrice(company){return unitRates[`dump:${company||'未選択'}`]||0;}
+function getGuardPrice(){return unitRates['guard:警備員']||0;}
+function getSubPrice(name){return unitRates[`subcontractor:${name}`]||0;}
 
 // ===== LOAD DATA =====
 async function loadData(){
@@ -290,50 +299,60 @@ async function loadData(){
   const{data:reports}=await q;
   const reps=reports||[];
 
-  // 全体集計
-  let totalLabor=0,totalDays=0,totalSub=0,totalMachine=0,totalDump=0,totalDumpTai=0,totalGuard=0,totalGuardPpl=0;
+  let totalLabor=0,totalSub=0,totalMachine=0,totalDump=0,totalGuard=0;
+  let totalLaborDays=0,totalDumpTai=0,totalGuardPpl=0;
 
-  // 現場ごとに集計
   const siteMap={};
-  reps.forEach(r=>{
-    const dailyRate=rates[r.employee_id]||22000;
-    const hourlyRate=dailyRate/8;
-    const nm=r.normal_mins||0,ot=r.overtime_mins||0;
-    const laborCost=nm>0?(dailyRate+(ot>0?Math.round(ot/60*hourlyRate*1.25):0)):0;
-    const dump=r.dump_count||0;
-    const guard=r.guard_count||0;
 
-    (r.site_ids||[]).forEach(sid=>{
-      if(!siteMap[sid])siteMap[sid]={reports:[],labor:0,days:0,dump:0,dumpTai:0,guard:0,guardPpl:0};
-      siteMap[sid].reports.push(r);
-      if(nm>0){siteMap[sid].labor+=laborCost;siteMap[sid].days++;}
-      siteMap[sid].dump+=dump>0?1:0;
-      siteMap[sid].dumpTai+=dump;
-      siteMap[sid].guard+=guard>0?1:0;
-      siteMap[sid].guardPpl+=guard;
+  reps.forEach(r=>{
+    const dr=empRates[r.employee_id]||22000;
+    const hr=dr/8;
+    const nm=r.normal_mins||0,ot=r.overtime_mins||0;
+    const laborCost=nm>0?(dr+(ot>0?Math.round(ot/60*hr*1.25):0)):0;
+
+    const dumpTai=r.dump_count||0;
+    const dumpCo=r.dump_company||'未選択';
+    const dumpCost=dumpTai*getDumpPrice(dumpCo);
+
+    const guardPpl=r.guard_count||0;
+    const guardCost=guardPpl*getGuardPrice();
+
+    // 外注費（重機回送業者ごとの日額）
+    let subCost=0;
+    (r.subcontractor_ids||[]).forEach(subId=>{
+      const sub=subcontractors.find(s=>s.id===subId);
+      if(sub) subCost+=getSubPrice(sub.name);
     });
 
-    if(nm>0){totalLabor+=laborCost;totalDays++;}
-    if(dump>0){totalDump++;totalDumpTai+=dump;}
-    if(guard>0){totalGuard++;totalGuardPpl+=guard;}
+    (r.site_ids||[]).forEach(sid=>{
+      if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0};
+      siteMap[sid].reports.push(r);
+      if(nm>0){siteMap[sid].labor+=laborCost;siteMap[sid].laborDays++;}
+      siteMap[sid].sub+=subCost;
+      if(dumpTai>0){siteMap[sid].dump+=dumpCost;siteMap[sid].dumpTai+=dumpTai;siteMap[sid].dumpDays++;}
+      if(guardPpl>0){siteMap[sid].guard+=guardCost;siteMap[sid].guardPpl+=guardPpl;siteMap[sid].guardDays++;}
+    });
+
+    if(nm>0){totalLabor+=laborCost;totalLaborDays++;}
+    totalSub+=subCost;
+    totalDump+=dumpCost;totalDumpTai+=dumpTai;
+    totalGuard+=guardCost;totalGuardPpl+=guardPpl;
   });
 
-  // 重機リース費（月額÷稼働日数で日割り計算）
-  const workDays=new Set(reps.map(r=>r.report_date)).size||1;
-  machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).forEach(m=>{
-    totalMachine+=m.lease_monthly;
-  });
+  // 重機リース（月額合計）
+  machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).forEach(m=>{totalMachine+=m.lease_monthly;});
 
-  // サマリー表示
+  // サマリー
   document.getElementById('sumLabor').textContent=fmt(totalLabor);
-  document.getElementById('sumLaborDays').textContent=`${totalDays}人日`;
+  document.getElementById('sumLaborSub').textContent=`${totalLaborDays}人日`;
   document.getElementById('sumSub').textContent=fmt(totalSub);
+  document.getElementById('sumSubSub').textContent=`重機回送業者`;
   document.getElementById('sumMachine').textContent=fmt(totalMachine);
-  document.getElementById('sumDump').textContent=`${totalDumpTai}台・${totalDump}日`;
-  document.getElementById('sumDumpDays').textContent='（費用は手入力）';
-  document.getElementById('sumGuard').textContent=`${totalGuardPpl}人・${totalGuard}日`;
-  document.getElementById('sumGuardDays').textContent='（費用は手入力）';
-  document.getElementById('sumTotal').textContent=fmt(totalLabor+totalSub+totalMachine);
+  document.getElementById('sumDump').textContent=fmt(totalDump);
+  document.getElementById('sumDumpSub').textContent=`${totalDumpTai}台`;
+  document.getElementById('sumGuard').textContent=fmt(totalGuard);
+  document.getElementById('sumGuardSub').textContent=`${totalGuardPpl}人`;
+  document.getElementById('sumTotal').textContent=fmt(totalLabor+totalSub+totalMachine+totalDump+totalGuard);
 
   renderSiteList(siteMap);
   renderEmployeeList(reps);
@@ -345,60 +364,79 @@ function renderSiteList(siteMap){
   document.getElementById('siteCount').textContent=`${keys.length}現場`;
   if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
 
-  // 総労務費で最大値計算（バー用）
-  const maxLabor=Math.max(...Object.values(siteMap).map(s=>s.labor),1);
+  const machineCost=machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).reduce((s,m)=>s+m.lease_monthly,0);
+  const totals=Object.values(siteMap).map(s=>s.labor+s.sub+s.dump+s.guard+machineCost);
+  const maxTotal=Math.max(...totals,1);
 
   document.getElementById('siteList').innerHTML=keys.map(sid=>{
     const s=siteMap[sid];
     const site=sites.find(x=>x.id===sid);
     if(!site)return '';
-    const machineCost=machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).reduce((sum,m)=>sum+m.lease_monthly,0);
-    const total=s.labor+machineCost;
-    const pct=Math.round(s.labor/maxLabor*100);
+    const total=s.labor+s.sub+s.dump+s.guard+machineCost;
+    const pct=Math.round(total/maxTotal*100);
 
     // 日別明細
     const byDate={};
     s.reports.forEach(r=>{
-      if(!byDate[r.report_date])byDate[r.report_date]={reps:[]};
-      byDate[r.report_date].reps.push(r);
+      if(!byDate[r.report_date])byDate[r.report_date]=[];
+      byDate[r.report_date].push(r);
     });
 
-    const dailyRows=Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0])).map(([date,d])=>{
-      return d.reps.map(r=>{
-        const dr=rates[r.employee_id]||22000;
+    const dailyRows=Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0])).flatMap(([date,reps])=>
+      reps.map(r=>{
+        const dr=empRates[r.employee_id]||22000;
         const hr=dr/8;
         const nm=r.normal_mins||0,ot=r.overtime_mins||0;
         const lc=nm>0?dr+(ot>0?Math.round(ot/60*hr*1.25):0):0;
-        const wtLabel=r.work_type==='night'?'🌙':r.work_type==='overtime'?'⏰':'🌞';
+        const dumpTai=r.dump_count||0;
+        const dumpCo=r.dump_company||'未選択';
+        const dumpCost=dumpTai*getDumpPrice(dumpCo);
+        const guardPpl=r.guard_count||0;
+        const guardCost=guardPpl*getGuardPrice();
+        let subCost=0;
+        (r.subcontractor_ids||[]).forEach(subId=>{const sub=subcontractors.find(s=>s.id===subId);if(sub)subCost+=getSubPrice(sub.name);});
+        const subNames=(r.subcontractor_ids||[]).map(id=>subcontractors.find(s=>s.id===id)?.name).filter(Boolean).join('・');
+        const wt=r.work_type==='night'?'🌙':r.work_type==='overtime'?'⏰':'🌞';
         return `<tr>
           <td>${date}</td>
-          <td>${r.employee_name} ${wtLabel}</td>
-          <td>${r.start_time}〜${r.end_time}</td>
+          <td>${r.employee_name} ${wt}</td>
           <td class="right money">${nm>0?fmt(lc):'-'}</td>
-          <td class="right">${r.dump_count||0}台</td>
-          <td class="right">${r.guard_count||0}人</td>
+          <td class="right money">${subNames?fmt(subCost)+' ('+subNames+')':'-'}</td>
+          <td class="right money">${dumpTai>0?fmt(dumpCost)+' '+dumpTai+'台 ('+dumpCo+')':'-'}</td>
+          <td class="right money">${guardPpl>0?fmt(guardCost)+' '+guardPpl+'人':'-'}</td>
         </tr>`;
-      }).join('');
-    }).join('');
+      })
+    ).join('');
+
+    const laborTotal=s.labor,subTotal=s.sub,dumpTotal=s.dump,guardTotal=s.guard;
 
     return `<div class="site-card print-card">
       <div class="site-card-header" onclick="toggleDetail('${sid}')">
         <div>
           <div class="site-card-title">🏗️ ${site.name}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.days}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人</div>
         </div>
-        <div class="site-card-total">${fmt(s.labor)}</div>
+        <div class="site-card-total">${fmt(total)}</div>
       </div>
       <div class="cost-breakdown">
-        <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(s.labor)}</div><div style="font-size:10px;color:var(--text3);">${s.days}人日</div></div>
-        <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${s.dumpTai}台</div><div style="font-size:10px;color:var(--text3);">${s.dump}日</div></div>
-        <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${s.guardPpl}人</div><div style="font-size:10px;color:var(--text3);">${s.guard}日</div></div>
+        <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(laborTotal)}</div><div class="bi-sub">${s.laborDays}人日</div></div>
+        <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div></div>
+        <div class="breakdown-item"><div class="bi-label">🚜 重機</div><div class="bi-val machine">${fmt(machineCost)}</div><div class="bi-sub">月額</div></div>
+        <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${fmt(dumpTotal)}</div><div class="bi-sub">${s.dumpTai}台</div></div>
+        <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${fmt(guardTotal)}</div><div class="bi-sub">${s.guardPpl}人</div></div>
       </div>
       <div class="cost-bar-wrap"><div class="cost-bar" style="width:${pct}%;background:var(--accent);"></div></div>
-      <div id="detail-${sid}" style="display:none;margin-top:12px;">
+      <div id="detail-${sid}" style="display:none;margin-top:12px;overflow-x:auto;">
         <table class="daily-table">
-          <thead><tr><th>日付</th><th>従業員</th><th>時間</th><th class="right">労務費</th><th class="right">ダンプ</th><th class="right">警備</th></tr></thead>
+          <thead><tr><th>日付</th><th>従業員</th><th class="right">労務費</th><th class="right">外注費</th><th class="right">ダンプ</th><th class="right">警備員</th></tr></thead>
           <tbody>${dailyRows}</tbody>
+          <tfoot><tr>
+            <td colspan="2">合計</td>
+            <td class="right money">${fmt(laborTotal)}</td>
+            <td class="right money">${fmt(subTotal)}</td>
+            <td class="right money">${fmt(dumpTotal)}</td>
+            <td class="right money">${fmt(guardTotal)}</td>
+          </tr></tfoot>
         </table>
       </div>
       <button class="toggle-detail no-print" onclick="toggleDetail('${sid}')">明細を表示 ▾</button>
@@ -409,72 +447,636 @@ function renderSiteList(siteMap){
 function toggleDetail(sid){
   const el=document.getElementById('detail-'+sid);
   if(!el)return;
-  const visible=el.style.display==='block';
-  el.style.display=visible?'none':'block';
+  el.style.display=el.style.display==='block'?'none':'block';
 }
 
 // ===== EMPLOYEE LIST =====
 function renderEmployeeList(reps){
   const empMap={};
   reps.forEach(r=>{
-    if(!empMap[r.employee_id])empMap[r.employee_id]={name:r.employee_name,days:0,normalMins:0,otMins:0,labor:0};
+    if(!empMap[r.employee_id])empMap[r.employee_id]={name:r.employee_name,days:0,labor:0};
     const nm=r.normal_mins||0,ot=r.overtime_mins||0;
     if(nm>0){
-      const dr=rates[r.employee_id]||22000;
-      const hr=dr/8;
-      const lc=dr+(ot>0?Math.round(ot/60*hr*1.25):0);
+      const dr=empRates[r.employee_id]||22000;
+      const lc=dr+(ot>0?Math.round(ot/60*(dr/8)*1.25):0);
       empMap[r.employee_id].days++;
-      empMap[r.employee_id].normalMins+=nm;
-      empMap[r.employee_id].otMins+=ot;
       empMap[r.employee_id].labor+=lc;
     }
   });
-
   const arr=Object.values(empMap).sort((a,b)=>b.labor-a.labor);
-  const maxLabor=Math.max(...arr.map(e=>e.labor),1);
-
-  if(!arr.length){document.getElementById('employeeList').innerHTML='<div class="empty-msg">データがありません</div>';return;}
-
-  document.getElementById('employeeList').innerHTML=arr.map(e=>`
-    <div class="emp-row">
-      <div class="emp-name">${e.name}</div>
-      <div class="emp-days">${e.days}日</div>
-      <div class="emp-bar-wrap"><div class="emp-bar" style="width:${Math.round(e.labor/maxLabor*100)}%"></div></div>
-      <div class="emp-cost">${fmt(e.labor)}</div>
-    </div>
-  `).join('');
+  const maxL=Math.max(...arr.map(e=>e.labor),1);
+  document.getElementById('employeeList').innerHTML=arr.length
+    ?arr.map(e=>`<div class="emp-row">
+        <div class="emp-name">${e.name}</div>
+        <div class="emp-days">${e.days}日</div>
+        <div class="emp-bar-wrap"><div class="emp-bar" style="width:${Math.round(e.labor/maxL*100)}%"></div></div>
+        <div class="emp-cost">${fmt(e.labor)}</div>
+      </div>`).join('')
+    :'<div class="empty-msg">データがありません</div>';
 }
 
 // ===== RATE EDITOR =====
-async function loadRates(){
-  const{data}=await sb.from('employee_rates').select('*');
-  const ratesArr=(data||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1);
-  const latestRates={};
-  ratesArr.forEach(r=>{if(!latestRates[r.employee_id])latestRates[r.employee_id]=r;});
-
+function renderRateEditor(){
   const workers=employees.filter(e=>e.role!=='admin');
-  document.getElementById('rateList').innerHTML=workers.map(e=>{
-    const r=latestRates[e.id];
-    const daily=r?r.daily_rate:22000;
-    return `<div class="rate-row">
+
+  // 従業員
+  document.getElementById('rateEmpList').innerHTML=workers.map(e=>
+    `<div class="rate-row">
       <div class="rate-name">${e.name}</div>
-      <input type="number" class="rate-input" id="rate-${e.id}" value="${daily}" step="1000" min="0">
-      <div style="font-size:11px;color:var(--text3);">/日</div>
-      <button class="rate-save" onclick="saveRate('${e.id}')">保存</button>
+      <input type="number" class="rate-input" id="rate-emp-${e.id}" value="${empRates[e.id]||22000}" step="1000" min="0">
+      <div class="rate-unit">/日</div>
+      <button class="rate-save" onclick="saveEmpRate('${e.id}')">保存</button>
+    </div>`
+  ).join('')||'<div class="empty-msg">従業員がいません</div>';
+
+  // ダンプ
+  const dumpNames=['大須賀商店','高瀬興行','未選択'];
+  document.getElementById('rateDumpList').innerHTML=dumpNames.map(name=>
+    `<div class="rate-row">
+      <div class="rate-name">${name}</div>
+      <input type="number" class="rate-input" id="rate-dump-${name}" value="${unitRates['dump:'+name]||0}" step="1000" min="0">
+      <div class="rate-unit">/台</div>
+      <button class="rate-save" onclick="saveUnitRate('dump','${name}','dump-${name}',1)">保存</button>
+    </div>`
+  ).join('');
+
+  // 警備員
+  document.getElementById('rateGuardList').innerHTML=
+    `<div class="rate-row">
+      <div class="rate-name">警備員</div>
+      <input type="number" class="rate-input" id="rate-guard-警備員" value="${unitRates['guard:警備員']||0}" step="1000" min="0">
+      <div class="rate-unit">/人</div>
+      <button class="rate-save" onclick="saveUnitRate('guard','警備員','guard-警備員',1)">保存</button>
     </div>`;
-  }).join('')||'<div class="empty-msg">従業員がいません</div>';
+
+  // 外注先
+  const subNames=['岡井重機','大須賀商店','高瀬興行'];
+  document.getElementById('rateSubList').innerHTML=subNames.map(name=>
+    `<div class="rate-row">
+      <div class="rate-name">${name}</div>
+      <input type="number" class="rate-input" id="rate-sub-${name}" value="${unitRates['subcontractor:'+name]||0}" step="1000" min="0">
+      <div class="rate-unit">/日</div>
+      <button class="rate-save" onclick="saveUnitRate('subcontractor','${name}','sub-${name}',1)">保存</button>
+    </div>`
+  ).join('');
 }
 
-async function saveRate(empId){
-  const val=parseInt(document.getElementById('rate-'+empId).value);
-  if(!val||val<0){alert('正しい金額を入力してください');return;}
+async function saveEmpRate(empId){
+  const val=parseInt(document.getElementById('rate-emp-'+empId).value)||0;
   const today=new Date();
   const d=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  await sb.from('employee_rates').upsert({
-    employee_id:empId,daily_rate:val,effective_from:d
-  },{onConflict:'employee_id,effective_from'});
-  rates[empId]=val;
-  alert('単価を保存しました');
+  await sb.from('employee_rates').upsert({employee_id:empId,daily_rate:val,effective_from:d},{onConflict:'employee_id,effective_from'});
+  empRates[empId]=val;
+  alert('保存しました');
+}
+
+async function saveUnitRate(category,name,inputKey,_unit){
+  const val=parseInt(document.getElementById('rate-'+inputKey).value)||0;
+  await sb.from('unit_rates').upsert({category,name,unit_price:val,unit:category==='dump'?'台':category==='guard'?'人':'式',updated_at:new Date().toISOString()},{onConflict:'category,name'});
+  unitRates[`${category}:${name}`]=val;
+  alert(`${name} の単価を保存しました`);
+}
+
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原価管理ダッシュボード</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#F5F3EE;--surface:#FFF;--surface2:#EEECE7;
+  --accent:#2B5F3F;--accent-light:#D6E8DC;
+  --accent2:#E07B39;--accent2-light:#FAE8D8;
+  --text:#1A1A18;--text2:#6B6960;--text3:#9E9C95;
+  --border:#DEDAD2;--danger:#C84B31;--danger-bg:#FBE9E5;
+  --warn:#B87A1A;--warn-bg:#FDF0D5;
+  --radius:12px;--radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+@media print{
+  body{background:white;font-size:11px;}
+  .no-print{display:none!important;}
+  .page-break{page-break-before:always;}
+  .print-card{break-inside:avoid;}
+  @page{size:A4;margin:15mm;}
+  .container{max-width:100%;padding:0;}
+  .cost-table th,.cost-table td{padding:5px 8px;}
+}
+
+.loading-screen{position:fixed;inset:0;background:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;color:white;gap:12px;}
+.spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.app-header{background:var(--accent);color:white;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:12px;}
+.header-title{font-size:18px;font-weight:700;}
+.header-sub{font-size:11px;opacity:.7;margin-top:2px;}
+.header-right{display:flex;gap:8px;align-items:center;}
+.btn-print{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
+.btn-back{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 12px;border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-decoration:none;}
+
+.container{max-width:960px;margin:0 auto;padding:20px 16px;}
+
+.filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+.filter-label{font-size:12px;color:var(--text3);font-weight:500;}
+.filter-select{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:14px;font-family:'Noto Sans JP',sans-serif;background:var(--surface2);color:var(--text);cursor:pointer;}
+.btn-filter{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
+.month-nav{display:flex;align-items:center;gap:8px;}
+.month-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:16px;cursor:pointer;}
+.month-label{font-size:15px;font-weight:700;min-width:80px;text-align:center;}
+
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+.sum-card.c-green{border-left:4px solid var(--accent);}
+.sum-card.c-orange{border-left:4px solid var(--accent2);}
+.sum-card.c-warn{border-left:4px solid var(--warn);}
+.sum-card.c-purple{border-left:4px solid #7C3AED;}
+.sum-card.c-blue{border-left:4px solid #1D4ED8;}
+.sum-card.c-red{border-left:4px solid var(--danger);}
+.sum-label{font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;}
+.sum-val{font-size:20px;font-weight:700;font-family:'DM Mono',monospace;}
+.sum-val.green{color:var(--accent);}
+.sum-val.orange{color:var(--accent2);}
+.sum-val.warn{color:var(--warn);}
+.sum-val.purple{color:#7C3AED;}
+.sum-val.blue{color:#1D4ED8;}
+.sum-val.red{color:var(--danger);}
+.sum-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+
+.tab-nav{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;}
+.tab-btn{flex:1;padding:12px 8px;font-size:13px;font-weight:500;color:var(--text3);background:none;border:none;cursor:pointer;font-family:'Noto Sans JP',sans-serif;border-bottom:2.5px solid transparent;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--accent-light);}
+
+.section-title{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.section-title .badge{font-size:11px;padding:2px 8px;border-radius:12px;background:var(--accent-light);color:var(--accent);font-weight:500;}
+
+.site-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+.site-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;cursor:pointer;gap:8px;}
+.site-card-title{font-size:15px;font-weight:700;}
+.site-card-total{font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);white-space:nowrap;}
+.cost-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px;}
+.breakdown-item{background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;}
+.bi-label{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.bi-val{font-size:15px;font-weight:700;font-family:'DM Mono',monospace;}
+.bi-val.labor{color:var(--accent);}
+.bi-val.sub{color:var(--accent2);}
+.bi-val.machine{color:var(--warn);}
+.bi-val.dump{color:#7C3AED;}
+.bi-val.guard{color:#1D4ED8;}
+.bi-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+
+.cost-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-bottom:8px;}
+.cost-bar{height:100%;border-radius:3px;transition:width .4s;}
+
+.daily-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
+.daily-table th{background:var(--surface2);padding:6px 10px;font-weight:500;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);}
+.daily-table td{padding:6px 10px;border-bottom:1px solid var(--border);}
+.daily-table tr:last-child td{border-bottom:none;}
+.daily-table tfoot td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);}
+.right{text-align:right;}
+.money{font-family:'DM Mono',monospace;}
+.toggle-detail{background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 10px;font-size:11px;color:var(--text3);cursor:pointer;margin-top:4px;}
+
+.emp-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);}
+.emp-row:last-child{border-bottom:none;}
+.emp-name{font-size:14px;font-weight:500;width:100px;flex-shrink:0;}
+.emp-days{font-size:12px;color:var(--text2);width:45px;flex-shrink:0;}
+.emp-bar-wrap{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:0 12px;}
+.emp-bar{height:100%;background:var(--accent);border-radius:4px;}
+.emp-cost{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right;min-width:90px;}
+
+.rate-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+.rate-section-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.rate-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+.rate-row:last-child{border-bottom:none;}
+.rate-name{font-size:13px;font-weight:500;flex:1;}
+.rate-unit{font-size:11px;color:var(--text3);width:24px;}
+.rate-input{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:14px;font-family:'DM Mono',monospace;width:110px;text-align:right;}
+.rate-input:focus{outline:none;border-color:var(--accent);}
+.rate-save{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:7px 12px;font-size:12px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;}
+
+.empty-msg{text-align:center;color:var(--text3);padding:40px;font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <div style="font-size:18px;font-weight:700;">原価管理</div>
+  <div style="font-size:13px;opacity:.7;">データを読み込み中...</div>
+</div>
+
+<header class="app-header no-print">
+  <div>
+    <div class="header-title">📊 原価管理ダッシュボード</div>
+    <div class="header-sub" id="headerPeriod"></div>
+  </div>
+  <div class="header-right">
+    <button class="btn-print" onclick="window.print()">🖨️ A4印刷</button>
+    <a class="btn-back" href="index.html">← 日報へ</a>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="filter-bar no-print">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="filter-label">月</span>
+      <div class="month-nav">
+        <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+        <div class="month-label" id="monthLabel"></div>
+        <button class="month-btn" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="filter-label">現場</span>
+      <select class="filter-select" id="siteFilter"><option value="">全現場</option></select>
+    </div>
+    <button class="btn-filter" onclick="loadData()">集計する</button>
+  </div>
+
+  <!-- サマリー -->
+  <div class="summary-grid">
+    <div class="sum-card c-green"><div class="sum-label">👷 労務費</div><div class="sum-val green" id="sumLabor">-</div><div class="sum-sub" id="sumLaborSub"></div></div>
+    <div class="sum-card c-orange"><div class="sum-label">🧱 外注費</div><div class="sum-val orange" id="sumSub">-</div><div class="sum-sub" id="sumSubSub"></div></div>
+    <div class="sum-card c-warn"><div class="sum-label">🚜 重機リース</div><div class="sum-val warn" id="sumMachine">-</div></div>
+    <div class="sum-card c-purple"><div class="sum-label">🚚 大型ダンプ</div><div class="sum-val purple" id="sumDump">-</div><div class="sum-sub" id="sumDumpSub"></div></div>
+    <div class="sum-card c-blue"><div class="sum-label">🦺 警備員</div><div class="sum-val blue" id="sumGuard">-</div><div class="sum-sub" id="sumGuardSub"></div></div>
+    <div class="sum-card c-red"><div class="sum-label">💰 総原価</div><div class="sum-val red" id="sumTotal">-</div></div>
+  </div>
+
+  <div class="tab-nav no-print">
+    <button class="tab-btn active" onclick="switchTab('site')" id="tab-site">現場別</button>
+    <button class="tab-btn" onclick="switchTab('employee')" id="tab-employee">従業員別</button>
+    <button class="tab-btn" onclick="switchTab('rate')" id="tab-rate">⚙️ 単価設定</button>
+  </div>
+
+  <div id="content-site">
+    <div class="section-title">現場別 原価明細 <span class="badge" id="siteCount"></span></div>
+    <div id="siteList"><div class="empty-msg">集計ボタンを押してください</div></div>
+  </div>
+
+  <div id="content-employee" style="display:none;">
+    <div class="section-title">従業員別 労務費</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+      <div id="employeeList"><div class="empty-msg">集計ボタンを押してください</div></div>
+    </div>
+  </div>
+
+  <div id="content-rate" style="display:none;">
+    <div class="section-title">単価設定</div>
+
+    <!-- 従業員単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">👷 従業員 日給</div>
+      <div id="rateEmpList"></div>
+    </div>
+
+    <!-- ダンプ単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🚚 大型ダンプ常用 単価（1台/日）</div>
+      <div id="rateDumpList"></div>
+    </div>
+
+    <!-- 警備員単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🦺 警備員 単価（1人/日）</div>
+      <div id="rateGuardList"></div>
+    </div>
+
+    <!-- 外注先単価 -->
+    <div class="rate-card">
+      <div class="rate-section-title">🧱 外注先 単価（1日あたり）</div>
+      <div id="rateSubList"></div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);margin-top:4px;">※ 従業員の時間単価 = 日給 ÷ 8時間で自動計算されます</div>
+  </div>
+
+</div>
+
+<script>
+const SUPABASE_URL='https://fblecreevjtrqnkhmwuk.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let currentMonth=new Date();
+let sites=[],employees=[],machines=[],subcontractors=[];
+let empRates={};      // employee_id → daily_rate
+let unitRates={};     // 'dump:大須賀商店' → price など
+
+function fmt(n){return n>0?'¥'+Math.round(n).toLocaleString():'¥0';}
+
+// ===== INIT =====
+async function init(){
+  const[sRes,eRes,erRes,mRes,subRes,urRes]=await Promise.all([
+    sb.from('sites').select('*').eq('is_active',true),
+    sb.from('employees').select('*').eq('is_active',true),
+    sb.from('employee_rates').select('*'),
+    sb.from('machines').select('*').eq('is_active',true),
+    sb.from('subcontractors').select('*').eq('is_active',true),
+    sb.from('unit_rates').select('*')
+  ]);
+  sites=sRes.data||[];
+  employees=eRes.data||[];
+  machines=mRes.data||[];
+  subcontractors=subRes.data||[];
+
+  // 従業員単価マップ
+  const arr=(erRes.data||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1);
+  arr.forEach(r=>{if(!empRates[r.employee_id])empRates[r.employee_id]=r.daily_rate;});
+
+  // 単価マップ（category:name → price）
+  (urRes.data||[]).forEach(r=>{unitRates[`${r.category}:${r.name}`]=r.unit_price||0;});
+
+  // 現場セレクト
+  const sel=document.getElementById('siteFilter');
+  sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
+
+  updateMonthLabel();
+  renderRateEditor();
+  await loadData();
+  document.getElementById('loadingScreen').style.display='none';
+}
+
+function updateMonthLabel(){
+  const m=currentMonth;
+  document.getElementById('monthLabel').textContent=`${m.getFullYear()}/${m.getMonth()+1}`;
+  document.getElementById('headerPeriod').textContent=`${m.getFullYear()}年${m.getMonth()+1}月`;
+}
+function changeMonth(delta){
+  currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+delta,1);
+  updateMonthLabel();
+}
+function switchTab(name){
+  ['site','employee','rate'].forEach(t=>{
+    document.getElementById('content-'+t).style.display=t===name?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active',t===name);
+  });
+}
+
+// ===== COST CALC HELPERS =====
+function getDumpPrice(company){return unitRates[`dump:${company||'未選択'}`]||0;}
+function getGuardPrice(){return unitRates['guard:警備員']||0;}
+function getSubPrice(name){return unitRates[`subcontractor:${name}`]||0;}
+
+// ===== LOAD DATA =====
+async function loadData(){
+  const y=currentMonth.getFullYear();
+  const m=String(currentMonth.getMonth()+1).padStart(2,'0');
+  const from=`${y}-${m}-01`;
+  const last=new Date(y,currentMonth.getMonth()+1,0).getDate();
+  const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
+  const siteId=document.getElementById('siteFilter').value;
+
+  let q=sb.from('report_summary').select('*').gte('report_date',from).lte('report_date',to);
+  if(siteId) q=q.contains('site_ids',[siteId]);
+  const{data:reports}=await q;
+  const reps=reports||[];
+
+  let totalLabor=0,totalSub=0,totalMachine=0,totalDump=0,totalGuard=0;
+  let totalLaborDays=0,totalDumpTai=0,totalGuardPpl=0;
+
+  const siteMap={};
+
+  reps.forEach(r=>{
+    const dr=empRates[r.employee_id]||22000;
+    const hr=dr/8;
+    const nm=r.normal_mins||0,ot=r.overtime_mins||0;
+    const laborCost=nm>0?(dr+(ot>0?Math.round(ot/60*hr*1.25):0)):0;
+
+    const dumpTai=r.dump_count||0;
+    const dumpCo=r.dump_company||'未選択';
+    const dumpCost=dumpTai*getDumpPrice(dumpCo);
+
+    const guardPpl=r.guard_count||0;
+    const guardCost=guardPpl*getGuardPrice();
+
+    // 外注費（重機回送業者ごとの日額）
+    let subCost=0;
+    (r.subcontractor_ids||[]).forEach(subId=>{
+      const sub=subcontractors.find(s=>s.id===subId);
+      if(sub) subCost+=getSubPrice(sub.name);
+    });
+
+    (r.site_ids||[]).forEach(sid=>{
+      if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0};
+      siteMap[sid].reports.push(r);
+      if(nm>0){siteMap[sid].labor+=laborCost;siteMap[sid].laborDays++;}
+      siteMap[sid].sub+=subCost;
+      if(dumpTai>0){siteMap[sid].dump+=dumpCost;siteMap[sid].dumpTai+=dumpTai;siteMap[sid].dumpDays++;}
+      if(guardPpl>0){siteMap[sid].guard+=guardCost;siteMap[sid].guardPpl+=guardPpl;siteMap[sid].guardDays++;}
+    });
+
+    if(nm>0){totalLabor+=laborCost;totalLaborDays++;}
+    totalSub+=subCost;
+    totalDump+=dumpCost;totalDumpTai+=dumpTai;
+    totalGuard+=guardCost;totalGuardPpl+=guardPpl;
+  });
+
+  // 重機リース（月額合計）
+  machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).forEach(m=>{totalMachine+=m.lease_monthly;});
+
+  // サマリー
+  document.getElementById('sumLabor').textContent=fmt(totalLabor);
+  document.getElementById('sumLaborSub').textContent=`${totalLaborDays}人日`;
+  document.getElementById('sumSub').textContent=fmt(totalSub);
+  document.getElementById('sumSubSub').textContent=`重機回送業者`;
+  document.getElementById('sumMachine').textContent=fmt(totalMachine);
+  document.getElementById('sumDump').textContent=fmt(totalDump);
+  document.getElementById('sumDumpSub').textContent=`${totalDumpTai}台`;
+  document.getElementById('sumGuard').textContent=fmt(totalGuard);
+  document.getElementById('sumGuardSub').textContent=`${totalGuardPpl}人`;
+  document.getElementById('sumTotal').textContent=fmt(totalLabor+totalSub+totalMachine+totalDump+totalGuard);
+
+  renderSiteList(siteMap);
+  renderEmployeeList(reps);
+}
+
+// ===== SITE LIST =====
+function renderSiteList(siteMap){
+  const keys=Object.keys(siteMap);
+  document.getElementById('siteCount').textContent=`${keys.length}現場`;
+  if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
+
+  const machineCost=machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).reduce((s,m)=>s+m.lease_monthly,0);
+  const totals=Object.values(siteMap).map(s=>s.labor+s.sub+s.dump+s.guard+machineCost);
+  const maxTotal=Math.max(...totals,1);
+
+  document.getElementById('siteList').innerHTML=keys.map(sid=>{
+    const s=siteMap[sid];
+    const site=sites.find(x=>x.id===sid);
+    if(!site)return '';
+    const total=s.labor+s.sub+s.dump+s.guard+machineCost;
+    const pct=Math.round(total/maxTotal*100);
+
+    // 日別明細
+    const byDate={};
+    s.reports.forEach(r=>{
+      if(!byDate[r.report_date])byDate[r.report_date]=[];
+      byDate[r.report_date].push(r);
+    });
+
+    const dailyRows=Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0])).flatMap(([date,reps])=>
+      reps.map(r=>{
+        const dr=empRates[r.employee_id]||22000;
+        const hr=dr/8;
+        const nm=r.normal_mins||0,ot=r.overtime_mins||0;
+        const lc=nm>0?dr+(ot>0?Math.round(ot/60*hr*1.25):0):0;
+        const dumpTai=r.dump_count||0;
+        const dumpCo=r.dump_company||'未選択';
+        const dumpCost=dumpTai*getDumpPrice(dumpCo);
+        const guardPpl=r.guard_count||0;
+        const guardCost=guardPpl*getGuardPrice();
+        let subCost=0;
+        (r.subcontractor_ids||[]).forEach(subId=>{const sub=subcontractors.find(s=>s.id===subId);if(sub)subCost+=getSubPrice(sub.name);});
+        const subNames=(r.subcontractor_ids||[]).map(id=>subcontractors.find(s=>s.id===id)?.name).filter(Boolean).join('・');
+        const wt=r.work_type==='night'?'🌙':r.work_type==='overtime'?'⏰':'🌞';
+        return `<tr>
+          <td>${date}</td>
+          <td>${r.employee_name} ${wt}</td>
+          <td class="right money">${nm>0?fmt(lc):'-'}</td>
+          <td class="right money">${subNames?fmt(subCost)+' ('+subNames+')':'-'}</td>
+          <td class="right money">${dumpTai>0?fmt(dumpCost)+' '+dumpTai+'台 ('+dumpCo+')':'-'}</td>
+          <td class="right money">${guardPpl>0?fmt(guardCost)+' '+guardPpl+'人':'-'}</td>
+        </tr>`;
+      })
+    ).join('');
+
+    const laborTotal=s.labor,subTotal=s.sub,dumpTotal=s.dump,guardTotal=s.guard;
+
+    return `<div class="site-card print-card">
+      <div class="site-card-header" onclick="toggleDetail('${sid}')">
+        <div>
+          <div class="site-card-title">🏗️ ${site.name}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人</div>
+        </div>
+        <div class="site-card-total">${fmt(total)}</div>
+      </div>
+      <div class="cost-breakdown">
+        <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(laborTotal)}</div><div class="bi-sub">${s.laborDays}人日</div></div>
+        <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div></div>
+        <div class="breakdown-item"><div class="bi-label">🚜 重機</div><div class="bi-val machine">${fmt(machineCost)}</div><div class="bi-sub">月額</div></div>
+        <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${fmt(dumpTotal)}</div><div class="bi-sub">${s.dumpTai}台</div></div>
+        <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${fmt(guardTotal)}</div><div class="bi-sub">${s.guardPpl}人</div></div>
+      </div>
+      <div class="cost-bar-wrap"><div class="cost-bar" style="width:${pct}%;background:var(--accent);"></div></div>
+      <div id="detail-${sid}" style="display:none;margin-top:12px;overflow-x:auto;">
+        <table class="daily-table">
+          <thead><tr><th>日付</th><th>従業員</th><th class="right">労務費</th><th class="right">外注費</th><th class="right">ダンプ</th><th class="right">警備員</th></tr></thead>
+          <tbody>${dailyRows}</tbody>
+          <tfoot><tr>
+            <td colspan="2">合計</td>
+            <td class="right money">${fmt(laborTotal)}</td>
+            <td class="right money">${fmt(subTotal)}</td>
+            <td class="right money">${fmt(dumpTotal)}</td>
+            <td class="right money">${fmt(guardTotal)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      <button class="toggle-detail no-print" onclick="toggleDetail('${sid}')">明細を表示 ▾</button>
+    </div>`;
+  }).join('');
+}
+
+function toggleDetail(sid){
+  const el=document.getElementById('detail-'+sid);
+  if(!el)return;
+  el.style.display=el.style.display==='block'?'none':'block';
+}
+
+// ===== EMPLOYEE LIST =====
+function renderEmployeeList(reps){
+  const empMap={};
+  reps.forEach(r=>{
+    if(!empMap[r.employee_id])empMap[r.employee_id]={name:r.employee_name,days:0,labor:0};
+    const nm=r.normal_mins||0,ot=r.overtime_mins||0;
+    if(nm>0){
+      const dr=empRates[r.employee_id]||22000;
+      const lc=dr+(ot>0?Math.round(ot/60*(dr/8)*1.25):0);
+      empMap[r.employee_id].days++;
+      empMap[r.employee_id].labor+=lc;
+    }
+  });
+  const arr=Object.values(empMap).sort((a,b)=>b.labor-a.labor);
+  const maxL=Math.max(...arr.map(e=>e.labor),1);
+  document.getElementById('employeeList').innerHTML=arr.length
+    ?arr.map(e=>`<div class="emp-row">
+        <div class="emp-name">${e.name}</div>
+        <div class="emp-days">${e.days}日</div>
+        <div class="emp-bar-wrap"><div class="emp-bar" style="width:${Math.round(e.labor/maxL*100)}%"></div></div>
+        <div class="emp-cost">${fmt(e.labor)}</div>
+      </div>`).join('')
+    :'<div class="empty-msg">データがありません</div>';
+}
+
+// ===== RATE EDITOR =====
+function renderRateEditor(){
+  const workers=employees.filter(e=>e.role!=='admin');
+
+  // 従業員
+  document.getElementById('rateEmpList').innerHTML=workers.map(e=>
+    `<div class="rate-row">
+      <div class="rate-name">${e.name}</div>
+      <input type="number" class="rate-input" id="rate-emp-${e.id}" value="${empRates[e.id]||22000}" step="1000" min="0">
+      <div class="rate-unit">/日</div>
+      <button class="rate-save" onclick="saveEmpRate('${e.id}')">保存</button>
+    </div>`
+  ).join('')||'<div class="empty-msg">従業員がいません</div>';
+
+  // ダンプ
+  const dumpNames=['大須賀商店','高瀬興行','未選択'];
+  document.getElementById('rateDumpList').innerHTML=dumpNames.map(name=>
+    `<div class="rate-row">
+      <div class="rate-name">${name}</div>
+      <input type="number" class="rate-input" id="rate-dump-${name}" value="${unitRates['dump:'+name]||0}" step="1000" min="0">
+      <div class="rate-unit">/台</div>
+      <button class="rate-save" onclick="saveUnitRate('dump','${name}','dump-${name}',1)">保存</button>
+    </div>`
+  ).join('');
+
+  // 警備員
+  document.getElementById('rateGuardList').innerHTML=
+    `<div class="rate-row">
+      <div class="rate-name">警備員</div>
+      <input type="number" class="rate-input" id="rate-guard-警備員" value="${unitRates['guard:警備員']||0}" step="1000" min="0">
+      <div class="rate-unit">/人</div>
+      <button class="rate-save" onclick="saveUnitRate('guard','警備員','guard-警備員',1)">保存</button>
+    </div>`;
+
+  // 外注先
+  const subNames=['岡井重機','大須賀商店','高瀬興行'];
+  document.getElementById('rateSubList').innerHTML=subNames.map(name=>
+    `<div class="rate-row">
+      <div class="rate-name">${name}</div>
+      <input type="number" class="rate-input" id="rate-sub-${name}" value="${unitRates['subcontractor:'+name]||0}" step="1000" min="0">
+      <div class="rate-unit">/日</div>
+      <button class="rate-save" onclick="saveUnitRate('subcontractor','${name}','sub-${name}',1)">保存</button>
+    </div>`
+  ).join('');
+}
+
+async function saveEmpRate(empId){
+  const val=parseInt(document.getElementById('rate-emp-'+empId).value)||0;
+  const today=new Date();
+  const d=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  await sb.from('employee_rates').upsert({employee_id:empId,daily_rate:val,effective_from:d},{onConflict:'employee_id,effective_from'});
+  empRates[empId]=val;
+  alert('保存しました');
+}
+
+async function saveUnitRate(category,name,inputKey,_unit){
+  const val=parseInt(document.getElementById('rate-'+inputKey).value)||0;
+  await sb.from('unit_rates').upsert({category,name,unit_price:val,unit:category==='dump'?'台':category==='guard'?'人':'式',updated_at:new Date().toISOString()},{onConflict:'category,name'});
+  unitRates[`${category}:${name}`]=val;
+  alert(`${name} の単価を保存しました`);
 }
 
 window.addEventListener('DOMContentLoaded',init);

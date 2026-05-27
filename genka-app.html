@@ -226,6 +226,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <button class="btn-filter" onclick="loadData()">集計する</button>
   </div>
 
+  <!-- 現場選択時の予算ヒーローパネル -->
+  <div id="siteBudgetHero" style="display:none;margin-bottom:20px;border-radius:var(--radius);overflow:hidden;">
+    <div id="siteBudgetHeroInner"></div>
+  </div>
+
   <!-- サマリー -->
   <div class="summary-grid">
     <div class="sum-card c-green"><div class="sum-label">👷 労務費</div><div class="sum-val green" id="sumLabor">-</div><div class="sum-sub" id="sumLaborSub"></div></div>
@@ -234,8 +239,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div class="sum-card c-purple"><div class="sum-label">🚚 大型ダンプ</div><div class="sum-val purple" id="sumDump">-</div><div class="sum-sub" id="sumDumpSub"></div></div>
     <div class="sum-card c-blue"><div class="sum-label">🦺 警備員</div><div class="sum-val blue" id="sumGuard">-</div><div class="sum-sub" id="sumGuardSub"></div></div>
     <div class="sum-card c-red"><div class="sum-label">💰 総原価</div><div class="sum-val red" id="sumTotal">-</div></div>
-    <div class="sum-card" style="border-left:4px solid #1D4ED8;"><div class="sum-label">📋 実行予算</div><div class="sum-val" style="color:#1D4ED8;" id="sumBudget">-</div><div class="sum-sub" id="sumBudgetSub"></div></div>
-    <div class="sum-card" id="sumDiffCard" style="border-left:4px solid var(--accent);"><div class="sum-label">📈 予算残</div><div class="sum-val" id="sumDiff">-</div><div class="sum-sub" id="sumDiffPct"></div></div>
   </div>
 
   <div class="tab-nav no-print">
@@ -890,21 +893,57 @@ async function loadData(){
   const grandTotal=totalLabor+totalSub+totalMachine+totalDump+totalGuard+totalInvMaterial+totalInvOther;
   document.getElementById('sumTotal').textContent=fmt(grandTotal);
 
-  // 予算サマリー
-  const totalBudget=Object.values(budgetMap).reduce((s,v)=>s+v,0);
-  const diff=totalBudget-grandTotal;
-  document.getElementById('sumBudget').textContent=totalBudget>0?fmt(totalBudget):'未設定';
-  document.getElementById('sumBudgetSub').textContent=totalBudget>0?`年間予算`:'';
-  if(totalBudget>0){
-    const pct=Math.round((grandTotal/totalBudget)*100);
-    document.getElementById('sumDiff').textContent=fmt(Math.abs(diff));
-    document.getElementById('sumDiff').style.color=diff>=0?'var(--accent)':'var(--danger)';
-    document.getElementById('sumDiffCard').style.borderLeftColor=diff>=0?'var(--accent)':'var(--danger)';
-    document.getElementById('sumDiffPct').textContent=`${diff>=0?'残':'超過'} 消化率${pct}%`;
+  // 現場選択時のヒーローパネル
+  const selectedSiteId=document.getElementById('siteFilter').value;
+  const hero=document.getElementById('siteBudgetHero');
+  if(selectedSiteId&&budgetMap[selectedSiteId]!==undefined){
+    const siteName=sites.find(s=>s.id===selectedSiteId)?.name||'';
+    const siteBudget=budgetMap[selectedSiteId];
+    const siteCost=grandTotal;
+    const siteDiff=siteBudget-siteCost;
+    const over=siteDiff<0;
+    const pct=Math.min(Math.round(siteCost/siteBudget*100),999);
+    const barW=Math.min(pct,100);
+    document.getElementById('siteBudgetHeroInner').innerHTML=`
+      <div style="background:${over?'var(--danger)':'var(--accent)'};padding:20px;color:white;">
+        <div style="font-size:13px;opacity:.8;margin-bottom:4px;">🏗️ ${siteName}</div>
+        <div style="font-size:12px;opacity:.7;margin-bottom:16px;">${currentMonth.getFullYear()}年度 実行予算</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;text-align:center;">
+          <div>
+            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">実行予算</div>
+            <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">現在原価</div>
+            <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;opacity:.75;margin-bottom:4px;">${over?'⚠️ 超過額':'✅ 残額'}</div>
+            <div style="font-size:24px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;opacity:.8;">消化率</span>
+          <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 予算超過':''}</span>
+        </div>
+        <div style="height:12px;background:rgba(255,255,255,.25);border-radius:6px;overflow:hidden;">
+          <div style="height:100%;width:${barW}%;background:white;border-radius:6px;transition:width .5s;"></div>
+        </div>
+        <div style="text-align:right;margin-top:8px;">
+          <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
+        </div>
+      </div>`;
+    hero.style.display='block';
+  }else if(selectedSiteId&&budgetMap[selectedSiteId]===undefined){
+    const siteName=sites.find(s=>s.id===selectedSiteId)?.name||'';
+    document.getElementById('siteBudgetHeroInner').innerHTML=`
+      <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">
+        <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">🏗️ ${siteName} の実行予算が未設定です</div>
+        <button onclick="openBudgetModal('${selectedSiteId}','${siteName}')" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
+      </div>`;
+    hero.style.display='block';
   }else{
-    document.getElementById('sumDiff').textContent='予算未設定';
-    document.getElementById('sumDiff').style.color='var(--text3)';
-    document.getElementById('sumDiffPct').textContent='';
+    hero.style.display='none';
   }
 
   renderSiteList(siteMap,totalInvMaterial,totalInvOther,budgetMap);
@@ -978,28 +1017,12 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={})
     const cardBorder=budget>0?(over?'border:2px solid var(--danger);':'border:2px solid var(--accent);'):'';
 
     const budgetBlock=budget>0?`
-      <div style="background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;text-align:center;">
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">実行予算</div>
-            <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:#1D4ED8;">${fmt(budget)}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">現在原価</div>
-            <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text);">${fmt(total)}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
-            <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${fmt(Math.abs(diff))}</div>
-          </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);margin-bottom:10px;">
+        <div style="display:flex;gap:16px;align-items:center;">
+          <span style="font-size:11px;color:var(--text2);">予算 <b style="font-family:'DM Mono',monospace;">${fmt(budget)}</b></span>
+          <span style="font-size:11px;color:var(--text2);">原価 <b style="font-family:'DM Mono',monospace;">${fmt(total)}</b></span>
         </div>
-        <div style="margin-bottom:4px;display:flex;justify-content:space-between;">
-          <span style="font-size:11px;color:var(--text2);">消化率</span>
-          <span style="font-size:11px;font-weight:700;color:${over?'var(--danger)':'var(--accent)'};">${Math.round(total/budget*100)}%</span>
-        </div>
-        <div style="height:10px;background:rgba(255,255,255,.5);border-radius:5px;overflow:hidden;">
-          <div style="height:100%;width:${budgetPct}%;background:${over?'var(--danger)':'var(--accent)'};border-radius:5px;transition:width .4s;"></div>
-        </div>
+        <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${over?'超過':'残'} ${fmt(Math.abs(diff))}</span>
       </div>`
     :`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
         <span style="font-size:12px;color:var(--text3);">📋 実行予算未設定</span>

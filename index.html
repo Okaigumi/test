@@ -727,13 +727,17 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div class="modal-handle"></div>
     <div class="modal-title" id="siteSettingTitle">🏗️ 現場設定</div>
     <div style="margin-bottom:14px;">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">工事場所</div>
+      <input type="text" class="memo-area" id="siteLocation" placeholder="例：静岡県浜松市中央区〇〇町1-2-3" style="min-height:auto;padding:10px 12px;resize:none;">
+    </div>
+    <div style="margin-bottom:14px;">
       <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">工期</div>
       <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">
         <input type="date" class="date-input" id="siteStartDate">
         <span style="color:var(--text3);">〜</span>
         <input type="date" class="date-input" id="siteEndDate">
       </div>
-      <button onclick="saveSitePeriod()" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">工期を保存</button>
+      <button onclick="saveSitePeriod()" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">保存</button>
     </div>
     <div style="margin-bottom:14px;">
       <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">従業員の配属</div>
@@ -1573,6 +1577,7 @@ async function openSiteSetting(siteId){
   editingSiteId=siteId;
   const s=state.sites.find(s=>s.id===siteId);
   document.getElementById('siteSettingTitle').textContent=`🏗️ ${s.name} の設定`;
+  document.getElementById('siteLocation').value=s.location||'';
   document.getElementById('siteStartDate').value=s.start_date||'';
   document.getElementById('siteEndDate').value=s.end_date||'';
 
@@ -1594,11 +1599,12 @@ async function openSiteSetting(siteId){
 async function saveSitePeriod(){
   const sd=document.getElementById('siteStartDate').value||null;
   const ed=document.getElementById('siteEndDate').value||null;
-  await sb.from('sites').update({start_date:sd,end_date:ed}).eq('id',editingSiteId);
+  const loc=document.getElementById('siteLocation').value||null;
+  await sb.from('sites').update({start_date:sd,end_date:ed,location:loc}).eq('id',editingSiteId);
   const s=state.sites.find(s=>s.id===editingSiteId);
-  if(s){s.start_date=sd;s.end_date=ed;}
+  if(s){s.start_date=sd;s.end_date=ed;s.location=loc;}
   renderMaster();renderSiteChips();
-  alert('工期を保存しました');
+  alert('保存しました');
 }
 
 async function toggleAssign(siteId,empId,btn){

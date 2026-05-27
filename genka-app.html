@@ -881,10 +881,15 @@ async function loadData(){
   document.getElementById('sumSub').textContent=fmt(totalSub);
   document.getElementById('sumSubSub').textContent=totalInvSub>0?`うち請求書 ${fmt(totalInvSub)}`:'';
   document.getElementById('sumMachine').textContent=fmt(totalMachine);
-  document.getElementById('sumDump').textContent=fmt(totalDump);
-  document.getElementById('sumDumpSub').textContent=`${totalDumpTai}台`;
-  document.getElementById('sumGuard').textContent=fmt(totalGuard);
-  document.getElementById('sumGuardSub').textContent=`${totalGuardPpl}人`;
+
+  const dumpUnitSet=getDumpPrice('大須賀商店')>0||getDumpPrice('高瀬興行')>0||getDumpPrice('未選択')>0;
+  document.getElementById('sumDump').textContent=dumpUnitSet?fmt(totalDump):`${totalDumpTai}台`;
+  document.getElementById('sumDumpSub').textContent=dumpUnitSet?`${totalDumpTai}台`:'⚠️ 単価未設定';
+
+  const guardUnitSet=getGuardPrice()>0;
+  document.getElementById('sumGuard').textContent=guardUnitSet?fmt(totalGuard):`${totalGuardPpl}人`;
+  document.getElementById('sumGuardSub').textContent=guardUnitSet?`${totalGuardPpl}人`:'⚠️ 単価未設定';
+
   const grandTotal=totalLabor+totalSub+totalMachine+totalDump+totalGuard+totalInvMaterial+totalInvOther;
   document.getElementById('sumTotal').textContent=fmt(grandTotal);
 
@@ -951,12 +956,12 @@ async function loadData(){
     hero.style.display='none';
   }
 
-  renderSiteList(siteMap,totalInvMaterial,totalInvOther,budgetMap);
+  renderSiteList(siteMap,totalInvMaterial,totalInvOther,budgetMap,dumpUnitSet,guardUnitSet);
   renderEmployeeList(reps);
 }
 
 // ===== SITE LIST =====
-function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={}){
+function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={},dumpUnitSet=false,guardUnitSet=false){
   const keys=Object.keys(siteMap);
   document.getElementById('siteCount').textContent=`${keys.length}現場`;
   if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
@@ -1047,8 +1052,8 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={})
         <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(laborTotal)}</div><div class="bi-sub">${s.laborDays}人日</div></div>
         <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div>${s.invSub>0?`<div class="bi-sub">うち請求書 ${fmt(s.invSub)}</div>`:''}</div>
         <div class="breakdown-item"><div class="bi-label">🚜 重機</div><div class="bi-val machine">${fmt(machineCost+invMach)}</div></div>
-        <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${fmt(dumpTotal)}</div><div class="bi-sub">${s.dumpTai}台</div></div>
-        <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${fmt(guardTotal)}</div><div class="bi-sub">${s.guardPpl}人</div></div>
+        <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${dumpUnitSet?fmt(dumpTotal):s.dumpTai+'台'}</div><div class="bi-sub">${dumpUnitSet?s.dumpTai+'台':'単価未設定'}</div></div>
+        <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${guardUnitSet?fmt(guardTotal):s.guardPpl+'人'}</div><div class="bi-sub">${guardUnitSet?s.guardPpl+'人':'単価未設定'}</div></div>
         ${invMat>0?`<div class="breakdown-item"><div class="bi-label">📦 材料費</div><div class="bi-val" style="color:#7C3AED;">${fmt(invMat)}</div><div class="bi-sub">請求書</div></div>`:''}
         ${invOth>0?`<div class="breakdown-item"><div class="bi-label">📋 その他</div><div class="bi-val">${fmt(invOth)}</div><div class="bi-sub">請求書</div></div>`:''}
       </div>

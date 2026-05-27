@@ -376,6 +376,7 @@ async function openSiteModal(siteId=null){
     </label>`).join('');
 
   const body=`
+    <input type="hidden" id="f-siteid" value="${siteId||''}">
     <div class="form-grid" style="margin-bottom:16px;">
       <div class="form-group form-full">
         <label class="form-label">現場名 *</label>
@@ -403,15 +404,16 @@ async function openSiteModal(siteId=null){
 
   openModal(s?`🏗️ ${s.name} を編集`:'🏗️ 新規現場を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveSite('${siteId||''}')">保存</button>`);
+    <button class="btn btn-primary" onclick="saveSite()">保存</button>`);
 }
 
-async function saveSite(siteId){
+async function saveSite(){
+  const siteId=document.getElementById('f-siteid').value||null;
   const name=document.getElementById('f-name').value.trim();
   if(!name){alert('現場名を入力してください');return;}
   const payload={
     name,
-    location:document.getElementById('f-location').value||null,
+    location:document.getElementById('f-location').value.trim()||null,
     start_date:document.getElementById('f-start').value||null,
     end_date:document.getElementById('f-end').value||null,
     is_active:true
@@ -429,11 +431,15 @@ async function saveSite(siteId){
     await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
     for(const c of checks){
       if(c.checked){
-        await sb.from('site_assignments').upsert({site_id:id,employee_id:c.value,is_active:true},{onConflict:'site_id,employee_id'});
+        await sb.from('site_assignments').upsert(
+          {site_id:id,employee_id:c.value,is_active:true},
+          {onConflict:'site_id,employee_id'}
+        );
       }
     }
   }
-  closeModal();await pageSites();
+  closeModal();
+  await pageSites();
 }
 
 async function deleteSite(id,name){
@@ -488,6 +494,7 @@ async function openInvoiceModal(invId=null){
   const siteOpts=_sites.map(s=>`<option value="${s.id}" ${inv?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
   const cats=[['subcontract','🧱 外注費'],['material','📦 材料費'],['machine_lease','🚜 重機リース'],['other','📋 その他']];
   const body=`
+    <input type="hidden" id="fi-id" value="${inv?.id||''}">
     <div class="form-grid">
       <div class="form-group">
         <label class="form-label">請求日 *</label>
@@ -527,10 +534,11 @@ async function openInvoiceModal(invId=null){
     </div>`;
   openModal(inv?'📄 請求書を編集':'📄 請求書を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveInvoice('${invId||''}')">保存</button>`);
+    <button class="btn btn-primary" onclick="saveInvoice()">保存</button>`);
 }
 
-async function saveInvoice(invId){
+async function saveInvoice(){
+  const invId=document.getElementById('fi-id').value||null;
   const date=document.getElementById('fi-date').value;
   const vendor=document.getElementById('fi-vendor').value.trim();
   const amount=parseInt(document.getElementById('fi-amount').value)||0;
@@ -656,6 +664,7 @@ async function openBudgetModal(budgetId=null){
   if(budgetId){const{data}=await sb.from('site_budgets').select('*').eq('id',budgetId).single();b=data;}
   const siteOpts=_sites.map(s=>`<option value="${s.id}" ${b?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
   const body=`
+    <input type="hidden" id="fb-id" value="${b?.id||''}">
     <div class="form-grid">
       <div class="form-group form-full">
         <label class="form-label">現場 *</label>
@@ -676,10 +685,10 @@ async function openBudgetModal(budgetId=null){
     </div>`;
   openModal(b?'📋 予算を編集':'📋 予算を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveBudget('${budgetId||''}')">保存</button>`);
+    <button class="btn btn-primary" onclick="saveBudget()">保存</button>`);
 }
 
-async function saveBudget(budgetId){
+async function saveBudget(){const budgetId=document.getElementById('fb-id').value||null;
   const site=document.getElementById('fb-site').value;
   const year=parseInt(document.getElementById('fb-year').value);
   const amount=parseInt(document.getElementById('fb-amount').value)||0;
@@ -724,6 +733,7 @@ async function openEmployeeModal(empId=null){
   let e=null;
   if(empId){const{data}=await sb.from('employees').select('*').eq('id',empId).single();e=data;}
   const body=`
+    <input type="hidden" id="fe-id" value="${e?.id||''}">
     <div class="form-grid">
       <div class="form-group form-full">
         <label class="form-label">名前 *</label>
@@ -750,10 +760,10 @@ async function openEmployeeModal(empId=null){
     </div>`;
   openModal(e?`👷 ${e.name} を編集`:'👷 従業員を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveEmployee('${empId||''}')">保存</button>`);
+    <button class="btn btn-primary" onclick="saveEmployee()">保存</button>`);
 }
 
-async function saveEmployee(empId){
+async function saveEmployee(){const empId=document.getElementById('fe-id').value||null;
   const name=document.getElementById('fe-name').value.trim();
   const pin=document.getElementById('fe-pin').value;
   const role=document.getElementById('fe-role').value;
@@ -793,6 +803,7 @@ async function openAdminModal(adminId=null){
   let a=null;
   if(adminId){const{data}=await sb.from('genka_admins').select('*').eq('id',adminId).single();a=data;}
   const body=`
+    <input type="hidden" id="fa-id" value="${a?.id||''}">
     <div class="form-grid">
       <div class="form-group form-full">
         <label class="form-label">名前 *</label>
@@ -812,10 +823,10 @@ async function openAdminModal(adminId=null){
     </div>`;
   openModal(a?`🔐 ${a.name} を編集`:'🔐 管理者を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" onclick="saveAdmin('${adminId||''}')">保存</button>`);
+    <button class="btn btn-primary" onclick="saveAdmin()">保存</button>`);
 }
 
-async function saveAdmin(adminId){
+async function saveAdmin(){const adminId=document.getElementById('fa-id').value||null;
   const name=document.getElementById('fa-name').value.trim();
   const pin=document.getElementById('fa-pin').value;
   const is_active=document.getElementById('fa-active').value==='true';

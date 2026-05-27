@@ -365,24 +365,15 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 <div id="budgetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeBudgetModal()">
   <div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:640px;padding:24px;animation:slideUp .25s ease;">
     <div style="width:40px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px;"></div>
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">📋 実行予算の設定</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">📋 実行予算の設定（年間）</div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:16px;" id="budgetModalSite"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">種類</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <button id="btype-month" class="inv-cat-btn selected" onclick="setBudgetType('month')">月次</button>
-          <button id="btype-year" class="inv-cat-btn" onclick="setBudgetType('year')">年間</button>
-        </div>
-      </div>
-      <div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">年度</div>
-        <input type="number" class="rate-input" id="budgetYear" style="width:100%;font-size:15px;">
-      </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">年度</div>
+      <input type="number" class="rate-input" id="budgetYear" style="width:100%;font-size:15px;">
     </div>
     <div style="margin-bottom:14px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;" id="budgetAmtLabel">予算金額（月次）</div>
-      <input type="number" class="rate-input" id="budgetAmount" placeholder="0" step="10000" min="0" style="width:100%;font-size:16px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">年間予算金額（月表示は÷12で自動計算）</div>
+      <input type="number" class="rate-input" id="budgetAmount" placeholder="0" step="100000" min="0" style="width:100%;font-size:16px;">
     </div>
     <div style="margin-bottom:16px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">メモ（任意）</div>
@@ -578,14 +569,6 @@ function switchTab(name){
 
 // ===== BUDGET =====
 let budgetSiteId=null;
-let budgetType='month';
-
-function setBudgetType(type){
-  budgetType=type;
-  document.getElementById('btype-month').classList.toggle('selected',type==='month');
-  document.getElementById('btype-year').classList.toggle('selected',type==='year');
-  document.getElementById('budgetAmtLabel').textContent=type==='month'?'予算金額（月次）':'予算金額（年間）';
-}
 
 async function openBudgetModal(siteId,siteName){
   budgetSiteId=siteId;
@@ -593,17 +576,13 @@ async function openBudgetModal(siteId,siteName){
   document.getElementById('budgetYear').value=currentMonth.getFullYear();
   document.getElementById('budgetAmount').value='';
   document.getElementById('budgetMemo').value='';
-  setBudgetType('month');
 
-  // 既存の予算を読み込む
-  const y=currentMonth.getFullYear();
-  const m=currentMonth.getMonth()+1;
-  const{data}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',y);
-  const monthly=(data||[]).find(b=>b.month===m);
-  const yearly=(data||[]).find(b=>b.month===null);
-  if(monthly){setBudgetType('month');document.getElementById('budgetAmount').value=monthly.budget;document.getElementById('budgetMemo').value=monthly.memo||'';}
-  else if(yearly){setBudgetType('year');document.getElementById('budgetAmount').value=yearly.budget;document.getElementById('budgetMemo').value=yearly.memo||'';}
-
+  // 既存の年間予算を読み込む
+  const{data}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).is('month',null).single();
+  if(data){
+    document.getElementById('budgetAmount').value=data.budget;
+    document.getElementById('budgetMemo').value=data.memo||'';
+  }
   document.getElementById('budgetModal').style.display='flex';
 }
 
@@ -616,11 +595,10 @@ async function saveBudget(){
   const amount=parseInt(document.getElementById('budgetAmount').value)||0;
   if(!amount){alert('予算金額を入力してください');return;}
   const year=parseInt(document.getElementById('budgetYear').value);
-  const month=budgetType==='month'?currentMonth.getMonth()+1:null;
   const memo=document.getElementById('budgetMemo').value||null;
 
   await sb.from('site_budgets').upsert({
-    site_id:budgetSiteId,year,month,budget:amount,memo,updated_at:new Date().toISOString()
+    site_id:budgetSiteId,year,month:null,budget:amount,memo,updated_at:new Date().toISOString()
   },{onConflict:'site_id,year,month'});
 
   closeBudgetModal();
@@ -829,16 +807,12 @@ async function loadData(){
   const{data:invoicesData}=await invQ;
   const invs=invoicesData||[];
 
-  // 予算データ取得（月次 or 年間）
+  // 予算データ取得（年間のみ）
   const{data:budgetsData}=await sb.from('site_budgets').select('*').eq('year',currentMonth.getFullYear());
   const budgets=budgetsData||[];
-  // 月次予算があれば月次を優先、なければ年間÷12
   const budgetMap={};
   budgets.forEach(b=>{
-    if(b.month===currentMonth.getMonth()+1) budgetMap[b.site_id]=b.budget;
-  });
-  budgets.forEach(b=>{
-    if(b.month===null&&!budgetMap[b.site_id]) budgetMap[b.site_id]=Math.round(b.budget/12);
+    if(b.month===null) budgetMap[b.site_id]=Math.round(b.budget/12);
   });
 
   let totalLabor=0,totalSub=0,totalMachine=0,totalDump=0,totalGuard=0;
@@ -920,7 +894,7 @@ async function loadData(){
   const totalBudget=Object.values(budgetMap).reduce((s,v)=>s+v,0);
   const diff=totalBudget-grandTotal;
   document.getElementById('sumBudget').textContent=totalBudget>0?fmt(totalBudget):'未設定';
-  document.getElementById('sumBudgetSub').textContent=totalBudget>0?`${currentMonth.getMonth()+1}月予算`:'';
+  document.getElementById('sumBudgetSub').textContent=totalBudget>0?`年間予算÷12`:``;
   if(totalBudget>0){
     const pct=Math.round((grandTotal/totalBudget)*100);
     document.getElementById('sumDiff').textContent=fmt(Math.abs(diff));

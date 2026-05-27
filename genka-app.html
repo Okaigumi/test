@@ -628,8 +628,15 @@ async function loadData(){
   const{data:reports}=await q;
   const reps=reports||[];
 
+  // 請求書データも取得
+  let invQ=sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to);
+  if(siteId) invQ=invQ.eq('site_id',siteId);
+  const{data:invoicesData}=await invQ;
+  const invs=invoicesData||[];
+
   let totalLabor=0,totalSub=0,totalMachine=0,totalDump=0,totalGuard=0;
   let totalLaborDays=0,totalDumpTai=0,totalGuardPpl=0;
+  let totalInvSub=0,totalInvMaterial=0,totalInvMachine=0,totalInvOther=0;
 
   const siteMap={};
 
@@ -646,7 +653,6 @@ async function loadData(){
     const guardPpl=r.guard_count||0;
     const guardCost=guardPpl*getGuardPrice();
 
-    // 外注費（重機回送業者ごとの日額）
     let subCost=0;
     (r.subcontractor_ids||[]).forEach(subId=>{
       const sub=subcontractors.find(s=>s.id===subId);
@@ -654,7 +660,7 @@ async function loadData(){
     });
 
     (r.site_ids||[]).forEach(sid=>{
-      if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0};
+      if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0,invSub:0,invMaterial:0,invMachine:0,invOther:0};
       siteMap[sid].reports.push(r);
       if(nm>0){siteMap[sid].labor+=laborCost;siteMap[sid].laborDays++;}
       siteMap[sid].sub+=subCost;
@@ -668,40 +674,60 @@ async function loadData(){
     totalGuard+=guardCost;totalGuardPpl+=guardPpl;
   });
 
-  // 重機リース（月額合計）
+  // 請求書を現場別・カテゴリ別に集計
+  invs.forEach(inv=>{
+    const amt=inv.amount||0;
+    if(inv.site_id&&siteMap[inv.site_id]){
+      if(inv.category==='subcontract') siteMap[inv.site_id].invSub+=amt;
+      else if(inv.category==='material') siteMap[inv.site_id].invMaterial+=amt;
+      else if(inv.category==='machine_lease') siteMap[inv.site_id].invMachine+=amt;
+      else siteMap[inv.site_id].invOther+=amt;
+    } else if(!inv.site_id){
+      // 現場指定なしの場合はサマリーのみに加算
+    }
+    if(inv.category==='subcontract') totalInvSub+=amt;
+    else if(inv.category==='material') totalInvMaterial+=amt;
+    else if(inv.category==='machine_lease') totalInvMachine+=amt;
+    else totalInvOther+=amt;
+  });
+
+  // 重機リース（月額合計）+ 請求書の重機リース
   machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).forEach(m=>{totalMachine+=m.lease_monthly;});
+  totalMachine+=totalInvMachine;
+  totalSub+=totalInvSub;
 
   // サマリー
   document.getElementById('sumLabor').textContent=fmt(totalLabor);
   document.getElementById('sumLaborSub').textContent=`${totalLaborDays}人日`;
   document.getElementById('sumSub').textContent=fmt(totalSub);
-  document.getElementById('sumSubSub').textContent='';
+  document.getElementById('sumSubSub').textContent=totalInvSub>0?`うち請求書 ${fmt(totalInvSub)}`:'';
   document.getElementById('sumMachine').textContent=fmt(totalMachine);
   document.getElementById('sumDump').textContent=fmt(totalDump);
   document.getElementById('sumDumpSub').textContent=`${totalDumpTai}台`;
   document.getElementById('sumGuard').textContent=fmt(totalGuard);
   document.getElementById('sumGuardSub').textContent=`${totalGuardPpl}人`;
-  document.getElementById('sumTotal').textContent=fmt(totalLabor+totalSub+totalMachine+totalDump+totalGuard);
+  const grandTotal=totalLabor+totalSub+totalMachine+totalDump+totalGuard+totalInvMaterial+totalInvOther;
+  document.getElementById('sumTotal').textContent=fmt(grandTotal);
 
-  renderSiteList(siteMap);
+  renderSiteList(siteMap,totalInvMaterial,totalInvOther);
   renderEmployeeList(reps);
 }
 
 // ===== SITE LIST =====
-function renderSiteList(siteMap){
+function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0){
   const keys=Object.keys(siteMap);
   document.getElementById('siteCount').textContent=`${keys.length}現場`;
   if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
 
   const machineCost=machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).reduce((s,m)=>s+m.lease_monthly,0);
-  const totals=Object.values(siteMap).map(s=>s.labor+s.sub+s.dump+s.guard+machineCost);
+  const totals=Object.values(siteMap).map(s=>s.labor+s.sub+s.invSub+s.dump+s.guard+(s.invMaterial||0)+(s.invMachine||0)+(s.invOther||0)+machineCost);
   const maxTotal=Math.max(...totals,1);
 
   document.getElementById('siteList').innerHTML=keys.map(sid=>{
     const s=siteMap[sid];
     const site=sites.find(x=>x.id===sid);
     if(!site)return '';
-    const total=s.labor+s.sub+s.dump+s.guard+machineCost;
+    const total=s.labor+s.sub+(s.invSub||0)+s.dump+s.guard+(s.invMaterial||0)+(s.invMachine||0)+(s.invOther||0)+machineCost;
     const pct=Math.round(total/maxTotal*100);
 
     // 日別明細
@@ -737,22 +763,31 @@ function renderSiteList(siteMap){
       })
     ).join('');
 
-    const laborTotal=s.labor,subTotal=s.sub,dumpTotal=s.dump,guardTotal=s.guard;
+    const laborTotal=s.labor;
+    const subTotal=s.sub+(s.invSub||0);
+    const dumpTotal=s.dump;
+    const guardTotal=s.guard;
+    const invMat=s.invMaterial||0;
+    const invMach=s.invMachine||0;
+    const invOth=s.invOther||0;
+    const hasInv=(s.invSub||0)+(invMat)+(invMach)+(invOth)>0;
 
     return `<div class="site-card print-card">
       <div class="site-card-header" onclick="toggleDetail('${sid}')">
         <div>
           <div class="site-card-title">🏗️ ${site.name}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人${hasInv?' ｜ 📄請求書あり':''}</div>
         </div>
         <div class="site-card-total">${fmt(total)}</div>
       </div>
       <div class="cost-breakdown">
         <div class="breakdown-item"><div class="bi-label">👷 労務費</div><div class="bi-val labor">${fmt(laborTotal)}</div><div class="bi-sub">${s.laborDays}人日</div></div>
-        <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div></div>
-        <div class="breakdown-item"><div class="bi-label">🚜 重機</div><div class="bi-val machine">${fmt(machineCost)}</div><div class="bi-sub">月額</div></div>
+        <div class="breakdown-item"><div class="bi-label">🧱 外注費</div><div class="bi-val sub">${fmt(subTotal)}</div>${s.invSub>0?`<div class="bi-sub">うち請求書 ${fmt(s.invSub)}</div>`:''}</div>
+        <div class="breakdown-item"><div class="bi-label">🚜 重機</div><div class="bi-val machine">${fmt(machineCost+invMach)}</div></div>
         <div class="breakdown-item"><div class="bi-label">🚚 ダンプ</div><div class="bi-val dump">${fmt(dumpTotal)}</div><div class="bi-sub">${s.dumpTai}台</div></div>
         <div class="breakdown-item"><div class="bi-label">🦺 警備員</div><div class="bi-val guard">${fmt(guardTotal)}</div><div class="bi-sub">${s.guardPpl}人</div></div>
+        ${invMat>0?`<div class="breakdown-item"><div class="bi-label">📦 材料費</div><div class="bi-val" style="color:#7C3AED;">${fmt(invMat)}</div><div class="bi-sub">請求書</div></div>`:''}
+        ${invOth>0?`<div class="breakdown-item"><div class="bi-label">📋 その他</div><div class="bi-val">${fmt(invOth)}</div><div class="bi-sub">請求書</div></div>`:''}
       </div>
       <div class="cost-bar-wrap"><div class="cost-bar" style="width:${pct}%;background:var(--accent);"></div></div>
       <div id="detail-${sid}" style="display:none;margin-top:12px;overflow-x:auto;">
@@ -760,13 +795,20 @@ function renderSiteList(siteMap){
           <thead><tr><th>日付</th><th>従業員</th><th class="right">労務費</th><th class="right">外注費</th><th class="right">ダンプ</th><th class="right">警備員</th></tr></thead>
           <tbody>${dailyRows}</tbody>
           <tfoot><tr>
-            <td colspan="2">合計</td>
+            <td colspan="2">日報合計</td>
             <td class="right money">${fmt(laborTotal)}</td>
-            <td class="right money">${fmt(subTotal)}</td>
+            <td class="right money">${fmt(s.sub)}</td>
             <td class="right money">${fmt(dumpTotal)}</td>
             <td class="right money">${fmt(guardTotal)}</td>
           </tr></tfoot>
         </table>
+        ${hasInv?`<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;">
+          <div style="font-weight:700;margin-bottom:4px;">📄 請求書計上分</div>
+          ${s.invSub>0?`<div style="display:flex;justify-content:space-between;"><span>外注費</span><span class="money">${fmt(s.invSub)}</span></div>`:''}
+          ${invMat>0?`<div style="display:flex;justify-content:space-between;"><span>材料費</span><span class="money">${fmt(invMat)}</span></div>`:''}
+          ${invMach>0?`<div style="display:flex;justify-content:space-between;"><span>重機リース</span><span class="money">${fmt(invMach)}</span></div>`:''}
+          ${invOth>0?`<div style="display:flex;justify-content:space-between;"><span>その他</span><span class="money">${fmt(invOth)}</span></div>`:''}
+        </div>`:''}
       </div>
       <button class="toggle-detail no-print" onclick="toggleDetail('${sid}')">明細を表示 ▾</button>
     </div>`;

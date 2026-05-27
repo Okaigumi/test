@@ -122,6 +122,12 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 .empty-msg{text-align:center;color:var(--text3);padding:40px;font-size:14px;}
 
+/* PIN Login */
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:white;transition:background .15s;display:inline-block;}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+.pin-key{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;font-size:20px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;text-align:center;transition:all .1s;}
+.pin-key:active{background:var(--accent-light);transform:scale(.95);}
+
 /* Invoice */
 .inv-cat-btn{padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;font-weight:500;color:var(--text2);transition:all .15s;}
 .inv-cat-btn.selected{background:var(--accent-light);border-color:var(--accent);color:var(--accent);}
@@ -146,13 +152,51 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <div style="font-size:13px;opacity:.7;">データを読み込み中...</div>
 </div>
 
+<!-- ログイン画面 -->
+<div id="loginScreen" style="display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--bg);">
+  <div style="font-size:48px;margin-bottom:12px;">📊</div>
+  <div style="font-size:22px;font-weight:700;margin-bottom:6px;">原価管理</div>
+  <div style="font-size:14px;color:var(--text3);margin-bottom:32px;">管理者専用</div>
+  <div style="background:white;border-radius:var(--radius);border:1px solid var(--border);padding:24px;width:100%;max-width:320px;">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:6px;font-weight:500;">お名前を選択</div>
+    <select id="loginName" style="width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:15px;font-family:'Noto Sans JP',sans-serif;background:var(--surface2);color:var(--text);margin-bottom:14px;">
+      <option value="">選択してください</option>
+    </select>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:500;">PINコード（4桁）</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px;">
+      <div class="pin-dot" id="g0"></div><div class="pin-dot" id="g1"></div>
+      <div class="pin-dot" id="g2"></div><div class="pin-dot" id="g3"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      <button class="pin-key" onclick="gPinInput('1')">1</button>
+      <button class="pin-key" onclick="gPinInput('2')">2</button>
+      <button class="pin-key" onclick="gPinInput('3')">3</button>
+      <button class="pin-key" onclick="gPinInput('4')">4</button>
+      <button class="pin-key" onclick="gPinInput('5')">5</button>
+      <button class="pin-key" onclick="gPinInput('6')">6</button>
+      <button class="pin-key" onclick="gPinInput('7')">7</button>
+      <button class="pin-key" onclick="gPinInput('8')">8</button>
+      <button class="pin-key" onclick="gPinInput('9')">9</button>
+      <button class="pin-key" onclick="gPinClear()">C</button>
+      <button class="pin-key" onclick="gPinInput('0')">0</button>
+      <button class="pin-key" onclick="gPinBack()">⌫</button>
+    </div>
+    <div id="loginError" style="font-size:13px;color:var(--danger);margin-top:10px;text-align:center;display:none;">名前またはPINが正しくありません</div>
+  </div>
+</div>
+
+<!-- メインアプリ -->
+<div id="mainApp" style="display:none;">
+
 <header class="app-header no-print">
   <div>
     <div class="header-title">📊 原価管理ダッシュボード</div>
     <div class="header-sub" id="headerPeriod"></div>
   </div>
   <div class="header-right">
+    <div id="loginUserName" style="font-size:12px;opacity:.75;"></div>
     <button class="btn-print" onclick="window.print()">🖨️ A4印刷</button>
+    <button onclick="gLogout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 12px;border-radius:var(--radius-sm);font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">ログアウト</button>
   </div>
 </header>
 
@@ -365,6 +409,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
+</div><!-- /mainApp -->
+
 <script>
 const SUPABASE_URL='https://fblecreevjtrqnkhmwuk.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGVjcmVldmp0cnFua2htd3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIzNTgsImV4cCI6MjA5NTIxODM1OH0.33YzIhtqSpN9yoJ3D7jPfTyvYqPB7ovyjlOdEgNL8kg';
@@ -372,13 +418,68 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 let currentMonth=new Date();
 let sites=[],employees=[],machines=[],subcontractors=[];
-let empRates={};      // employee_id → daily_rate
-let unitRates={};     // 'dump:大須賀商店' → price など
+let empRates={};
+let unitRates={};
+let gCurrentUser=null;
+let gPin='';
 
 function fmt(n){return n>0?'¥'+Math.round(n).toLocaleString():'¥0';}
 
-// ===== INIT =====
+// ===== LOGIN =====
 async function init(){
+  // セッション確認
+  const saved=sessionStorage.getItem('genkaUser');
+  if(saved){
+    gCurrentUser=JSON.parse(saved);
+    document.getElementById('loadingScreen').style.display='flex';
+    await startApp();
+    return;
+  }
+  // ログイン画面を表示
+  const{data:emps}=await sb.from('employees').select('id,name,role').eq('is_active',true).order('name');
+  const sel=document.getElementById('loginName');
+  (emps||[]).forEach(e=>{
+    const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);
+  });
+  document.getElementById('loadingScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+function gPinInput(n){
+  if(gPin.length>=4)return;
+  gPin+=n;
+  updateGPinDots();
+  if(gPin.length===4)setTimeout(tryGLogin,200);
+}
+function gPinBack(){gPin=gPin.slice(0,-1);updateGPinDots();}
+function gPinClear(){gPin='';updateGPinDots();}
+function updateGPinDots(){
+  for(let i=0;i<4;i++)document.getElementById('g'+i).classList.toggle('filled',i<gPin.length);
+}
+
+async function tryGLogin(){
+  const empId=document.getElementById('loginName').value;
+  if(!empId){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
+  const{data}=await sb.from('employees').select('*').eq('id',empId).eq('pin',gPin).eq('is_active',true).single();
+  if(data){
+    gCurrentUser=data;
+    sessionStorage.setItem('genkaUser',JSON.stringify(data));
+    document.getElementById('loginError').style.display='none';
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('loadingScreen').style.display='flex';
+    await startApp();
+  }else{
+    document.getElementById('loginError').style.display='block';
+    gPin='';updateGPinDots();
+  }
+}
+
+function gLogout(){
+  sessionStorage.removeItem('genkaUser');
+  location.reload();
+}
+
+async function startApp(){
   const[sRes,eRes,erRes,mRes,subRes,urRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true),
     sb.from('employees').select('*').eq('is_active',true),
@@ -392,18 +493,17 @@ async function init(){
   machines=mRes.data||[];
   subcontractors=subRes.data||[];
 
-  // 従業員単価マップ
   const arr=(erRes.data||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1);
   arr.forEach(r=>{if(!empRates[r.employee_id])empRates[r.employee_id]=r.daily_rate;});
-
-  // 単価マップ（category:name → price）
   (urRes.data||[]).forEach(r=>{unitRates[`${r.category}:${r.name}`]=r.unit_price||0;});
 
-  // 現場セレクト（フィルター）
+  // ユーザー名表示
+  document.getElementById('loginUserName').textContent=gCurrentUser.name;
+
+  // 現場セレクト
   const sel=document.getElementById('siteFilter');
   sites.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
 
-  // 請求書フォームの現場セレクトと日付
   populateInvSiteSelect();
   const today=new Date();
   document.getElementById('invDate').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
@@ -412,6 +512,7 @@ async function init(){
   renderRateEditor();
   await loadData();
   document.getElementById('loadingScreen').style.display='none';
+  document.getElementById('mainApp').style.display='block';
 }
 
 function updateMonthLabel(){

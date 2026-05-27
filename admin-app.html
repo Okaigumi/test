@@ -410,13 +410,18 @@ async function openSiteModal(siteId=null){
 
 async function saveSite(){
   const siteId=_editSiteId;
-  const name=document.getElementById('f-name').value.trim();
+  const nameEl=document.getElementById('f-name');
+  const locEl=document.getElementById('f-location');
+  const startEl=document.getElementById('f-start');
+  const endEl=document.getElementById('f-end');
+  if(!nameEl){alert('エラー：フォーム要素が見つかりません');return;}
+  const name=nameEl.value.trim();
   if(!name){alert('現場名を入力してください');return;}
   const payload={
     name,
-    location:document.getElementById('f-location').value.trim()||null,
-    start_date:document.getElementById('f-start').value||null,
-    end_date:document.getElementById('f-end').value||null,
+    location:locEl?.value.trim()||null,
+    start_date:startEl?.value||null,
+    end_date:endEl?.value||null,
     is_active:true
   };
   let id=siteId;

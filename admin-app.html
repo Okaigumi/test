@@ -305,7 +305,7 @@ async function startApp(){
 }
 
 // ===== NAVIGATION =====
-function showPage(name){
+async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
   const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者'};
@@ -313,7 +313,7 @@ function showPage(name){
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
   const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins};
-  if(pages[name]) pages[name]();
+  if(pages[name]) await pages[name]();
 }
 
 // ===== MODAL =====
@@ -457,6 +457,7 @@ async function saveSite(){
 async function deleteSite(id){
   const s=_sites.find(x=>x.id===id);
   if(!confirm(`「${s?.name||id}」を削除しますか？`))return;
+  await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
   await sb.from('sites').update({is_active:false}).eq('id',id);
   await pageSites();
   showPage('sites');
@@ -468,7 +469,7 @@ async function pageInvoices(){
   const{data}=await sb.from('invoices').select('*').order('invoice_date',{ascending:false}).limit(200);
   const invs=data||[];
   const catInfo={subcontract:{label:'外注費',cls:'badge-orange'},material:{label:'材料費',cls:'badge-purple'},machine_lease:{label:'重機リース',cls:'badge-blue'},other:{label:'その他',cls:'badge-green'}};
-  const totalAmt=invs.reduce((s,i)=>s+i.amount,0);
+  const totalAmt=invs.reduce((s,i)=>s+(Number(i.amount)||0),0);
 
   const html=`
     <div class="stats-grid">
@@ -555,8 +556,11 @@ async function saveInvoice(){
   const invId=_editInvId;
   const date=document.getElementById('fi-date').value;
   const vendor=document.getElementById('fi-vendor').value.trim();
-  const amount=parseInt(document.getElementById('fi-amount').value)||0;
-  if(!date||!vendor||!amount){alert('日付・業者名・金額は必須です');return;}
+  const amountStr=document.getElementById('fi-amount').value;
+  const amount=parseInt(amountStr);
+  if(!date||!vendor||amountStr===''||isNaN(amount)){alert('日付・業者名・金額は必須です');return;}
+  const btn=document.querySelector('#modalFooter .btn-primary');
+  if(btn)btn.disabled=true;
   const payload={
     invoice_date:date,vendor_name:vendor,amount,
     site_id:document.getElementById('fi-site').value||null,
@@ -565,8 +569,13 @@ async function saveInvoice(){
     description:document.getElementById('fi-desc').value||null,
     memo:document.getElementById('fi-memo').value||null
   };
-  if(invId) await sb.from('invoices').update(payload).eq('id',invId);
-  else await sb.from('invoices').insert(payload);
+  if(invId){
+    const{data:updated,error}=await sb.from('invoices').update(payload).eq('id',invId).select();
+    if(error||!updated?.length){if(btn)btn.disabled=false;alert('保存に失敗しました');return;}
+  }else{
+    const{error}=await sb.from('invoices').insert(payload);
+    if(error){if(btn)btn.disabled=false;alert('保存に失敗しました：'+error.message);return;}
+  }
   closeModal();await pageInvoices();
 }
 
@@ -706,11 +715,16 @@ async function openBudgetModal(budgetId=null){
 async function saveBudget(){const budgetId=_editBudgetId;
   const site=document.getElementById('fb-site').value;
   const year=parseInt(document.getElementById('fb-year').value);
-  const amount=parseInt(document.getElementById('fb-amount').value)||0;
-  if(!site||!year||!amount){alert('現場・年度・金額は必須です');return;}
+  const amountStr=document.getElementById('fb-amount').value;
+  const amount=parseInt(amountStr);
+  if(!site||!year||amountStr===''||isNaN(amount)){alert('現場・年度・金額は必須です');return;}
   const payload={site_id:site,year,month:null,budget:amount,memo:document.getElementById('fb-memo').value||null,updated_at:new Date().toISOString()};
-  if(budgetId) await sb.from('site_budgets').update(payload).eq('id',budgetId);
-  else await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
+  if(budgetId){
+    const{data:updated,error}=await sb.from('site_budgets').update(payload).eq('id',budgetId).select();
+    if(error||!updated?.length){alert('保存に失敗しました');return;}
+  }else{
+    await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
+  }
   closeModal();await pageBudgets();
 }
 
@@ -730,7 +744,7 @@ async function pageEmployees(){
       <table class="data-table">
         <thead><tr><th>名前</th><th>役割</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
         <tbody>${(data||[]).map(e=>`<tr>
-          <td style="font-weight:500;">${e.name}</td>
+          <td style="font-weight:500;">${escapeHtml(e.name)}</td>
           <td><span class="badge ${e.role==='admin'?'badge-orange':'badge-blue'}">${e.role==='admin'?'管理者':'作業員'}</span></td>
           <td style="font-family:'DM Mono',monospace;color:var(--text3);">****</td>
           <td><span class="badge ${e.is_active?'badge-green':'badge-red'}">${e.is_active?'有効':'無効'}</span></td>
@@ -803,7 +817,7 @@ async function pageAdmins(){
       <table class="data-table">
         <thead><tr><th>名前</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
         <tbody>${(data||[]).map(a=>`<tr>
-          <td style="font-weight:500;">${a.name}</td>
+          <td style="font-weight:500;">${escapeHtml(a.name)}</td>
           <td style="font-family:'DM Mono',monospace;color:var(--text3);">****</td>
           <td><span class="badge ${a.is_active?'badge-green':'badge-red'}">${a.is_active?'有効':'無効'}</span></td>
           <td><button class="btn btn-secondary btn-sm" onclick="openAdminModal('${a.id}')">編集</button></td>

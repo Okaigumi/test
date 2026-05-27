@@ -250,6 +250,7 @@ let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdm
 
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function fmt(n){return '¥'+(n||0).toLocaleString();}
+function escapeHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 // ===== AUTH =====
 async function init(){
@@ -345,13 +346,13 @@ async function pageSites(){
         <thead><tr><th>現場名</th><th>住所・工事場所</th><th>工期</th><th>配属人数</th><th>操作</th></tr></thead>
         <tbody>${_sites.map(s=>`
           <tr>
-            <td><div style="font-weight:600;">${s.name}</div></td>
-            <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${s.location||'未設定'}</div></td>
+            <td><div style="font-weight:600;">${escapeHtml(s.name)}</div></td>
+            <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${escapeHtml(s.location||'未設定')}</div></td>
             <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
             <td><span class="badge badge-blue">${s.site_assignments?.length||0}名</span></td>
             <td>
               <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
-              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}','${s.name}')">削除</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}')">削除</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -381,11 +382,11 @@ async function openSiteModal(siteId=null){
     <div class="form-grid" style="margin-bottom:16px;">
       <div class="form-group form-full">
         <label class="form-label">現場名 *</label>
-        <input class="form-input" id="f-name" value="${s?.name||''}" placeholder="例：〇〇ビル3F">
+        <input class="form-input" id="f-name" value="${escapeHtml(s?.name||'')}" placeholder="例：〇〇ビル3F">
       </div>
       <div class="form-group form-full">
         <label class="form-label">住所・工事場所</label>
-        <input class="form-input" id="f-location" value="${s?.location||''}" placeholder="例：静岡県浜松市中央区〇〇町1-2-3">
+        <input class="form-input" id="f-location" value="${escapeHtml(s?.location||'')}" placeholder="例：静岡県浜松市中央区〇〇町1-2-3">
       </div>
       <div class="form-group">
         <label class="form-label">工期 開始</label>
@@ -426,33 +427,36 @@ async function saveSite(){
   };
   let id=siteId;
   if(siteId){
-    const{error}=await sb.from('sites').update(payload).eq('id',siteId);
+    const{data:updated,error}=await sb.from('sites').update(payload).eq('id',siteId).select();
     if(error){alert('保存エラー：'+error.message);return;}
+    if(!updated||updated.length===0){alert('更新できませんでした。データベースの権限設定を確認してください。');return;}
   }else{
     const{data,error}=await sb.from('sites').insert(payload).select('id').single();
     if(error){alert('保存エラー：'+error.message);return;}
     id=data?.id;
   }
-  // 配属更新
+  // 配属更新（失敗しても現場情報の保存済みとして画面更新）
   if(id){
     const checks=document.querySelectorAll('#modalBody input[type=checkbox]');
-    await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
+    const{error:aErr}=await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
+    if(aErr)console.error('配属リセットエラー:',aErr.message);
     for(const c of checks){
       if(c.checked){
-        await sb.from('site_assignments').upsert(
+        const{error:uErr}=await sb.from('site_assignments').upsert(
           {site_id:id,employee_id:c.value,is_active:true},
           {onConflict:'site_id,employee_id'}
         );
+        if(uErr)console.error('配属upsertエラー:',uErr.message);
       }
     }
   }
-  // 先にデータ更新・画面再描画してからモーダルを閉じる
   closeModal();
   await pageSites();
 }
 
-async function deleteSite(id,name){
-  if(!confirm(`「${name}」を削除しますか？`))return;
+async function deleteSite(id){
+  const s=_sites.find(x=>x.id===id);
+  if(!confirm(`「${s?.name||id}」を削除しますか？`))return;
   await sb.from('sites').update({is_active:false}).eq('id',id);
   await pageSites();
   showPage('sites');
@@ -481,8 +485,8 @@ async function pageInvoices(){
           const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
           const site=_sites.find(s=>s.id===i.site_id);
           return `<tr>
-            <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.invoice_date}</td>
-            <td><div style="font-weight:500;">${i.vendor_name}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${i.description}</div>`:''}</td>
+            <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(i.invoice_date)}</td>
+            <td><div style="font-weight:500;">${escapeHtml(i.vendor_name)}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${escapeHtml(i.description)}</div>`:''}</td>
             <td><span class="badge ${c.cls}">${c.label}</span></td>
             <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
             <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
@@ -568,7 +572,8 @@ async function saveInvoice(){
 
 async function deleteInvoice(id){
   if(!confirm('削除しますか？'))return;
-  await sb.from('invoices').delete().eq('id',id);
+  const{error}=await sb.from('invoices').delete().eq('id',id);
+  if(error){alert('削除に失敗しました：'+error.message);return;}
   await pageInvoices();
 }
 

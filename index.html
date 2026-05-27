@@ -819,16 +819,19 @@ let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSite
 // ===== 時間計算 =====
 function toMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
 function fmtMins(m){if(m<=0)return '0h';const h=Math.floor(m/60),min=m%60;return min>0?`${h}h${min}m`:`${h}h`;}
+function escapeHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 function calcTime(startStr,endStr){
-  const s=toMins(startStr), e=toMins(endStr);
-  if(e<=s)return{total:0,normal:0,overtime:0};
+  const s=toMins(startStr);
+  let e=toMins(endStr);
+  if(e<=s) e+=24*60; // 日跨ぎシフト対応
   const total=e-s;
   // 通常時間：NORMAL_START〜NORMAL_ENDに重なる分 - 休憩
   const overlapStart=Math.max(s,NORMAL_START);
   const overlapEnd=Math.min(e,NORMAL_END);
   const overlap=Math.max(0,overlapEnd-overlapStart);
-  const normalWork=Math.max(0,overlap-BREAK_MINS);
+  const breakDeduct=overlap>BREAK_MINS?BREAK_MINS:0; // 短時間シフトは休憩控除なし
+  const normalWork=Math.max(0,overlap-breakDeduct);
   const overtime=total-overlap; // 通常時間帯外の分
   return{total,normal:normalWork,overtime};
 }
@@ -927,7 +930,7 @@ async function loadMaterials(){
 async function loadNotice(){
   const{data}=await sb.from('notices').select('*').eq('is_active',true).order('created_at',{ascending:false});
   if(data&&data.length>0){
-    document.getElementById('noticeText').innerHTML=data.map(n=>`<div style="padding:4px 0;border-bottom:1px solid #e8d88a;">${n.content}</div>`).join('').replace(/border-bottom:[^"]+(?="[^>]*><\/div>$)/,'');
+    document.getElementById('noticeText').innerHTML=data.map(n=>`<div style="padding:4px 0;border-bottom:1px solid #e8d88a;">${escapeHtml(n.content)}</div>`).join('').replace(/border-bottom:[^"]+(?="[^>]*><\/div>$)/,'');
     document.getElementById('noticeCard').style.display='block';
   }
 }
@@ -1378,7 +1381,8 @@ async function submitReport(){
   if(state.photos.length>0&&reportId){
     btn.innerHTML='<span>⏳</span> 写真アップロード中...';
     const urls=await uploadPhotos(reportId);
-    await sb.from('reports').update({photo_urls:urls,photo_count:urls.length}).eq('id',reportId);
+    const{error:photoErr}=await sb.from('reports').update({photo_urls:urls,photo_count:urls.length}).eq('id',reportId);
+    if(photoErr) alert('写真の保存に失敗しました。日報は提出済みです。再アップロードをご確認ください。');
   }
 
   btn.disabled=false;
@@ -1453,19 +1457,19 @@ function renderHistory(data){
 function showDetail(i){
   const r=window._historyData[i];
   const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
-  const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);const q=(r.material_quantities||{})[id]||1;return `${m?.name}×${q}`;}).join('、');
+  const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);if(!m)return null;const q=(r.material_quantities||{})[id]||1;return `${m.name}×${q}`;}).filter(Boolean).join('、');
   const wtLabel=r.work_type==='night'?'🌙 夜間緊急':r.work_type==='overtime'?'⏰ 残業':'🌞 通常';
   const photoHtml=(r.photo_urls&&r.photo_urls.length>0)
     ?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;">${r.photo_urls.map((url,j)=>`<a href="${url}" target="_blank" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);"><img src="${url}" alt="写真${j+1}" style="width:100%;display:block;"></a>`).join('')}</div>`
     :'なし';
   const subInfo=(r.subcontractor_ids||[]).map(subId=>{
-    const subName=state.subcontractors.find(s=>s.id===subId)?.name||'';
+    const subName=escapeHtml(state.subcontractors.find(s=>s.id===subId)?.name||'');
     const entries=(r.sub_machines||{})[subId]||[];
     if(!entries.length) return subName;
     const details=entries.map(e=>{
-      const mName=machinesData.find(m=>m.id===e.machine_id)?.name||'?';
-      const fromName=e.from_site?(e.from_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.from_site)?.name||'?'):'?';
-      const toName=e.to_site?(e.to_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.to_site)?.name||'?'):'?';
+      const mName=escapeHtml(machinesData.find(m=>m.id===e.machine_id)?.name||'?');
+      const fromName=escapeHtml(e.from_site?(e.from_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.from_site)?.name||'?'):'?');
+      const toName=escapeHtml(e.to_site?(e.to_site==='yard'?'ヤード':state.sites.find(s=>s.id===e.to_site)?.name||'?'):'?');
       return `🚜${mName} ${fromName}→${toName}`;
     }).join('<br>');
     return `${subName}<br>${details}`;
@@ -1473,15 +1477,15 @@ function showDetail(i){
   document.getElementById('detailTitle').textContent=`📋 ${r.report_date} の日報`;
   document.getElementById('detailBody').innerHTML=`
     <div class="modal-row"><span class="modal-key">工事種別</span><span class="modal-val">${wtLabel}</span></div>
-    <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${siteNames||'なし'}</span></div>
-    <div class="modal-row"><span class="modal-key">外注</span><span class="modal-val">${matNames||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">現場</span><span class="modal-val">${escapeHtml(siteNames||'なし')}</span></div>
+    <div class="modal-row"><span class="modal-key">外注</span><span class="modal-val">${escapeHtml(matNames||'なし')}</span></div>
     <div class="modal-row"><span class="modal-key">🚛 重機回送</span><span class="modal-val">${subInfo}</span></div>
-    <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${r.start_time}〜${r.end_time}</span></div>
+    <div class="modal-row"><span class="modal-key">作業時間</span><span class="modal-val">${escapeHtml(r.start_time||'')}〜${escapeHtml(r.end_time||'')}</span></div>
     <div class="modal-row"><span class="modal-key">通常時間</span><span class="modal-val" style="color:var(--success)">${fmtMins(r.normal_mins||0)}</span></div>
     <div class="modal-row"><span class="modal-key">残業時間</span><span class="modal-val" style="color:var(--warn)">${fmtMins(r.overtime_mins||0)}</span></div>
-    <div class="modal-row"><span class="modal-key">🚚 大型ダンプ</span><span class="modal-val">${r.dump_count||0}台${r.dump_company?' ('+r.dump_company+')':''}</span></div>
+    <div class="modal-row"><span class="modal-key">🚚 大型ダンプ</span><span class="modal-val">${r.dump_count||0}台${r.dump_company?' ('+escapeHtml(r.dump_company)+')':''}</span></div>
     <div class="modal-row"><span class="modal-key">🦺 警備員</span><span class="modal-val">${r.guard_count||0}人</span></div>
-    <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${r.memo||'なし'}</span></div>
+    <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${escapeHtml(r.memo||'なし')}</span></div>
     <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
     <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>
   `;

@@ -457,6 +457,7 @@ let gCurrentUser=null;
 let gPin='';
 
 function fmt(n){return n>0?'¥'+Math.round(n).toLocaleString():'¥0';}
+function escapeHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 // ===== LOGIN =====
 async function init(){
@@ -687,10 +688,10 @@ async function loadInvoices(){
       return `<div class="inv-row">
         <div class="inv-date">${inv.invoice_date}</div>
         <div class="inv-info">
-          <div class="inv-vendor">${inv.vendor_name} <span class="inv-cat-badge" style="background:${info.bg};color:${info.color};">${info.label}</span></div>
-          ${siteName?`<div class="inv-site-tag">🏗️ ${siteName}</div>`:''}
-          ${inv.description?`<div class="inv-desc">${inv.description}</div>`:''}
-          ${inv.memo?`<div class="inv-desc">📝 ${inv.memo}</div>`:''}
+          <div class="inv-vendor">${escapeHtml(inv.vendor_name)} <span class="inv-cat-badge" style="background:${info.bg};color:${info.color};">${info.label}</span></div>
+          ${siteName?`<div class="inv-site-tag">🏗️ ${escapeHtml(siteName)}</div>`:''}
+          ${inv.description?`<div class="inv-desc">${escapeHtml(inv.description)}</div>`:''}
+          ${inv.memo?`<div class="inv-desc">📝 ${escapeHtml(inv.memo)}</div>`:''}
         </div>
         <div>
           <div class="inv-amount" style="color:${info.color};">${fmt(inv.amount)}</div>
@@ -705,7 +706,8 @@ async function loadInvoices(){
 
 async function deleteInvoice(id){
   if(!confirm('この請求書を削除しますか？'))return;
-  await sb.from('invoices').delete().eq('id',id);
+  const{error}=await sb.from('invoices').delete().eq('id',id);
+  if(error){alert('削除に失敗しました：'+error.message);return;}
   await loadInvoices();
 }
 
@@ -838,13 +840,14 @@ async function loadData(){
       if(sub) subCost+=getSubPrice(sub.name);
     });
 
+    const numSites=(r.site_ids||[]).length||1;
     (r.site_ids||[]).forEach(sid=>{
       if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0,invSub:0,invMaterial:0,invMachine:0,invOther:0};
       siteMap[sid].reports.push(r);
-      if(nm>0){siteMap[sid].labor+=laborCost;siteMap[sid].laborDays++;}
-      siteMap[sid].sub+=subCost;
-      if(dumpTai>0){siteMap[sid].dump+=dumpCost;siteMap[sid].dumpTai+=dumpTai;siteMap[sid].dumpDays++;}
-      if(guardPpl>0){siteMap[sid].guard+=guardCost;siteMap[sid].guardPpl+=guardPpl;siteMap[sid].guardDays++;}
+      if(nm>0){siteMap[sid].labor+=laborCost/numSites;siteMap[sid].laborDays+=1/numSites;}
+      siteMap[sid].sub+=subCost/numSites;
+      if(dumpTai>0){siteMap[sid].dump+=dumpCost/numSites;siteMap[sid].dumpTai+=dumpTai/numSites;siteMap[sid].dumpDays+=1/numSites;}
+      if(guardPpl>0){siteMap[sid].guard+=guardCost/numSites;siteMap[sid].guardPpl+=guardPpl/numSites;siteMap[sid].guardDays+=1/numSites;}
     });
 
     if(nm>0){totalLabor+=laborCost;totalLaborDays++;}
@@ -912,7 +915,8 @@ async function loadData(){
 
     if(budgetMap[selectedSiteId]!==undefined){
       const siteBudget=budgetMap[selectedSiteId];
-      const siteCost=grandTotal;
+      const sd=siteMap[selectedSiteId]||{};
+      const siteCost=(sd.labor||0)+(sd.sub||0)+(sd.dump||0)+(sd.guard||0)+(sd.invSub||0)+(sd.invMaterial||0)+(sd.invMachine||0)+(sd.invOther||0);
       const siteDiff=siteBudget-siteCost;
       const over=siteDiff<0;
       const pct=Math.min(Math.round(siteCost/siteBudget*100),999);

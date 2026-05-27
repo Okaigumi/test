@@ -895,6 +895,7 @@ async function loadData(){
     const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
     const siteName=siteObj.name||'';
     const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
+    const location=siteObj.location?`📍 ${siteObj.location}`:'';
     const siteBudget=budgetMap[selectedSiteId];
     const siteCost=grandTotal;
     const siteDiff=siteBudget-siteCost;
@@ -903,7 +904,8 @@ async function loadData(){
     const barW=Math.min(pct,100);
     document.getElementById('siteBudgetHeroInner').innerHTML=`
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
-        <div style="font-size:17px;font-weight:700;margin-bottom:4px;">🏗️ ${siteName}</div>
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🏗️ ${siteName}</div>
+        ${location?`<div style="font-size:12px;color:var(--text2);margin-bottom:3px;">${location}</div>`:''}
         ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
       </div>
       <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
@@ -937,9 +939,11 @@ async function loadData(){
     const siteObj=sites.find(s=>s.id===selectedSiteId)||{};
     const siteName=siteObj.name||'';
     const period=(siteObj.start_date&&siteObj.end_date)?`📅 ${siteObj.start_date} 〜 ${siteObj.end_date}`:(siteObj.start_date?`📅 ${siteObj.start_date} 〜`:'');
+    const location=siteObj.location?`📍 ${siteObj.location}`:'';
     document.getElementById('siteBudgetHeroInner').innerHTML=`
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
-        <div style="font-size:17px;font-weight:700;margin-bottom:4px;">🏗️ ${siteName}</div>
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🏗️ ${siteName}</div>
+        ${location?`<div style="font-size:12px;color:var(--text2);margin-bottom:3px;">${location}</div>`:''}
         ${period?`<div style="font-size:12px;color:var(--text3);">${period}</div>`:''}
       </div>
       <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">

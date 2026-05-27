@@ -44,11 +44,19 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 .filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
 .filter-label{font-size:12px;color:var(--text3);font-weight:500;}
-.filter-select{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:14px;font-family:'Noto Sans JP',sans-serif;background:var(--surface2);color:var(--text);cursor:pointer;}
+.filter-select{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:14px;font-family:'Noto Sans JP',sans-serif;background:var(--surface2);color:var(--text);cursor:pointer;max-width:100%;width:auto;}
 .btn-filter{background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
 .month-nav{display:flex;align-items:center;gap:8px;}
 .month-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:16px;cursor:pointer;}
 .month-label{font-size:15px;font-weight:700;min-width:80px;text-align:center;}
+
+@media(max-width:480px){
+  .filter-bar{flex-direction:column;align-items:stretch;}
+  .filter-bar>div{width:100%;}
+  .filter-select{width:100%;}
+  .btn-filter{width:100%;}
+  .month-nav{justify-content:center;}
+}
 
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
 .sum-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}

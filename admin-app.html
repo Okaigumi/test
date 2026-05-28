@@ -878,7 +878,8 @@ async function saveBudget(){const budgetId=_editBudgetId;
     const{data:updated,error}=await sb.from('site_budgets').update(payload).eq('id',budgetId).select();
     if(error||!updated?.length){alert('保存に失敗しました');return;}
   }else{
-    await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
+    const{error}=await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
+    if(error){alert('保存に失敗しました：'+error.message);return;}
   }
   closeModal();await pageBudgets();
 }

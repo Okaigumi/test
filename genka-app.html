@@ -596,9 +596,10 @@ async function saveBudget(){
   const year=parseInt(document.getElementById('budgetYear').value);
   const memo=document.getElementById('budgetMemo').value||null;
 
-  await sb.from('site_budgets').upsert({
+  const{error}=await sb.from('site_budgets').upsert({
     site_id:budgetSiteId,year,month:null,budget:amount,memo,updated_at:new Date().toISOString(),is_active:true
   },{onConflict:'site_id,year,month'});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
 
   closeBudgetModal();
   await loadData();

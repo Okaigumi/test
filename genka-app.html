@@ -663,7 +663,7 @@ async function loadInvoices(){
   const last=new Date(y,currentMonth.getMonth()+1,0).getDate();
   const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
 
-  const{data}=await sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to).order('invoice_date',{ascending:false});
+  const{data}=await sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to).in('status',['confirmed','posted']).order('invoice_date',{ascending:false});
   const invs=data||[];
   document.getElementById('invCount').textContent=`${invs.length}件`;
 
@@ -800,8 +800,8 @@ async function loadData(){
   const{data:reports}=await q;
   const reps=reports||[];
 
-  // 請求書データも取得
-  let invQ=sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to);
+  // 請求書データも取得（confirmed/posted のみ原価に反映）
+  let invQ=sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to).in('status',['confirmed','posted']);
   if(siteId) invQ=invQ.eq('site_id',siteId);
   const{data:invoicesData}=await invQ;
   const invs=invoicesData||[];

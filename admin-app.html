@@ -700,7 +700,7 @@ async function deleteInvoice(id){
 }
 
 async function restoreInvoice(id){
-  if(!confirm('この請求書を取り消し済みから通常一覧に戻しますか？\n復元すると、原価管理にも再度反映されます。'))return;
+  if(!confirm('この請求書を取り消し済みから通常一覧に戻しますか？\n復元すると、確認済みの請求書として原価管理にも再度反映されます。\n※以前に最終反映済みだった場合でも、復元後は確認済みとして扱われます。'))return;
   const{error}=await sb.from('invoices').update({status:'confirmed'}).eq('id',id);
   if(error){alert('復元に失敗しました：'+error.message);return;}
   await pageInvoices();

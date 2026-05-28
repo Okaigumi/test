@@ -261,6 +261,7 @@ let _sites=[],_employees=[],_subcontractors=[],_machines=[],_unitRates={};
 let _companies=[];
 let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null,_editMachineId=null;
 let _invoiceTab='active';
+let _budgetTab='active';
 
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function fmt(n){return '¥'+(n||0).toLocaleString();}
@@ -773,32 +774,67 @@ async function saveUnitRate(cat,name,inputId,unit){
 }
 
 // ===== BUDGETS PAGE =====
-async function pageBudgets(){
+async function pageBudgets(tab){
+  if(tab) _budgetTab=tab;
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openBudgetModal()">＋ 予算を追加</button>`;
-  const year=new Date().getFullYear();
-  const{data}=await sb.from('site_budgets').select('*').eq('is_active',true).order('year',{ascending:false});
-  const budgets=data||[];
 
-  const html=`
-    <div class="card">
-      <div class="card-header"><div class="card-title">実行予算一覧</div></div>
-      <table class="data-table">
-        <thead><tr><th>現場</th><th>年度</th><th>年間予算</th><th>メモ</th><th>操作</th></tr></thead>
-        <tbody>${budgets.map(b=>{
-          const site=_sites.find(s=>s.id===b.site_id);
-          return `<tr>
-            <td style="font-weight:500;">${site?.name||'不明'}</td>
-            <td style="font-family:'DM Mono',monospace;">${b.year}年</td>
-            <td class="money" style="font-weight:600;color:var(--accent);">${fmt(b.budget)}</td>
-            <td style="font-size:12px;color:var(--text2);">${b.memo||'-'}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" onclick="openBudgetModal('${b.id}')">編集</button>
-              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteBudget('${b.id}')">削除</button>
-            </td>
-          </tr>`;}).join('')||'<tr><td colspan="5" class="empty">予算が登録されていません</td></tr>'}
-        </tbody>
-      </table>
+  const tabBar=`
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn ${_budgetTab==='active'?'btn-primary':'btn-secondary'}" onclick="pageBudgets('active')">通常一覧</button>
+      <button class="btn ${_budgetTab==='inactive'?'btn-primary':'btn-secondary'}" onclick="pageBudgets('inactive')">取り消し済み</button>
     </div>`;
+
+  let html='';
+
+  if(_budgetTab==='active'){
+    const{data}=await sb.from('site_budgets').select('*').eq('is_active',true).order('year',{ascending:false});
+    const budgets=data||[];
+    html=`
+      ${tabBar}
+      <div class="card">
+        <div class="card-header"><div class="card-title">実行予算一覧</div></div>
+        <table class="data-table">
+          <thead><tr><th>現場</th><th>年度</th><th>年間予算</th><th>メモ</th><th>操作</th></tr></thead>
+          <tbody>${budgets.map(b=>{
+            const site=_sites.find(s=>s.id===b.site_id);
+            return `<tr>
+              <td style="font-weight:500;">${site?.name||'不明'}</td>
+              <td style="font-family:'DM Mono',monospace;">${b.year}年</td>
+              <td class="money" style="font-weight:600;color:var(--accent);">${fmt(b.budget)}</td>
+              <td style="font-size:12px;color:var(--text2);">${b.memo||'-'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="openBudgetModal('${b.id}')">編集</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteBudget('${b.id}')">取り消し</button>
+              </td>
+            </tr>`;}).join('')||'<tr><td colspan="5" class="empty">予算が登録されていません</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+  }else{
+    const{data}=await sb.from('site_budgets').select('*').eq('is_active',false).order('year',{ascending:false});
+    const budgets=data||[];
+    html=`
+      ${tabBar}
+      <div class="card">
+        <div class="card-header"><div class="card-title">取り消し済み実行予算（${budgets.length}件）</div></div>
+        <table class="data-table">
+          <thead><tr><th>現場</th><th>年度</th><th>年間予算</th><th>メモ</th><th>操作</th></tr></thead>
+          <tbody>${budgets.map(b=>{
+            const site=_sites.find(s=>s.id===b.site_id);
+            return `<tr style="opacity:0.7;">
+              <td style="font-weight:500;">${site?.name||'不明'}</td>
+              <td style="font-family:'DM Mono',monospace;">${b.year}年</td>
+              <td class="money" style="font-weight:600;">${fmt(b.budget)}</td>
+              <td style="font-size:12px;color:var(--text2);">${b.memo||'-'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="restoreBudget('${b.id}')">復元</button>
+              </td>
+            </tr>`;}).join('')||'<tr><td colspan="5" class="empty">取り消し済みの予算はありません</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
   document.getElementById('pageContent').innerHTML=html;
 }
 
@@ -851,6 +887,22 @@ async function deleteBudget(id){
   if(!confirm('この実行予算を取り消しますか？'))return;
   const{error}=await sb.from('site_budgets').update({is_active:false}).eq('id',id);
   if(error){alert('取り消しに失敗しました：'+error.message);return;}
+  await pageBudgets();
+}
+
+async function restoreBudget(id){
+  const{data:b,error:fetchErr}=await sb.from('site_budgets').select('*').eq('id',id).single();
+  if(fetchErr||!b){alert('予算データの取得に失敗しました');return;}
+
+  let dupQ=sb.from('site_budgets').select('id').eq('site_id',b.site_id).eq('year',b.year).eq('is_active',true).neq('id',id);
+  if(b.month===null){dupQ=dupQ.is('month',null);}else{dupQ=dupQ.eq('month',b.month);}
+  const{data:dups,error:dupErr}=await dupQ.limit(1);
+  if(dupErr){alert('復元前チェックに失敗しました：'+dupErr.message);return;}
+  if(dups&&dups.length>0){alert('同じ現場・年度の有効な予算が既に存在します。先に現在の予算を取り消してください。');return;}
+
+  if(!confirm('この実行予算を取り消し済みから通常一覧に戻しますか？\n復元すると、原価管理の予算集計にも再度反映されます。'))return;
+  const{error}=await sb.from('site_budgets').update({is_active:true}).eq('id',id);
+  if(error){alert('復元に失敗しました：'+error.message);return;}
   await pageBudgets();
 }
 

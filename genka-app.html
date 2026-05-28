@@ -494,10 +494,11 @@ function updateGPinDots(){
 async function tryGLogin(){
   const empId=document.getElementById('loginName').value;
   if(!empId){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
-  const{data}=await sb.from('genka_admins').select('*').eq('id',empId).eq('pin',gPin).eq('is_active',true).single();
-  if(data){
-    gCurrentUser=data;
-    sessionStorage.setItem('genkaUser',JSON.stringify(data));
+  const{data:user,error}=await sb.rpc('verify_admin_pin',{admin_id_input:empId,pin_input:gPin}).maybeSingle();
+  if(error){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
+  if(user){
+    gCurrentUser=user;
+    sessionStorage.setItem('genkaUser',JSON.stringify(user));
     document.getElementById('loginError').style.display='none';
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('loadingScreen').style.display='flex';

@@ -354,7 +354,7 @@ async function pageSites(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openSiteModal()">＋ 現場を追加</button>`;
 
   // Supabaseから最新データを取得してキャッシュ更新
-  const{data}=await sb.from('sites').select('*,site_assignments(employee_id)').eq('is_active',true).order('name');
+  const{data}=await sb.from('sites').select('*,site_assignments(employee_id,is_active)').eq('is_active',true).order('name');
   _sites=(data||[]);
 
   const html=`
@@ -362,7 +362,7 @@ async function pageSites(){
       <div class="stat-card"><div class="stat-label">総現場数</div><div class="stat-val blue">${_sites.length}</div></div>
       <div class="stat-card"><div class="stat-label">工期設定済</div><div class="stat-val green">${_sites.filter(s=>s.start_date).length}</div></div>
       <div class="stat-card"><div class="stat-label">住所設定済</div><div class="stat-val orange">${_sites.filter(s=>s.location).length}</div></div>
-      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>s.site_assignments?.length>0).length}</div></div>
+      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>s.site_assignments?.filter(a=>a.is_active).length>0).length}</div></div>
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">現場一覧</div></div>
@@ -374,7 +374,7 @@ async function pageSites(){
             <td>${s.company_id?companyName(s.company_id):'<span style="color:var(--orange);">未設定</span>'}</td>
             <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${escapeHtml(s.location||'未設定')}</div></td>
             <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
-            <td><span class="badge badge-blue">${s.site_assignments?.length||0}名</span></td>
+            <td><span class="badge badge-blue">${s.site_assignments?.filter(a=>a.is_active).length||0}名</span></td>
             <td>
               <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
               <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}')">削除</button>

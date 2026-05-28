@@ -1614,7 +1614,7 @@ async function saveSitePeriod(){
 async function toggleAssign(siteId,empId,btn){
   const isOn=btn.classList.contains('on');
   if(isOn){
-    await sb.from('site_assignments').delete().eq('site_id',siteId).eq('employee_id',empId);
+    await sb.from('site_assignments').update({is_active:false}).eq('site_id',siteId).eq('employee_id',empId);
     btn.className='assign-toggle off';
   }else{
     await sb.from('site_assignments').upsert({site_id:siteId,employee_id:empId,is_active:true},{onConflict:'site_id,employee_id'});

@@ -260,6 +260,7 @@ let aPin_str='';
 let _sites=[],_employees=[],_subcontractors=[],_machines=[],_unitRates={};
 let _companies=[];
 let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null,_editMachineId=null;
+let _invoiceTab='active';
 
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function fmt(n){return '¥'+(n||0).toLocaleString();}
@@ -497,44 +498,85 @@ async function deleteSite(id){
 }
 
 // ===== INVOICES PAGE =====
-async function pageInvoices(){
+async function pageInvoices(tab){
+  if(tab) _invoiceTab=tab;
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openInvoiceModal()">＋ 請求書を追加</button>`;
-  const{data}=await sb.from('invoices').select('*').neq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
-  const invs=data||[];
   const catInfo={subcontract:{label:'外注費',cls:'badge-orange'},material:{label:'材料費',cls:'badge-purple'},machine_lease:{label:'重機リース',cls:'badge-blue'},other:{label:'その他',cls:'badge-green'}};
-  const totalAmt=invs.reduce((s,i)=>s+(Number(i.amount)||0),0);
 
-  const html=`
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">総件数</div><div class="stat-val blue">${invs.length}</div></div>
-      <div class="stat-card"><div class="stat-label">合計金額</div><div class="stat-val green" style="font-size:20px;">${fmt(totalAmt)}</div></div>
-      <div class="stat-card"><div class="stat-label">外注費</div><div class="stat-val orange" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='subcontract').reduce((s,i)=>s+i.amount,0))}</div></div>
-      <div class="stat-card"><div class="stat-label">材料費</div><div class="stat-val purple" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='material').reduce((s,i)=>s+i.amount,0))}</div></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><div class="card-title">請求書一覧</div></div>
-      <table class="data-table">
-        <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>会社</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
-        <tbody>${invs.map(i=>{
-          const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
-          const site=_sites.find(s=>s.id===i.site_id);
-          const invComp=i.site_id?(site?.company_id?companyName(site.company_id):'<span style="color:var(--orange);">未設定</span>'):'-';
-          return `<tr>
-            <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(i.invoice_date)}</td>
-            <td><div style="font-weight:500;">${escapeHtml(i.vendor_name)}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${escapeHtml(i.description)}</div>`:''}</td>
-            <td><span class="badge ${c.cls}">${c.label}</span></td>
-            <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
-            <td style="font-size:12px;color:var(--text2);">${invComp}</td>
-            <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
-            <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" onclick="openInvoiceModal('${i.id}')">編集</button>
-              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteInvoice('${i.id}')">取り消し</button>
-            </td>
-          </tr>`;}).join('')}
-        </tbody>
-      </table>
+  const tabBar=`
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn ${_invoiceTab==='active'?'btn-primary':'btn-secondary'}" onclick="pageInvoices('active')">通常一覧</button>
+      <button class="btn ${_invoiceTab==='rejected'?'btn-primary':'btn-secondary'}" onclick="pageInvoices('rejected')">取り消し済み</button>
     </div>`;
+
+  let html='';
+
+  if(_invoiceTab==='active'){
+    const{data}=await sb.from('invoices').select('*').neq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
+    const invs=data||[];
+    const totalAmt=invs.reduce((s,i)=>s+(Number(i.amount)||0),0);
+    html=`
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">総件数</div><div class="stat-val blue">${invs.length}</div></div>
+        <div class="stat-card"><div class="stat-label">合計金額</div><div class="stat-val green" style="font-size:20px;">${fmt(totalAmt)}</div></div>
+        <div class="stat-card"><div class="stat-label">外注費</div><div class="stat-val orange" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='subcontract').reduce((s,i)=>s+i.amount,0))}</div></div>
+        <div class="stat-card"><div class="stat-label">材料費</div><div class="stat-val purple" style="font-size:20px;">${fmt(invs.filter(i=>i.category==='material').reduce((s,i)=>s+i.amount,0))}</div></div>
+      </div>
+      ${tabBar}
+      <div class="card">
+        <div class="card-header"><div class="card-title">請求書一覧</div></div>
+        <table class="data-table">
+          <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>会社</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
+          <tbody>${invs.map(i=>{
+            const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
+            const site=_sites.find(s=>s.id===i.site_id);
+            const invComp=i.site_id?(site?.company_id?companyName(site.company_id):'<span style="color:var(--orange);">未設定</span>'):'-';
+            return `<tr>
+              <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(i.invoice_date)}</td>
+              <td><div style="font-weight:500;">${escapeHtml(i.vendor_name)}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${escapeHtml(i.description)}</div>`:''}</td>
+              <td><span class="badge ${c.cls}">${c.label}</span></td>
+              <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
+              <td style="font-size:12px;color:var(--text2);">${invComp}</td>
+              <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
+              <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="openInvoiceModal('${i.id}')">編集</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteInvoice('${i.id}')">取り消し</button>
+              </td>
+            </tr>`;}).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }else{
+    const{data}=await sb.from('invoices').select('*').eq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
+    const invs=data||[];
+    html=`
+      ${tabBar}
+      <div class="card">
+        <div class="card-header"><div class="card-title">取り消し済み請求書（${invs.length}件）</div></div>
+        <table class="data-table">
+          <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>会社</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
+          <tbody>${invs.map(i=>{
+            const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
+            const site=_sites.find(s=>s.id===i.site_id);
+            const invComp=i.site_id?(site?.company_id?companyName(site.company_id):'<span style="color:var(--orange);">未設定</span>'):'-';
+            return `<tr style="opacity:0.7;">
+              <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(i.invoice_date)}</td>
+              <td><div style="font-weight:500;">${escapeHtml(i.vendor_name)}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${escapeHtml(i.description)}</div>`:''}</td>
+              <td><span class="badge ${c.cls}">${c.label}</span></td>
+              <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
+              <td style="font-size:12px;color:var(--text2);">${invComp}</td>
+              <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
+              <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="restoreInvoice('${i.id}')">復元</button>
+              </td>
+            </tr>`;}).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
   document.getElementById('pageContent').innerHTML=html;
 }
 
@@ -653,6 +695,13 @@ async function deleteInvoice(id){
   if(!confirm('この請求書を取り消しますか？'))return;
   const{error}=await sb.from('invoices').update({status:'rejected'}).eq('id',id);
   if(error){alert('取り消しに失敗しました：'+error.message);return;}
+  await pageInvoices();
+}
+
+async function restoreInvoice(id){
+  if(!confirm('この請求書を取り消し済みから通常一覧に戻しますか？\n復元すると、原価管理にも再度反映されます。'))return;
+  const{error}=await sb.from('invoices').update({status:'confirmed'}).eq('id',id);
+  if(error){alert('復元に失敗しました：'+error.message);return;}
   await pageInvoices();
 }
 

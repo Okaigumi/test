@@ -379,7 +379,7 @@ async function pageSites(){
             <td><span class="badge badge-blue">${s.site_assignments?.filter(a=>a.is_active).length||0}名</span></td>
             <td>
               <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
-              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}')">削除</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}')">無効化</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -491,7 +491,7 @@ async function saveSite(){
 
 async function deleteSite(id){
   const s=_sites.find(x=>x.id===id);
-  if(!confirm(`「${s?.name||id}」を削除しますか？`))return;
+  if(!confirm(`「${s?.name||id}」を無効化しますか？\n無効化すると、通常の現場一覧には表示されなくなります。`))return;
   await sb.from('site_assignments').update({is_active:false}).eq('site_id',id);
   await sb.from('sites').update({is_active:false}).eq('id',id);
   await pageSites();

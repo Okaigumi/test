@@ -96,3 +96,59 @@ COMMENT ON COLUMN public.site_budgets.is_active
 - 既存データは `is_active = true`
 - `admin-app.html` / `genka-app.html` では `is_active = true` の予算のみ一覧・集計対象
 - 取り消し済み予算は `is_active = false` としてDBに残る
+
+---
+
+## 2026-05-28 RLS security hardening — DELETE policy removal
+
+### 背景
+
+アプリコードがすべて論理削除（`is_active = false` / `status = 'rejected'`）で実装されていることを確認した上で、`public` スキーマの物理 DELETE を許可する RLS ポリシーを削除した。
+
+### 実行したSQL
+
+```sql
+DROP POLICY IF EXISTS inv_delete ON public.invoices;
+DROP POLICY IF EXISTS sa_delete ON public.site_assignments;
+DROP POLICY IF EXISTS sb_delete ON public.site_budgets;
+DROP POLICY IF EXISTS ce_delete ON public.cost_entries;
+```
+
+### 削除したポリシー
+
+| テーブル | ポリシー名 |
+|---|---|
+| `public.invoices` | `inv_delete` |
+| `public.site_assignments` | `sa_delete` |
+| `public.site_budgets` | `sb_delete` |
+| `public.cost_entries` | `ce_delete` |
+
+### 確認SQL
+
+```sql
+SELECT
+  tablename,
+  policyname,
+  roles,
+  cmd,
+  qual,
+  with_check
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND cmd = 'DELETE'
+ORDER BY tablename, policyname;
+```
+
+### 確認結果
+
+```text
+Success. No rows returned
+```
+
+`public` スキーマの DELETE 許可 RLS ポリシーは **0件**。
+
+### 補足
+
+- `cost_entries` はアプリコード上で未使用であることをリポジトリ全検索で確認済み
+- アプリ側の `.delete()` 呼び出しはリポジトリ全体で0件であることを確認済み
+- 物理 DELETE が必要になった場合は、Edge Function 経由で実装する方針（`docs/rls-security-plan.md` §8-1 参照）

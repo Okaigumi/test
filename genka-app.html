@@ -577,7 +577,8 @@ async function openBudgetModal(siteId,siteName){
   document.getElementById('budgetMemo').value='';
 
   // 既存の年間予算を読み込む
-  const{data}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).eq('is_active',true).is('month',null).single();
+  const{data,error}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).eq('is_active',true).is('month',null).maybeSingle();
+  if(error){alert('予算データの取得に失敗しました：'+error.message);return;}
   if(data){
     document.getElementById('budgetAmount').value=data.budget;
     document.getElementById('budgetMemo').value=data.memo||'';

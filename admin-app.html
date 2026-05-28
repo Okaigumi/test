@@ -72,15 +72,18 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .money{font-family:'DM Mono',monospace;}
 
 /* ===== FORM ===== */
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-width:0;}
 .form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-grid>*{min-width:0;}
+.invoice-form-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+#fi-company-display{max-width:100%;overflow:hidden;box-sizing:border-box;word-break:break-word;}
 .form-full{grid-column:1/-1;}
-.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group{display:flex;flex-direction:column;gap:6px;min-width:0;}
 .form-label{font-size:12px;font-weight:500;color:var(--text2);}
-.form-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:'Noto Sans JP',monospace;color:var(--text);transition:border-color .15s;}
+.form-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:'Noto Sans JP',monospace;color:var(--text);transition:border-color .15s;width:100%;max-width:100%;min-width:0;box-sizing:border-box;}
 .form-input:focus{outline:none;border-color:var(--accent);}
 .form-input::placeholder{color:var(--text3);}
-select.form-input{cursor:pointer;}
+select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
 
 /* ===== BUTTONS ===== */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;font-family:'Noto Sans JP',sans-serif;cursor:pointer;border:none;transition:all .15s;}
@@ -105,12 +108,12 @@ select.form-input{cursor:pointer;}
 /* ===== MODAL ===== */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-width:90vw;max-height:85vh;overflow-y:auto;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:min(720px,92vw);max-height:85vh;overflow-y:auto;overflow-x:hidden;box-sizing:border-box;}
 .modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .modal-title{font-size:15px;font-weight:700;}
 .modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
-.modal-body{padding:24px;}
-.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+.modal-body{padding:24px;overflow-x:hidden;}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
 
 /* ===== TABS ===== */
 .page-tabs{display:flex;gap:4px;background:var(--surface2);border-radius:var(--radius-sm);padding:4px;margin-bottom:24px;width:fit-content;}
@@ -145,6 +148,14 @@ select.form-input{cursor:pointer;}
 .pin-key{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;font-size:18px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;color:var(--text);transition:all .1s;}
 .pin-key:hover{background:var(--surface3);border-color:var(--accent);}
 .pin-key:active{transform:scale(.95);}
+
+@media(max-width:560px){
+  .form-grid,.form-grid.cols3{grid-template-columns:1fr;}
+  .form-full{grid-column:1;}
+  .modal-body{padding:16px;}
+  .modal-header{padding:16px;}
+  .modal-footer{padding:12px 16px;}
+}
 </style>
 </head>
 <body>
@@ -534,7 +545,7 @@ async function openInvoiceModal(invId=null){
   const cats=[['subcontract','🧱 外注費'],['material','📦 材料費'],['machine_lease','🚜 重機リース'],['other','📋 その他']];
   _editInvId=inv?.id||null;
   const body=`
-    <div class="form-grid">
+    <div class="form-grid invoice-form-grid">
       <div class="form-group">
         <label class="form-label">請求日 *</label>
         <input type="date" class="form-input" id="fi-date" value="${inv?.invoice_date||localDate()}">

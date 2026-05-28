@@ -199,6 +199,7 @@ select.form-input{cursor:pointer;}
     <nav class="sidebar-nav">
       <div class="nav-section">現場管理</div>
       <button class="nav-item active" onclick="showPage('sites')" id="nav-sites"><span class="nav-icon">🏗️</span>現場一覧</button>
+      <button class="nav-item" onclick="showPage('machines')" id="nav-machines"><span class="nav-icon">🚜</span>重機管理</button>
       <div class="nav-section">財務</div>
       <button class="nav-item" onclick="showPage('invoices')" id="nav-invoices"><span class="nav-icon">📄</span>請求書</button>
       <button class="nav-item" onclick="showPage('rates')" id="nav-rates"><span class="nav-icon">💴</span>単価設定</button>
@@ -246,11 +247,21 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 let currentUser=null;
 let aPin_str='';
 let _sites=[],_employees=[],_subcontractors=[],_machines=[],_unitRates={};
-let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null;
+let _companies=[];
+let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null,_editMachineId=null;
 
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function fmt(n){return '¥'+(n||0).toLocaleString();}
 function escapeHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function companyOptions(selectedId){
+  const blank='<option value="">未設定</option>';
+  return blank+_companies.map(c=>`<option value="${c.id}"${c.id===selectedId?' selected':''}>${escapeHtml(c.name)}</option>`).join('');
+}
+function companyName(id){
+  if(!id)return '未設定';
+  const c=_companies.find(c=>c.id===id);
+  return c?escapeHtml(c.name):'未設定';
+}
 
 // ===== AUTH =====
 async function init(){
@@ -284,17 +295,19 @@ async function tryLogin(){
 function aLogout(){sessionStorage.removeItem('adminUser');location.reload();}
 
 async function startApp(){
-  const[sRes,eRes,subRes,mRes,urRes]=await Promise.all([
+  const[sRes,eRes,subRes,mRes,urRes,cRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true).order('name'),
     sb.from('employees').select('*').eq('is_active',true).order('name'),
     sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
     sb.from('machines').select('*').eq('is_active',true).order('name'),
-    sb.from('unit_rates').select('*')
+    sb.from('unit_rates').select('*'),
+    sb.from('companies').select('*').eq('is_active',true).order('name')
   ]);
   _sites=sRes.data||[];
   _employees=eRes.data||[];
   _subcontractors=subRes.data||[];
   _machines=mRes.data||[];
+  _companies=cRes.data||[];
   (urRes.data||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
 
   document.getElementById('sidebarAvatar').textContent=currentUser.name.slice(0,1);
@@ -308,11 +321,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者'};
+  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins};
+  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines};
   if(pages[name]) await pages[name]();
 }
 
@@ -343,10 +356,11 @@ async function pageSites(){
     <div class="card">
       <div class="card-header"><div class="card-title">現場一覧</div></div>
       <table class="data-table">
-        <thead><tr><th>現場名</th><th>住所・工事場所</th><th>工期</th><th>配属人数</th><th>操作</th></tr></thead>
+        <thead><tr><th>現場名</th><th>会社</th><th>住所・工事場所</th><th>工期</th><th>配属人数</th><th>操作</th></tr></thead>
         <tbody>${_sites.map(s=>`
           <tr>
             <td><div style="font-weight:600;">${escapeHtml(s.name)}</div></td>
+            <td>${s.company_id?companyName(s.company_id):'<span style="color:var(--orange);">未設定</span>'}</td>
             <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${escapeHtml(s.location||'未設定')}</div></td>
             <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
             <td><span class="badge badge-blue">${s.site_assignments?.length||0}名</span></td>
@@ -396,6 +410,12 @@ async function openSiteModal(siteId=null){
         <label class="form-label">工期 終了</label>
         <input type="date" class="form-input" id="f-end" value="${s?.end_date||''}">
       </div>
+      <div class="form-group">
+        <label class="form-label">管理会社</label>
+        <select class="form-input" id="f-company">
+          ${companyOptions(s?.company_id)}
+        </select>
+      </div>
     </div>
     <div style="margin-bottom:12px;">
       <div class="form-label" style="margin-bottom:8px;">従業員の配属</div>
@@ -418,12 +438,14 @@ async function saveSite(){
   if(!nameEl){alert('エラー：フォーム要素が見つかりません');return;}
   const name=nameEl.value.trim();
   if(!name){alert('現場名を入力してください');return;}
+  const company_id=document.getElementById('f-company').value||null;
   const payload={
     name,
     location:locEl?.value.trim()||null,
     start_date:startEl?.value||null,
     end_date:endEl?.value||null,
-    is_active:true
+    is_active:true,
+    company_id
   };
   let id=siteId;
   if(siteId){
@@ -734,6 +756,136 @@ async function deleteBudget(id){
   await pageBudgets();
 }
 
+// ===== MACHINES PAGE =====
+async function pageMachines(){
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openMachineModal()">＋ 重機を追加</button>`;
+  const{data}=await sb.from('machines').select('*').order('name');
+  _machines=data||[];
+  const html=`
+    <div class="card">
+      <div class="card-header"><div class="card-title">重機一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>重機名</th><th>所有会社</th><th>所有区分</th><th>リース情報</th><th>ステータス</th><th>操作</th></tr></thead>
+        <tbody>${_machines.map(m=>{
+          const ownerBadge=m.ownership==='lease'
+            ?'<span class="badge badge-orange">リース</span>'
+            :'<span class="badge badge-green">自社</span>';
+          let leaseInfo='-';
+          if(m.ownership==='lease'){
+            const parts=[];
+            if(m.lease_company) parts.push(escapeHtml(m.lease_company));
+            if(m.lease_end){
+              const days=Math.ceil((new Date(m.lease_end)-new Date())/(1000*60*60*24));
+              const dateStr=m.lease_end+' 迄';
+              if(days<0) parts.push(`<span style="color:var(--red);">⚠️ ${dateStr}（超過）</span>`);
+              else if(days<=30) parts.push(`<span style="color:var(--orange);">⚠️ ${dateStr}（残${days}日）</span>`);
+              else parts.push(dateStr);
+            }
+            if(m.lease_monthly) parts.push('¥'+Number(m.lease_monthly).toLocaleString()+'/月');
+            leaseInfo=parts.join(' ｜ ')||'-';
+          }
+          return `<tr>
+            <td style="font-weight:500;">${escapeHtml(m.name)}</td>
+            <td>${m.company_id?companyName(m.company_id):'<span style="color:var(--orange);">未設定</span>'}</td>
+            <td>${ownerBadge}</td>
+            <td style="font-size:12px;color:var(--text2);">${leaseInfo}</td>
+            <td><span class="badge ${m.is_active?'badge-green':'badge-red'}">${m.is_active?'有効':'無効'}</span></td>
+            <td><button class="btn btn-secondary btn-sm" onclick="openMachineModal('${m.id}')">編集</button></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function openMachineModal(machineId=null){
+  let m=null;
+  if(machineId){const{data}=await sb.from('machines').select('*').eq('id',machineId).single();m=data;}
+  _editMachineId=m?.id||null;
+  const isLease=(m?.ownership==='lease');
+  const body=`
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">重機名 *</label>
+        <input class="form-input" id="fm-name" value="${escapeHtml(m?.name||'')}" placeholder="例：バックホウ0.45">
+      </div>
+      <div class="form-group">
+        <label class="form-label">所有会社</label>
+        <select class="form-input" id="fm-company">
+          ${companyOptions(m?.company_id)}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">所有区分</label>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button type="button" id="fm-own-owned" class="btn ${!isLease?'btn-primary':'btn-secondary'}" onclick="toggleMachineOwnership('owned')">自社</button>
+          <button type="button" id="fm-own-lease" class="btn ${isLease?'btn-primary':'btn-secondary'}" onclick="toggleMachineOwnership('lease')">リース</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ステータス</label>
+        <select class="form-input" id="fm-active">
+          <option value="true" ${m?.is_active!==false?'selected':''}>有効</option>
+          <option value="false" ${m?.is_active===false?'selected':''}>無効</option>
+        </select>
+      </div>
+      <div id="fm-lease-fields" class="form-group form-full" style="display:${isLease?'block':'none'};">
+        <div class="form-grid" style="margin:0;">
+          <div class="form-group">
+            <label class="form-label">リース会社</label>
+            <input class="form-input" id="fm-lease-company" value="${escapeHtml(m?.lease_company||'')}" placeholder="例：○○リース">
+          </div>
+          <div class="form-group">
+            <label class="form-label">月額リース料</label>
+            <input type="number" class="form-input" id="fm-lease-monthly" value="${m?.lease_monthly||''}" placeholder="例：120000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">リース開始日</label>
+            <input type="date" class="form-input" id="fm-lease-start" value="${m?.lease_start||''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">リース終了日</label>
+            <input type="date" class="form-input" id="fm-lease-end" value="${m?.lease_end||''}">
+          </div>
+        </div>
+      </div>
+    </div>`;
+  openModal(m?`🚜 ${m.name} を編集`:'🚜 重機を追加',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveMachine()">保存</button>`);
+}
+
+function toggleMachineOwnership(type){
+  const isLease=(type==='lease');
+  document.getElementById('fm-own-owned').className='btn '+(isLease?'btn-secondary':'btn-primary');
+  document.getElementById('fm-own-lease').className='btn '+(isLease?'btn-primary':'btn-secondary');
+  document.getElementById('fm-lease-fields').style.display=isLease?'block':'none';
+}
+
+async function saveMachine(){
+  const machineId=_editMachineId;
+  const name=document.getElementById('fm-name').value.trim();
+  if(!name){alert('重機名を入力してください');return;}
+  const company_id=document.getElementById('fm-company').value||null;
+  const is_active=document.getElementById('fm-active').value==='true';
+  const isLease=document.getElementById('fm-own-lease').classList.contains('btn-primary');
+  const ownership=isLease?'lease':'owned';
+  const payload={
+    name,
+    company_id,
+    is_active,
+    ownership,
+    lease_company:isLease?document.getElementById('fm-lease-company').value||null:null,
+    lease_start:isLease?document.getElementById('fm-lease-start').value||null:null,
+    lease_end:isLease?document.getElementById('fm-lease-end').value||null:null,
+    lease_monthly:isLease?parseInt(document.getElementById('fm-lease-monthly').value)||null:null
+  };
+  if(machineId) await sb.from('machines').update(payload).eq('id',machineId);
+  else await sb.from('machines').insert(payload);
+  closeModal();await pageMachines();
+}
+
 // ===== EMPLOYEES PAGE =====
 async function pageEmployees(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openEmployeeModal()">＋ 従業員を追加</button>`;
@@ -742,9 +894,10 @@ async function pageEmployees(){
     <div class="card">
       <div class="card-header"><div class="card-title">従業員一覧</div></div>
       <table class="data-table">
-        <thead><tr><th>名前</th><th>役割</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
+        <thead><tr><th>名前</th><th>会社</th><th>役割</th><th>PIN</th><th>ステータス</th><th>操作</th></tr></thead>
         <tbody>${(data||[]).map(e=>`<tr>
           <td style="font-weight:500;">${escapeHtml(e.name)}</td>
+          <td>${e.company_id?companyName(e.company_id):'<span style="color:var(--orange);">未設定</span>'}</td>
           <td><span class="badge ${e.role==='admin'?'badge-orange':'badge-blue'}">${e.role==='admin'?'管理者':'作業員'}</span></td>
           <td style="font-family:'DM Mono',monospace;color:var(--text3);">****</td>
           <td><span class="badge ${e.is_active?'badge-green':'badge-red'}">${e.is_active?'有効':'無効'}</span></td>
@@ -780,6 +933,12 @@ async function openEmployeeModal(empId=null){
         <input type="password" class="form-input" id="fe-pin" maxlength="4" placeholder="****">
       </div>
       <div class="form-group">
+        <label class="form-label">所属会社</label>
+        <select class="form-input" id="fe-company">
+          ${companyOptions(e?.company_id)}
+        </select>
+      </div>
+      <div class="form-group">
         <label class="form-label">ステータス</label>
         <select class="form-input" id="fe-active">
           <option value="true" ${e?.is_active!==false?'selected':''}>有効</option>
@@ -800,7 +959,8 @@ async function saveEmployee(){const empId=_editEmpId;
   if(!name){alert('名前を入力してください');return;}
   if(!empId&&!pin){alert('新規登録にはPINが必要です');return;}
   if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
-  const payload={name,role,is_active};
+  const company_id=document.getElementById('fe-company').value||null;
+  const payload={name,role,is_active,company_id};
   if(pin) payload.pin=pin;
   if(empId) await sb.from('employees').update(payload).eq('id',empId);
   else await sb.from('employees').insert({...payload,pin});

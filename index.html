@@ -1548,7 +1548,7 @@ function renderMaster(){
     return `<div class="site-master-card" onclick="openSiteSetting('${s.id}')">
       <div class="site-master-header">
         <span class="master-item-name">🏗️ ${s.name} ${daysTag}</span>
-        <button class="master-delete" onclick="event.stopPropagation();deleteSite('${s.id}')">🗑️</button>
+        <button class="master-delete" onclick="event.stopPropagation();deleteSite('${s.id}')">無効化</button>
       </div>
       ${period?`<div class="site-period">${period}</div>`:''}
       ${memberStr?`<div class="site-members">${memberStr}</div>`:''}
@@ -1556,7 +1556,7 @@ function renderMaster(){
   }).join('')||'<div class="empty-msg">現場が登録されていません</div>';
 
   document.getElementById('masterMaterialList').innerHTML=state.materials.map(m=>
-    `<div class="master-item"><span class="master-item-name">🧱 ${m.name}</span><button class="master-delete" onclick="deleteMaterial('${m.id}')">🗑️</button></div>`
+    `<div class="master-item"><span class="master-item-name">🧱 ${m.name}</span><button class="master-delete" onclick="deleteMaterial('${m.id}')">無効化</button></div>`
   ).join('');
 
   // 重機マスタ
@@ -1568,7 +1568,7 @@ function renderMaster(){
     return `<div class="site-master-card" onclick="openMachineSetting('${m.id}')">
       <div class="site-master-header">
         <span class="master-item-name">🚜 ${m.name} ${badge}</span>
-        <button class="master-delete" onclick="event.stopPropagation();deleteMachine('${m.id}')">🗑️</button>
+        <button class="master-delete" onclick="event.stopPropagation();deleteMachine('${m.id}')">無効化</button>
       </div>
       ${leaseInfo}
     </div>`;
@@ -1625,9 +1625,9 @@ async function toggleAssign(siteId,empId,btn){
 }
 
 async function addSite(){const v=document.getElementById('newSiteInput').value.trim();if(!v)return;await sb.from('sites').insert({name:v});document.getElementById('newSiteInput').value='';await loadSites();}
-async function deleteSite(id){if(!confirm('削除しますか？'))return;await sb.from('sites').update({is_active:false}).eq('id',id);await loadSites();}
+async function deleteSite(id){const s=state.sites.find(x=>x.id===id);if(!confirm(`「${s?.name||id}」を無効化しますか？\n無効化すると、通常の現場一覧には表示されなくなります。`))return;await sb.from('sites').update({is_active:false}).eq('id',id);await loadSites();}
 async function addMaterial(){const v=document.getElementById('newMaterialInput').value.trim();if(!v)return;await sb.from('materials').insert({name:v});document.getElementById('newMaterialInput').value='';await loadMaterials();}
-async function deleteMaterial(id){if(!confirm('削除しますか？'))return;await sb.from('materials').update({is_active:false}).eq('id',id);await loadMaterials();}
+async function deleteMaterial(id){const m=state.materials.find(x=>x.id===id);if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の外注マスタには表示されなくなります。`))return;await sb.from('materials').update({is_active:false}).eq('id',id);await loadMaterials();}
 
 // 重機マスタ管理
 async function addMachine(){
@@ -1638,7 +1638,8 @@ async function addMachine(){
   await loadMachineLocations();renderMaster();
 }
 async function deleteMachine(id){
-  if(!confirm('この重機を削除しますか？'))return;
+  const m=machinesData.find(x=>x.id===id);
+  if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の重機一覧には表示されなくなります。`))return;
   await sb.from('machines').update({is_active:false}).eq('id',id);
   await loadMachineLocations();renderMaster();
 }

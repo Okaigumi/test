@@ -295,9 +295,10 @@ function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('p'+i).clas
 async function tryLogin(){
   const id=document.getElementById('loginName').value;
   if(!id){document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();return;}
-  const{data}=await sb.from('genka_admins').select('*').eq('id',id).eq('pin',aPin_str).eq('is_active',true).single();
-  if(data){
-    currentUser=data;sessionStorage.setItem('adminUser',JSON.stringify(data));
+  const{data:user,error}=await sb.rpc('verify_admin_pin',{admin_id_input:id,pin_input:aPin_str}).maybeSingle();
+  if(error){document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();return;}
+  if(user){
+    currentUser=user;sessionStorage.setItem('adminUser',JSON.stringify(user));
     document.getElementById('loginError').style.display='none';
     document.getElementById('loginWrap').style.display='none';
     document.getElementById('loadingWrap').style.display='flex';

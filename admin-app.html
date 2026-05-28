@@ -499,7 +499,7 @@ async function deleteSite(id){
 // ===== INVOICES PAGE =====
 async function pageInvoices(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openInvoiceModal()">＋ 請求書を追加</button>`;
-  const{data}=await sb.from('invoices').select('*').order('invoice_date',{ascending:false}).limit(200);
+  const{data}=await sb.from('invoices').select('*').neq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
   const invs=data||[];
   const catInfo={subcontract:{label:'外注費',cls:'badge-orange'},material:{label:'材料費',cls:'badge-purple'},machine_lease:{label:'重機リース',cls:'badge-blue'},other:{label:'その他',cls:'badge-green'}};
   const totalAmt=invs.reduce((s,i)=>s+(Number(i.amount)||0),0);
@@ -529,7 +529,7 @@ async function pageInvoices(){
             <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
             <td>
               <button class="btn btn-secondary btn-sm" onclick="openInvoiceModal('${i.id}')">編集</button>
-              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteInvoice('${i.id}')">削除</button>
+              <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteInvoice('${i.id}')">取り消し</button>
             </td>
           </tr>`;}).join('')}
         </tbody>
@@ -650,9 +650,9 @@ async function saveInvoice(){
 }
 
 async function deleteInvoice(id){
-  if(!confirm('削除しますか？'))return;
-  const{error}=await sb.from('invoices').delete().eq('id',id);
-  if(error){alert('削除に失敗しました：'+error.message);return;}
+  if(!confirm('この請求書を取り消しますか？'))return;
+  const{error}=await sb.from('invoices').update({status:'rejected'}).eq('id',id);
+  if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await pageInvoices();
 }
 

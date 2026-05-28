@@ -698,16 +698,16 @@ async function loadInvoices(){
           <div style="font-size:10px;color:var(--text3);text-align:right;">${taxStr}</div>
         </div>
         <button class="inv-del" onclick="editInvoice('${inv.id}')" style="color:var(--accent);">✏️</button>
-        <button class="inv-del" onclick="deleteInvoice('${inv.id}')">🗑️</button>
+        <button class="inv-del" onclick="deleteInvoice('${inv.id}')">取り消し</button>
       </div>`;
     }).join('')}
   `;
 }
 
 async function deleteInvoice(id){
-  if(!confirm('この請求書を削除しますか？'))return;
-  const{error}=await sb.from('invoices').delete().eq('id',id);
-  if(error){alert('削除に失敗しました：'+error.message);return;}
+  if(!confirm('この請求書を取り消しますか？'))return;
+  const{error}=await sb.from('invoices').update({status:'rejected'}).eq('id',id);
+  if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await loadInvoices();
 }
 

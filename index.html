@@ -869,10 +869,11 @@ function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).clas
 async function tryLogin(){
   const empId=document.getElementById('nameSelect').value;
   if(!empId){document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();return;}
-  const{data}=await sb.from('employees').select('*').eq('id',empId).eq('pin',state.pin).eq('is_active',true).single();
-  if(data){
-    state.currentUser=data;
-    sessionStorage.setItem('currentUser',JSON.stringify(data));
+  const{data:user,error}=await sb.rpc('verify_employee_pin',{employee_id_input:empId,pin_input:state.pin}).maybeSingle();
+  if(error){document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();return;}
+  if(user){
+    state.currentUser=user;
+    sessionStorage.setItem('currentUser',JSON.stringify(user));
     document.getElementById('loginError').style.display='none';
     show('loginScreen',false);await startApp();
   }else{document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();}

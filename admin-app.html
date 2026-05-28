@@ -503,15 +503,17 @@ async function pageInvoices(){
     <div class="card">
       <div class="card-header"><div class="card-title">請求書一覧</div></div>
       <table class="data-table">
-        <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
+        <thead><tr><th>日付</th><th>業者名</th><th>カテゴリ</th><th>現場</th><th>会社</th><th>金額</th><th>税</th><th>操作</th></tr></thead>
         <tbody>${invs.map(i=>{
           const c=catInfo[i.category]||{label:'その他',cls:'badge-green'};
           const site=_sites.find(s=>s.id===i.site_id);
+          const invComp=i.site_id?(site?.company_id?companyName(site.company_id):'<span style="color:var(--orange);">未設定</span>'):'-';
           return `<tr>
             <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(i.invoice_date)}</td>
             <td><div style="font-weight:500;">${escapeHtml(i.vendor_name)}</div>${i.description?`<div style="font-size:11px;color:var(--text3);">${escapeHtml(i.description)}</div>`:''}</td>
             <td><span class="badge ${c.cls}">${c.label}</span></td>
             <td style="font-size:12px;color:var(--text2);">${site?.name||'指定なし'}</td>
+            <td style="font-size:12px;color:var(--text2);">${invComp}</td>
             <td class="money" style="font-weight:600;">${fmt(i.amount)}</td>
             <td style="font-size:11px;color:var(--text3);">${i.tax_included?'税込':'税抜'}</td>
             <td>
@@ -539,7 +541,11 @@ async function openInvoiceModal(invId=null){
       </div>
       <div class="form-group">
         <label class="form-label">現場</label>
-        <select class="form-input" id="fi-site"><option value="">指定なし</option>${siteOpts}</select>
+        <select class="form-input" id="fi-site" onchange="updateInvoiceCompanyDisplay()"><option value="">指定なし</option>${siteOpts}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">管理会社</label>
+        <div id="fi-company-display" style="padding:9px 12px;font-size:13px;"></div>
       </div>
       <div class="form-group form-full">
         <label class="form-label">業者名・取引先 *</label>
@@ -572,6 +578,23 @@ async function openInvoiceModal(invId=null){
   openModal(inv?'📄 請求書を編集':'📄 請求書を追加',body,`
     <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
     <button class="btn btn-primary" onclick="saveInvoice()">保存</button>`);
+  updateInvoiceCompanyDisplay();
+}
+
+function updateInvoiceCompanyDisplay(){
+  const siteId=document.getElementById('fi-site')?.value;
+  const el=document.getElementById('fi-company-display');
+  if(!el)return;
+  if(!siteId){
+    el.innerHTML='<span style="color:var(--text3);font-size:12px;">現場を選択すると会社が自動設定されます</span>';
+    return;
+  }
+  const site=_sites.find(s=>s.id===siteId);
+  if(site?.company_id){
+    el.innerHTML=`<span class="badge badge-blue">${companyName(site.company_id)}</span>`;
+  }else{
+    el.innerHTML='<span style="color:var(--orange);font-size:12px;">⚠️ 現場の管理会社が未設定です</span>';
+  }
 }
 
 async function saveInvoice(){
@@ -583,9 +606,13 @@ async function saveInvoice(){
   if(!date||!vendor||amountStr===''||isNaN(amount)){alert('日付・業者名・金額は必須です');return;}
   const btn=document.querySelector('#modalFooter .btn-primary');
   if(btn)btn.disabled=true;
+  const site_id=document.getElementById('fi-site').value||null;
+  const site=site_id?_sites.find(s=>s.id===site_id):null;
+  const company_id=site?.company_id||null;
   const payload={
     invoice_date:date,vendor_name:vendor,amount,
-    site_id:document.getElementById('fi-site').value||null,
+    site_id,
+    company_id,
     category:document.getElementById('fi-cat').value,
     tax_included:document.getElementById('fi-tax').value==='true',
     description:document.getElementById('fi-desc').value||null,
@@ -593,10 +620,20 @@ async function saveInvoice(){
   };
   if(invId){
     const{data:updated,error}=await sb.from('invoices').update(payload).eq('id',invId).select();
-    if(error||!updated?.length){if(btn)btn.disabled=false;alert('保存に失敗しました');return;}
+    if(error||!updated?.length){
+      if(btn)btn.disabled=false;
+      console.error('請求書更新エラー:',error?.message);
+      alert('保存に失敗しました：'+(error?.message||'不明なエラー'));
+      return;
+    }
   }else{
     const{error}=await sb.from('invoices').insert(payload);
-    if(error){if(btn)btn.disabled=false;alert('保存に失敗しました：'+error.message);return;}
+    if(error){
+      if(btn)btn.disabled=false;
+      console.error('請求書追加エラー:',error.message);
+      alert('保存に失敗しました：'+error.message);
+      return;
+    }
   }
   closeModal();await pageInvoices();
 }

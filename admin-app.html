@@ -776,7 +776,7 @@ async function saveUnitRate(cat,name,inputId,unit){
 async function pageBudgets(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openBudgetModal()">＋ 予算を追加</button>`;
   const year=new Date().getFullYear();
-  const{data}=await sb.from('site_budgets').select('*').order('year',{ascending:false});
+  const{data}=await sb.from('site_budgets').select('*').eq('is_active',true).order('year',{ascending:false});
   const budgets=data||[];
 
   const html=`
@@ -837,7 +837,7 @@ async function saveBudget(){const budgetId=_editBudgetId;
   const amountStr=document.getElementById('fb-amount').value;
   const amount=parseInt(amountStr);
   if(!site||!year||amountStr===''||isNaN(amount)){alert('現場・年度・金額は必須です');return;}
-  const payload={site_id:site,year,month:null,budget:amount,memo:document.getElementById('fb-memo').value||null,updated_at:new Date().toISOString()};
+  const payload={site_id:site,year,month:null,budget:amount,memo:document.getElementById('fb-memo').value||null,updated_at:new Date().toISOString(),is_active:true};
   if(budgetId){
     const{data:updated,error}=await sb.from('site_budgets').update(payload).eq('id',budgetId).select();
     if(error||!updated?.length){alert('保存に失敗しました');return;}
@@ -848,8 +848,9 @@ async function saveBudget(){const budgetId=_editBudgetId;
 }
 
 async function deleteBudget(id){
-  if(!confirm('削除しますか？'))return;
-  await sb.from('site_budgets').delete().eq('id',id);
+  if(!confirm('この実行予算を取り消しますか？'))return;
+  const{error}=await sb.from('site_budgets').update({is_active:false}).eq('id',id);
+  if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await pageBudgets();
 }
 

@@ -577,7 +577,7 @@ async function openBudgetModal(siteId,siteName){
   document.getElementById('budgetMemo').value='';
 
   // 既存の年間予算を読み込む
-  const{data}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).is('month',null).single();
+  const{data}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).eq('is_active',true).is('month',null).single();
   if(data){
     document.getElementById('budgetAmount').value=data.budget;
     document.getElementById('budgetMemo').value=data.memo||'';
@@ -597,7 +597,7 @@ async function saveBudget(){
   const memo=document.getElementById('budgetMemo').value||null;
 
   await sb.from('site_budgets').upsert({
-    site_id:budgetSiteId,year,month:null,budget:amount,memo,updated_at:new Date().toISOString()
+    site_id:budgetSiteId,year,month:null,budget:amount,memo,updated_at:new Date().toISOString(),is_active:true
   },{onConflict:'site_id,year,month'});
 
   closeBudgetModal();
@@ -807,7 +807,7 @@ async function loadData(){
   const invs=invoicesData||[];
 
   // 予算データ取得（年間のみ）
-  const{data:budgetsData}=await sb.from('site_budgets').select('*').eq('year',currentMonth.getFullYear());
+  const{data:budgetsData}=await sb.from('site_budgets').select('*').eq('year',currentMonth.getFullYear()).eq('is_active',true);
   const budgets=budgetsData||[];
   const budgetMap={};
   budgets.forEach(b=>{

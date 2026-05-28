@@ -516,7 +516,7 @@ function gLogout(){
 async function startApp(){
   const[sRes,eRes,erRes,mRes,subRes,urRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true),
-    sb.from('employees').select('*').eq('is_active',true),
+    sb.from('employees').select('id,name,role,is_active').eq('is_active',true),
     sb.from('employee_rates').select('*'),
     sb.from('machines').select('*').eq('is_active',true),
     sb.from('subcontractors').select('*').eq('is_active',true),

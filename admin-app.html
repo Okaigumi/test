@@ -310,7 +310,7 @@ function aLogout(){sessionStorage.removeItem('adminUser');location.reload();}
 async function startApp(){
   const[sRes,eRes,subRes,mRes,urRes,cRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true).order('name'),
-    sb.from('employees').select('*').eq('is_active',true).order('name'),
+    sb.from('employees').select('id,name,role,company_id,is_active').eq('is_active',true).order('name'),
     sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
     sb.from('machines').select('*').eq('is_active',true).order('name'),
     sb.from('unit_rates').select('*'),
@@ -1040,7 +1040,7 @@ async function saveMachine(){
 // ===== EMPLOYEES PAGE =====
 async function pageEmployees(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openEmployeeModal()">＋ 従業員を追加</button>`;
-  const{data}=await sb.from('employees').select('*').order('name');
+  const{data}=await sb.from('employees').select('id,name,role,company_id,is_active').order('name');
   const html=`
     <div class="card">
       <div class="card-header"><div class="card-title">従業員一覧</div></div>
@@ -1064,7 +1064,7 @@ async function pageEmployees(){
 
 async function openEmployeeModal(empId=null){
   let e=null;
-  if(empId){const{data}=await sb.from('employees').select('*').eq('id',empId).single();e=data;}
+  if(empId){const{data}=await sb.from('employees').select('id,name,role,company_id,is_active').eq('id',empId).single();e=data;}
   _editEmpId=e?.id||null;
   const body=`
     <div class="form-grid">
@@ -1121,7 +1121,7 @@ async function saveEmployee(){const empId=_editEmpId;
 // ===== ADMINS PAGE =====
 async function pageAdmins(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openAdminModal()">＋ 管理者を追加</button>`;
-  const{data}=await sb.from('genka_admins').select('*').order('name');
+  const{data}=await sb.from('genka_admins').select('id,name,is_active').order('name');
   const html=`
     <div class="card">
       <div class="card-header"><div class="card-title">管理者一覧</div></div>
@@ -1141,7 +1141,7 @@ async function pageAdmins(){
 
 async function openAdminModal(adminId=null){
   let a=null;
-  if(adminId){const{data}=await sb.from('genka_admins').select('*').eq('id',adminId).single();a=data;}
+  if(adminId){const{data}=await sb.from('genka_admins').select('id,name,is_active').eq('id',adminId).single();a=data;}
   _editAdminId=a?.id||null;
   const body=`
     <div class="form-grid">

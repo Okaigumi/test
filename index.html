@@ -1497,7 +1497,7 @@ function closeDetail(e){if(e.target===document.getElementById('detailModal'))doc
 // ===== ADMIN =====
 async function loadAdminData(){
   const today=localToday();
-  const{data:employees}=await sb.from('employees').select('*').eq('is_active',true).neq('role','admin');
+  const{data:employees}=await sb.from('employees').select('id,name,role,is_active').eq('is_active',true).neq('role','admin');
   const{data:todayReports}=await sb.from('report_summary').select('*').eq('report_date',today);
   const submitted=(todayReports||[]).map(r=>r.employee_id);
   document.getElementById('totalStaff').textContent=(employees||[]).length;
@@ -1521,7 +1521,7 @@ let allEmployees=[];
 let siteAssignments={};
 
 async function loadAllEmployees(){
-  const{data}=await sb.from('employees').select('*').eq('is_active',true).order('name');
+  const{data}=await sb.from('employees').select('id,name,role,is_active').eq('is_active',true).order('name');
   allEmployees=data||[];
 }
 

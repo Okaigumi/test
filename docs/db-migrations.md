@@ -249,3 +249,56 @@ GRANT EXECUTE ON FUNCTION public.verify_admin_pin(uuid, text) TO authenticated;
 - `7c4c0f1` Use RPC for employee PIN login
 - `c31954d` Use RPC for admin PIN login
 - `9a88234` Use RPC for genka admin PIN login
+
+---
+
+## 2026-05-28 RLS security hardening — restrict PIN column SELECT
+
+### 背景
+
+ログイン処理を `verify_employee_pin` / `verify_admin_pin` RPC に移行したため、フロントエンドが `employees.pin` / `genka_admins.pin` を直接SELECTする必要がなくなった。
+
+そのため、`anon` / `authenticated` から `pin` 列の直接SELECT権限を外し、必要な列だけを明示的にSELECT許可する構成に変更した。
+
+### 実行したSQL
+
+```sql
+BEGIN;
+
+REVOKE SELECT ON public.employees FROM anon, authenticated;
+REVOKE SELECT ON public.genka_admins FROM anon, authenticated;
+
+GRANT SELECT (
+  id,
+  name,
+  role,
+  is_active,
+  company_id,
+  can_genka,
+  can_admin
+) ON public.employees TO anon, authenticated;
+
+GRANT SELECT (
+  id,
+  name,
+  is_active
+) ON public.genka_admins TO anon, authenticated;
+
+COMMIT;
+```
+
+### 確認結果
+
+```text
+Success. No rows returned
+```
+
+`employees.pin` / `genka_admins.pin` に対する `anon` / `authenticated` の直接SELECT権限は0件。
+
+### 動作確認
+
+以下の本番画面でログイン確認済み。
+
+- `index.html`：従業員ログインOK
+- `admin-app.html`：管理者ログインOK
+- `genka-app.html`：管理者ログインOK

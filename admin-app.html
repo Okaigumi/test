@@ -295,7 +295,7 @@ function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('p'+i).clas
 async function tryLogin(){
   const id=document.getElementById('loginName').value;
   if(!id){document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();return;}
-  const{data:user,error}=await sb.rpc('verify_admin_pin',{admin_id_input:id,pin_input:aPin_str}).maybeSingle();
+  const{data:user,error}=await sb.rpc('create_admin_session',{admin_id_input:id,pin_input:aPin_str}).maybeSingle();
   if(error){document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();return;}
   if(user){
     currentUser=user;sessionStorage.setItem('adminUser',JSON.stringify(user));
@@ -306,7 +306,11 @@ async function tryLogin(){
   }else{document.getElementById('loginError').style.display='block';aPin_str='';updatePinDots();}
 }
 
-function aLogout(){sessionStorage.removeItem('adminUser');location.reload();}
+async function aLogout(){
+  const token=currentUser?.session_token;
+  if(token){try{await sb.rpc('revoke_admin_session',{session_token_input:token});}catch(e){}}
+  sessionStorage.removeItem('adminUser');location.reload();
+}
 
 async function startApp(){
   const[sRes,eRes,subRes,mRes,urRes,cRes]=await Promise.all([
@@ -1114,11 +1118,22 @@ async function saveEmployee(){const empId=_editEmpId;
   if(!empId&&!pin){alert('新規登録にはPINが必要です');return;}
   if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
   const company_id=document.getElementById('fe-company').value||null;
-  const payload={name,role,is_active,company_id};
-  if(pin) payload.pin=pin;
+  const token=currentUser.session_token;
   let error;
-  if(empId){const res=await sb.from('employees').update(payload).eq('id',empId);error=res.error;}
-  else{const res=await sb.from('employees').insert({...payload,pin});error=res.error;}
+  if(empId){
+    const res=await sb.rpc('update_employee_secure',{
+      session_token_input:token,id_input:empId,name_input:name,
+      role_input:role,is_active_input:is_active,company_id_input:company_id,
+      new_pin_input:pin||null
+    });
+    error=res.error;
+  }else{
+    const res=await sb.rpc('create_employee_secure',{
+      session_token_input:token,name_input:name,pin_input:pin,
+      role_input:role,company_id_input:company_id,is_active_input:is_active
+    });
+    error=res.error;
+  }
   if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageEmployees();
 }
@@ -1178,11 +1193,20 @@ async function saveAdmin(){const adminId=_editAdminId;
   if(!name){alert('名前を入力してください');return;}
   if(!adminId&&!pin){alert('新規登録にはPINが必要です');return;}
   if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
-  const payload={name,is_active};
-  if(pin) payload.pin=pin;
+  const token=currentUser.session_token;
   let error;
-  if(adminId){const res=await sb.from('genka_admins').update(payload).eq('id',adminId);error=res.error;}
-  else{const res=await sb.from('genka_admins').insert({...payload,pin});error=res.error;}
+  if(adminId){
+    const res=await sb.rpc('update_genka_admin_secure',{
+      session_token_input:token,id_input:adminId,name_input:name,
+      is_active_input:is_active,new_pin_input:pin||null
+    });
+    error=res.error;
+  }else{
+    const res=await sb.rpc('create_genka_admin_secure',{
+      session_token_input:token,name_input:name,pin_input:pin
+    });
+    error=res.error;
+  }
   if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageAdmins();
 }

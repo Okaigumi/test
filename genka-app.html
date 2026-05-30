@@ -634,9 +634,12 @@ async function saveInvoice(){
   btn.disabled=true;btn.textContent='登録中...';
 
   const siteId=document.getElementById('invSite').value||null;
+  const invSite=siteId?sites.find(s=>s.id===siteId):null;
+  const company_id=invSite?.company_id||null;
   const{error}=await sb.from('invoices').insert({
     invoice_date:date,
     site_id:siteId,
+    company_id,
     vendor_name:vendor,
     category:currentInvCat,
     description:document.getElementById('invDesc').value||null,
@@ -761,9 +764,13 @@ async function updateInvoice(){
   const amount=parseInt(document.getElementById('editInvAmount').value)||0;
   if(!date||!vendor||!amount){alert('請求日・業者名・金額は必須です');return;}
 
+  const editSiteId=document.getElementById('editInvSite').value||null;
+  const editSite=editSiteId?sites.find(s=>s.id===editSiteId):null;
+  const edit_company_id=editSite?.company_id||null;
   const{error}=await sb.from('invoices').update({
     invoice_date:date,
-    site_id:document.getElementById('editInvSite').value||null,
+    site_id:editSiteId,
+    company_id:edit_company_id,
     vendor_name:vendor,
     category:editInvCat,
     description:document.getElementById('editInvDesc').value||null,

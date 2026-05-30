@@ -1033,8 +1033,10 @@ async function saveMachine(){
     lease_end:isLease?document.getElementById('fm-lease-end').value||null:null,
     lease_monthly:isLease?parseInt(document.getElementById('fm-lease-monthly').value)||null:null
   };
-  if(machineId) await sb.from('machines').update(payload).eq('id',machineId);
-  else await sb.from('machines').insert(payload);
+  let error;
+  if(machineId){const res=await sb.from('machines').update(payload).eq('id',machineId);error=res.error;}
+  else{const res=await sb.from('machines').insert(payload);error=res.error;}
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageMachines();
 }
 
@@ -1114,8 +1116,10 @@ async function saveEmployee(){const empId=_editEmpId;
   const company_id=document.getElementById('fe-company').value||null;
   const payload={name,role,is_active,company_id};
   if(pin) payload.pin=pin;
-  if(empId) await sb.from('employees').update(payload).eq('id',empId);
-  else await sb.from('employees').insert({...payload,pin});
+  let error;
+  if(empId){const res=await sb.from('employees').update(payload).eq('id',empId);error=res.error;}
+  else{const res=await sb.from('employees').insert({...payload,pin});error=res.error;}
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageEmployees();
 }
 
@@ -1176,8 +1180,10 @@ async function saveAdmin(){const adminId=_editAdminId;
   if(pin&&pin.length!==4){alert('PINは4桁で入力してください');return;}
   const payload={name,is_active};
   if(pin) payload.pin=pin;
-  if(adminId) await sb.from('genka_admins').update(payload).eq('id',adminId);
-  else await sb.from('genka_admins').insert({...payload,pin});
+  let error;
+  if(adminId){const res=await sb.from('genka_admins').update(payload).eq('id',adminId);error=res.error;}
+  else{const res=await sb.from('genka_admins').insert({...payload,pin});error=res.error;}
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageAdmins();
 }
 

@@ -312,3 +312,91 @@ Success. No rows returned
 - `index.html`：従業員ログインOK
 - `admin-app.html`：管理者ログインOK
 - `genka-app.html`：管理者ログインOK
+
+---
+
+## 2026-05-30 RLS security hardening — admin session RPC + permission cleanup
+
+### 目的
+
+- `employees_update_public` ポリシー（anon による employees 全行UPDATE）を削除する
+- `employees` / `genka_admins` への直接 INSERT / UPDATE 権限を剥奪する
+- 管理者操作をセッショントークン付きRPC経由に限定し、sessionStorage偽装だけでは操作できない構造にする
+
+### 追加したテーブル
+
+#### `public.admin_sessions`
+
+| カラム | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | PRIMARY KEY |
+| `admin_id` | uuid | `genka_admins.id` への外部キー |
+| `token_hash` | text | SHA-256ハッシュ（生トークンは保存しない） |
+| `expires_at` | timestamptz | 有効期限（ログインから8時間） |
+| `created_at` | timestamptz | 作成日時 |
+
+- RLS 有効化・直接アクセス用ポリシーなし（全ロールの直接操作を禁止）
+- SECURITY DEFINER RPC 経由のみ操作可能
+
+### 追加したRPC（6本）
+
+| RPC名 | 用途 |
+|---|---|
+| `create_admin_session(admin_id_input, pin_input)` | PIN照合 + セッショントークン発行。`verify_admin_pin` の代替 |
+| `create_employee_secure(session_token_input, ...)` | セッション検証付き 従業員新規登録 |
+| `update_employee_secure(session_token_input, ...)` | セッション検証付き 従業員編集（PIN省略可） |
+| `create_genka_admin_secure(session_token_input, ...)` | セッション検証付き 管理者新規登録 |
+| `update_genka_admin_secure(session_token_input, ...)` | セッション検証付き 管理者編集（PIN省略可） |
+| `revoke_admin_session(session_token_input)` | ログアウト時にセッションをDBから削除 |
+
+- 全RPC: `SECURITY DEFINER`, `SET search_path = public, extensions`
+- セッション検証: `encode(digest(token, 'sha256'), 'hex')` で token_hash と照合
+- セッション無効時は `RAISE EXCEPTION 'Invalid or expired session'`
+- `GRANT EXECUTE TO anon, authenticated`
+
+### フロント変更（admin-app.html のみ）
+
+| 関数 | 変更内容 |
+|---|---|
+| `tryLogin()` | `verify_admin_pin` → `create_admin_session` RPC に変更。`session_token` が sessionStorage に保存される |
+| `saveEmployee()` | `sb.from('employees').update/insert` → `update_employee_secure` / `create_employee_secure` RPC に変更 |
+| `saveAdmin()` | `sb.from('genka_admins').update/insert` → `update_genka_admin_secure` / `create_genka_admin_secure` RPC に変更 |
+| `aLogout()` | `async` 化。`revoke_admin_session` RPC を呼んでから sessionStorage 削除・リロード |
+
+### 削除・縮小した権限
+
+```sql
+-- 最危険ポリシーの削除
+DROP POLICY IF EXISTS employees_update_public ON public.employees;
+
+-- employees 直接 INSERT / UPDATE を剥奪
+REVOKE INSERT ON public.employees FROM anon, authenticated;
+REVOKE UPDATE ON public.employees FROM anon, authenticated;
+
+-- genka_admins 直接 INSERT / UPDATE を剥奪
+REVOKE INSERT ON public.genka_admins FROM anon, authenticated;
+REVOKE UPDATE ON public.genka_admins FROM anon, authenticated;
+```
+
+### 確認結果
+
+- `admin_sessions` RLS: true
+- `admin_sessions` ポリシー: 0件（直接アクセス禁止）
+- RPC 6本: 存在確認済み
+- `employees_update_public`: 削除済み（0件）
+- `employees` / `genka_admins` の anon/authenticated INSERT/UPDATE: 0件
+- 本番 `admin-app.html` でログイン・従業員保存・管理者保存・ログアウト確認済み
+
+### 残課題（次フェーズ）
+
+- PINのハッシュ化（bcrypt / pgcrypto）
+- Supabase Auth / Edge Function 化による本格認証
+- sessionStorage token の XSS 対策
+- `genka-app.html` のログイン方式を `create_admin_session` に統一（現状は `verify_admin_pin` のまま）
+
+### 関連コミット
+
+- `26f6e77` Use admin session RPCs for admin management
+- `1cd42b8` Add ASCII admin session RPC SQL
+- `dcea1bb` Add admin session SQL files
+- `cb51a4a` Add admin session RPC plan

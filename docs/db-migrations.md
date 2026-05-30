@@ -242,13 +242,23 @@ GRANT EXECUTE ON FUNCTION public.verify_admin_pin(uuid, text) TO authenticated;
 - `search_path` は `public`
 - 戻り値に `pin` は含めない
 - フロント側の `sessionStorage` に保存される `user` / `adminUser` / `genkaUser` に `pin` が含まれない
-- `employees` / `genka_admins` の SELECT ポリシーやGRANT整理は次フェーズで対応予定
+- `employees.pin` / `genka_admins.pin` の直接SELECT権限制限は完了済み（`d751ec7`）
+- フロントエンドから `pin` 列を直接読む処理は廃止済み
+
+### 次フェーズ課題（未対応）
+
+- `employees_update_public` ポリシーの縮小
+- `employees` / `genka_admins` の INSERT / UPDATE 権限整理
+- PINのハッシュ化（bcrypt / pgcrypto）
+- Supabase Auth / Edge Function 化
+- 管理者操作のサーバー側認可
 
 ### 関連コミット
 
 - `7c4c0f1` Use RPC for employee PIN login
 - `c31954d` Use RPC for admin PIN login
 - `9a88234` Use RPC for genka admin PIN login
+- `d751ec7` Document PIN column select restriction
 
 ---
 

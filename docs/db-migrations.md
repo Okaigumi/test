@@ -608,3 +608,74 @@ REVOKE UPDATE ON public.reports FROM anon, authenticated;
 
 - `3f3163c` Add employee report secure RPC SQL
 - `dad8f4c` Use secure RPCs for employee reports
+
+---
+
+## 2026-05-31 paid_leave_requests / paid_leave_grants secure RPC 化 + REVOKE
+
+### 目的
+
+- 有給申請・承認/却下・有給付与を従業員セッショントークン付き RPC 経由に限定する
+- `employee_id` / `reviewed_by` をフロントから信用せず、DB 側で `session_token` から確定する
+- 管理者処理（承認/却下・有給付与）は RPC 内で `employees.role = 'admin'` をサーバー側で確認する
+- `paid_leave_requests` / `paid_leave_grants` の直接 INSERT / UPDATE 権限を削除する
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/paid-leave-secure-rpc.sql` | 有給申請・承認・付与 secure RPC 3本 |
+
+### 作成したRPC
+
+| RPC名 | 用途 |
+|---|---|
+| `create_paid_leave_request_secure(session_token_input, ...)` | 有給申請 INSERT。`employee_id` はセッションから確定。`status = 'pending'` 固定 |
+| `review_paid_leave_request_secure(session_token_input, id_input, status_input)` | 有給申請の承認/却下。`role = 'admin'` をサーバー確認。`reviewed_by` はセッションから確定 |
+| `save_paid_leave_grant_secure(session_token_input, employee_id_input, year_input, days_input)` | 有給付与 UPSERT。`role = 'admin'` をサーバー確認。対象従業員の存在確認あり |
+
+- セッション検証: `employee_sessions` テーブルと `employees` を JOIN して `employee_id` / `role` を確定
+- 全 RPC: `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = public, extensions`
+- `GRANT EXECUTE TO anon, authenticated`
+
+### フロント変更（index.html）
+
+| 関数 | 変更内容 |
+|---|---|
+| `submitLeaveRequest()` | `paid_leave_requests.insert({employee_id,...})` → `create_paid_leave_request_secure`。`employee_id`・`status` を削除 |
+| `reviewLeave(reqId, status)` | `paid_leave_requests.update({status, reviewed_by, reviewed_at})` → `review_paid_leave_request_secure`。`reviewed_by`・`reviewed_at` を削除 |
+| `saveGrant()` | `paid_leave_grants.upsert({...})` → `save_paid_leave_grant_secure` |
+
+- 3処理すべてで `state.currentUser?.session_token` を `session_token_input` として使用
+- `session_token` がなければ alert して処理中断
+
+### 削除した権限
+
+```sql
+REVOKE INSERT ON public.paid_leave_requests FROM anon, authenticated;
+REVOKE UPDATE ON public.paid_leave_requests FROM anon, authenticated;
+REVOKE INSERT ON public.paid_leave_grants   FROM anon, authenticated;
+REVOKE UPDATE ON public.paid_leave_grants   FROM anon, authenticated;
+```
+
+### 確認結果
+
+- RPC 3本: 存在確認済み
+- anon / authenticated に RPC EXECUTE 権限: 6件（3本 × 2ロール）
+- `paid_leave_requests` の anon/authenticated INSERT/UPDATE: 0件
+- `paid_leave_grants` の anon/authenticated INSERT/UPDATE: 0件
+- 本番 `index.html` で有給申請・承認/却下・有給付与確認済み
+- Console 赤エラーなし
+
+### 残課題（次フェーズ）
+
+- 全テーブル権限棚卸し
+- RLS ポリシー整理
+- PIN のハッシュ化（bcrypt / pgcrypto）
+- ログイン失敗回数制限
+- sessionStorage token の管理強化
+
+### 関連コミット
+
+- `d786ee8` Add paid leave secure RPC SQL
+- `7176ba5` Use secure RPCs for paid leave

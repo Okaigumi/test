@@ -595,14 +595,20 @@ function closeBudgetModal(){
 }
 
 async function saveBudget(){
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const amount=parseInt(document.getElementById('budgetAmount').value)||0;
   if(!amount){alert('予算金額を入力してください');return;}
   const year=parseInt(document.getElementById('budgetYear').value);
   const memo=document.getElementById('budgetMemo').value||null;
 
-  const{error}=await sb.from('site_budgets').upsert({
-    site_id:budgetSiteId,year,month:null,budget:amount,memo,updated_at:new Date().toISOString(),is_active:true
-  },{onConflict:'site_id,year,month'});
+  const{error}=await sb.rpc('upsert_site_budget_secure',{
+    session_token_input:token,
+    site_id_input:budgetSiteId,
+    year_input:year,
+    amount_input:amount,
+    memo_input:memo
+  }).maybeSingle();
   if(error){alert('保存に失敗しました：'+error.message);return;}
 
   closeBudgetModal();
@@ -627,6 +633,8 @@ function setInvCat(cat){
 }
 
 async function saveInvoice(){
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const date=document.getElementById('invDate').value;
   const vendor=document.getElementById('invVendor').value.trim();
   const amount=parseInt(document.getElementById('invAmount').value)||0;
@@ -636,22 +644,23 @@ async function saveInvoice(){
   btn.disabled=true;btn.textContent='登録中...';
 
   const siteId=document.getElementById('invSite').value||null;
-  const invSite=siteId?sites.find(s=>s.id===siteId):null;
-  const company_id=invSite?.company_id||null;
-  const{error}=await sb.from('invoices').insert({
-    invoice_date:date,
-    site_id:siteId,
-    company_id,
-    vendor_name:vendor,
-    category:currentInvCat,
-    description:document.getElementById('invDesc').value||null,
-    amount:amount,
-    tax_included:document.getElementById('invTax').value==='true',
-    memo:document.getElementById('invMemo').value||null
-  });
+  const desc=document.getElementById('invDesc').value||null;
+  const taxIncluded=document.getElementById('invTax').value==='true';
+  const memo=document.getElementById('invMemo').value||null;
+  const{error}=await sb.rpc('create_invoice_secure',{
+    session_token_input:token,
+    invoice_date_input:date,
+    site_id_input:siteId,
+    vendor_name_input:vendor,
+    category_input:currentInvCat,
+    amount_input:amount,
+    tax_included_input:taxIncluded,
+    description_input:desc,
+    memo_input:memo
+  }).maybeSingle();
 
   btn.disabled=false;btn.textContent='＋ 請求書を登録する';
-  if(error){alert('登録に失敗しました');return;}
+  if(error){alert('登録に失敗しました：'+error.message);return;}
 
   // フォームリセット
   document.getElementById('invVendor').value='';
@@ -714,7 +723,9 @@ async function loadInvoices(){
 
 async function deleteInvoice(id){
   if(!confirm('この請求書を取り消しますか？'))return;
-  const{error}=await sb.from('invoices').update({status:'rejected'}).eq('id',id);
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('reject_invoice_secure',{session_token_input:token,id_input:id});
   if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await loadInvoices();
 }
@@ -761,27 +772,31 @@ function closeInvEdit(){
 
 async function updateInvoice(){
   if(!editingInvId)return;
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const date=document.getElementById('editInvDate').value;
   const vendor=document.getElementById('editInvVendor').value.trim();
   const amount=parseInt(document.getElementById('editInvAmount').value)||0;
   if(!date||!vendor||!amount){alert('請求日・業者名・金額は必須です');return;}
 
-  const editSiteId=document.getElementById('editInvSite').value||null;
-  const editSite=editSiteId?sites.find(s=>s.id===editSiteId):null;
-  const edit_company_id=editSite?.company_id||null;
-  const{error}=await sb.from('invoices').update({
-    invoice_date:date,
-    site_id:editSiteId,
-    company_id:edit_company_id,
-    vendor_name:vendor,
-    category:editInvCat,
-    description:document.getElementById('editInvDesc').value||null,
-    amount:amount,
-    tax_included:document.getElementById('editInvTax').value==='true',
-    memo:document.getElementById('editInvMemo').value||null
-  }).eq('id',editingInvId);
+  const siteId=document.getElementById('editInvSite').value||null;
+  const desc=document.getElementById('editInvDesc').value||null;
+  const taxIncluded=document.getElementById('editInvTax').value==='true';
+  const memo=document.getElementById('editInvMemo').value||null;
+  const{error}=await sb.rpc('update_invoice_secure',{
+    session_token_input:token,
+    id_input:editingInvId,
+    invoice_date_input:date,
+    site_id_input:siteId,
+    vendor_name_input:vendor,
+    category_input:editInvCat,
+    amount_input:amount,
+    tax_included_input:taxIncluded,
+    description_input:desc,
+    memo_input:memo
+  });
 
-  if(error){alert('更新に失敗しました');return;}
+  if(error){alert('更新に失敗しました：'+error.message);return;}
   closeInvEdit();
   await loadInvoices();
 }

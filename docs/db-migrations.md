@@ -400,3 +400,120 @@ REVOKE UPDATE ON public.genka_admins FROM anon, authenticated;
 - `1cd42b8` Add ASCII admin session RPC SQL
 - `dcea1bb` Add admin session SQL files
 - `cb51a4a` Add admin session RPC plan
+
+---
+
+## 2026-05-31 invoices / site_budgets secure RPC 化 + REVOKE
+
+### 目的
+
+- `invoices` / `site_budgets` への直接 INSERT / UPDATE 権限を `anon` / `authenticated` から削除する
+- 請求書・実行予算操作を管理者セッショントークン付き RPC 経由に限定し、sessionStorage 偽装だけでは操作できない構造にする
+- 年間予算（month IS NULL）の重複行を防ぐ
+
+### 追加・更新したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/invoice-budget-secure-rpc.sql` | invoices / site_budgets 用 secure RPC 8本 |
+| `docs/sql/site-budget-upsert-null-fix.sql` | 年間予算重複防止インデックス + upsert_site_budget_secure 修正 |
+
+### 作成・更新したRPC
+
+| RPC名 | 用途 |
+|---|---|
+| `create_invoice_secure` | 請求書 INSERT（セッション検証付き。company_id はサーバー側で sites から取得） |
+| `update_invoice_secure` | 請求書 UPDATE（セッション検証付き。company_id はサーバー側で取得） |
+| `reject_invoice_secure` | 請求書 status = 'rejected'（論理削除） |
+| `restore_invoice_secure` | 請求書 status = 'confirmed'（復元） |
+| `upsert_site_budget_secure` | 実行予算 INSERT ON CONFLICT DO UPDATE（month NULL 重複対策済み） |
+| `update_site_budget_secure` | 実行予算 UPDATE by id（admin 編集パス専用） |
+| `deactivate_site_budget_secure` | 実行予算 is_active = false（論理削除） |
+| `restore_site_budget_secure` | 実行予算 is_active = true（重複チェック内蔵） |
+
+- 全 RPC: `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = public, extensions`
+- セッション検証: `encode(digest(session_token_input, 'sha256'), 'hex')` で `admin_sessions.token_hash` と照合
+- `GRANT EXECUTE TO anon, authenticated`
+
+### フロント変更
+
+#### admin-app.html
+
+| 関数 | 変更内容 |
+|---|---|
+| `saveInvoice()` | `invoices.insert/update` → `create_invoice_secure` / `update_invoice_secure` |
+| `deleteInvoice()` | `invoices.update({status:'rejected'})` → `reject_invoice_secure` |
+| `restoreInvoice()` | `invoices.update({status:'confirmed'})` → `restore_invoice_secure` |
+| `saveBudget()` | `site_budgets.upsert/update` → `upsert_site_budget_secure` / `update_site_budget_secure` |
+| `deleteBudget()` | `site_budgets.update({is_active:false})` → `deactivate_site_budget_secure` |
+| `restoreBudget()` | 3クエリ（SELECT+重複チェック+UPDATE）→ `restore_site_budget_secure` 1本に集約 |
+
+#### genka-app.html
+
+| 関数 | 変更内容 |
+|---|---|
+| `saveInvoice()` | `invoices.insert` → `create_invoice_secure` |
+| `updateInvoice()` | `invoices.update` → `update_invoice_secure` |
+| `deleteInvoice()` | `invoices.update({status:'rejected'})` → `reject_invoice_secure` |
+| `saveBudget()` | `site_budgets.upsert` → `upsert_site_budget_secure` |
+| `openBudgetModal()` | `.maybeSingle()` → `.order('updated_at',{ascending:false}).limit(1)` に変更（重複行があっても最新1件を採用し画面が落ちないようにした） |
+
+### site_budgets 重複対策
+
+#### 背景
+
+PostgreSQL の UNIQUE 制約は NULL を「互いに等しくない」として扱うため、`ON CONFLICT (site_id, year, month)` は `month IS NULL` の重複を検出できなかった。同じ現場・年度の年間予算が複数 INSERT できる状態だった。
+
+#### 実施内容
+
+1. 既存の重複データを整理（最新1件のみ `is_active = true`、古い重複行は `is_active = false`）
+2. 部分ユニークインデックスを追加:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS site_budgets_annual_active_unique
+  ON public.site_budgets (site_id, year)
+  WHERE month IS NULL AND is_active = true;
+```
+
+3. `upsert_site_budget_secure` の conflict target を変更:
+
+```sql
+ON CONFLICT (site_id, year) WHERE month IS NULL AND is_active = true
+DO UPDATE SET ...
+```
+
+### 削除した権限
+
+```sql
+REVOKE INSERT ON public.invoices    FROM anon, authenticated;
+REVOKE UPDATE ON public.invoices    FROM anon, authenticated;
+REVOKE INSERT ON public.site_budgets FROM anon, authenticated;
+REVOKE UPDATE ON public.site_budgets FROM anon, authenticated;
+```
+
+### 確認結果
+
+- secure RPC 8本: 存在確認済み
+- anon / authenticated に RPC EXECUTE 権限: 16件（8本 × 2ロール）
+- `invoices` の anon/authenticated INSERT/UPDATE: 0件
+- `site_budgets` の anon/authenticated INSERT/UPDATE: 0件
+- `site_budgets` の有効重複（同 site_id + year + month IS NULL + is_active=true）: 0件
+- 本番 `admin-app.html` で請求書・実行予算の全操作確認済み
+- 本番 `genka-app.html` で請求書・実行予算の全操作確認済み
+- Console 赤エラーなし
+
+### 残課題（次フェーズ）
+
+- PIN のハッシュ化（bcrypt / pgcrypto）
+- ログイン失敗回数制限
+- Supabase Auth / Edge Function 化による本格認証
+- sessionStorage token の XSS 対策
+- `reports` / `paid_leave_requests` の RPC 化検討
+
+### 関連コミット
+
+- `bee2a12` Add invoice and budget secure RPC SQL
+- `d6712be` Use secure RPCs for admin invoices and budgets
+- `ede5b67` Use secure RPCs for genka invoices and budgets
+- `2ec7182` Handle duplicate annual budgets in genka app
+- `c1575bb` Fix annual site budget upsert conflicts

@@ -2034,18 +2034,21 @@ function selectMachineYard(){
 }
 
 async function confirmMachineMove(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   if(!selectedMoveSiteId){alert('移動先を選択してください');return;}
   const btn=document.getElementById('machineMoveBtn');
   btn.disabled=true;btn.textContent='記録中...';
 
-  await sb.from('machine_locations').insert({
-    machine_id:selectedMachineId,
-    site_id:selectedMoveSiteId==='yard'?null:selectedMoveSiteId,
-    moved_by:state.currentUser.id,
-    memo:document.getElementById('machineMemo').value||null
-  });
+  const{error}=await sb.rpc('create_machine_location_secure',{
+    session_token_input:token,
+    machine_id_input:selectedMachineId,
+    site_id_input:selectedMoveSiteId==='yard'?null:selectedMoveSiteId,
+    memo_input:document.getElementById('machineMemo').value||null
+  }).maybeSingle();
 
   btn.disabled=false;btn.textContent='移動を記録する';
+  if(error){alert('記録に失敗しました：'+error.message);return;}
   document.getElementById('machineModal').classList.remove('show');
   await loadMachines();
 }

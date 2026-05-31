@@ -657,6 +657,8 @@ function updateInvoiceCompanyDisplay(){
 }
 
 async function saveInvoice(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const invId=_editInvId;
   const date=document.getElementById('fi-date').value;
   const vendor=document.getElementById('fi-vendor').value.trim();
@@ -665,48 +667,63 @@ async function saveInvoice(){
   if(!date||!vendor||amountStr===''||isNaN(amount)){alert('日付・業者名・金額は必須です');return;}
   const btn=document.querySelector('#modalFooter .btn-primary');
   if(btn)btn.disabled=true;
-  const site_id=document.getElementById('fi-site').value||null;
-  const site=site_id?_sites.find(s=>s.id===site_id):null;
-  const company_id=site?.company_id||null;
-  const payload={
-    invoice_date:date,vendor_name:vendor,amount,
-    site_id,
-    company_id,
-    category:document.getElementById('fi-cat').value,
-    tax_included:document.getElementById('fi-tax').value==='true',
-    description:document.getElementById('fi-desc').value||null,
-    memo:document.getElementById('fi-memo').value||null
-  };
+  const siteId=document.getElementById('fi-site').value||null;
+  const category=document.getElementById('fi-cat').value;
+  const taxIncluded=document.getElementById('fi-tax').value==='true';
+  const desc=document.getElementById('fi-desc').value||null;
+  const memo=document.getElementById('fi-memo').value||null;
+  let error;
   if(invId){
-    const{data:updated,error}=await sb.from('invoices').update(payload).eq('id',invId).select();
-    if(error||!updated?.length){
-      if(btn)btn.disabled=false;
-      console.error('請求書更新エラー:',error?.message);
-      alert('保存に失敗しました：'+(error?.message||'不明なエラー'));
-      return;
-    }
+    const res=await sb.rpc('update_invoice_secure',{
+      session_token_input:token,
+      id_input:invId,
+      invoice_date_input:date,
+      site_id_input:siteId,
+      vendor_name_input:vendor,
+      category_input:category,
+      amount_input:amount,
+      tax_included_input:taxIncluded,
+      description_input:desc,
+      memo_input:memo
+    });
+    error=res.error;
   }else{
-    const{error}=await sb.from('invoices').insert(payload);
-    if(error){
-      if(btn)btn.disabled=false;
-      console.error('請求書追加エラー:',error.message);
-      alert('保存に失敗しました：'+error.message);
-      return;
-    }
+    const res=await sb.rpc('create_invoice_secure',{
+      session_token_input:token,
+      invoice_date_input:date,
+      site_id_input:siteId,
+      vendor_name_input:vendor,
+      category_input:category,
+      amount_input:amount,
+      tax_included_input:taxIncluded,
+      description_input:desc,
+      memo_input:memo
+    }).maybeSingle();
+    error=res.error;
+  }
+  if(error){
+    if(btn)btn.disabled=false;
+    console.error('請求書保存エラー:',error.message);
+    alert('保存に失敗しました：'+error.message);
+    return;
   }
   closeModal();await pageInvoices();
 }
 
 async function deleteInvoice(id){
   if(!confirm('この請求書を取り消しますか？'))return;
-  const{error}=await sb.from('invoices').update({status:'rejected'}).eq('id',id);
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('reject_invoice_secure',{session_token_input:token,id_input:id});
   if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await pageInvoices();
 }
 
 async function restoreInvoice(id){
   if(!confirm('この請求書を通常一覧に戻しますか？\n戻すと、原価管理にも再度反映されます。'))return;
-  const{error}=await sb.from('invoices').update({status:'confirmed'}).eq('id',id);
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('restore_invoice_secure',{session_token_input:token,id_input:id});
   if(error){alert('復元に失敗しました：'+error.message);return;}
   await pageInvoices();
 }
@@ -873,42 +890,59 @@ async function openBudgetModal(budgetId=null){
 }
 
 async function saveBudget(){const budgetId=_editBudgetId;
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const site=document.getElementById('fb-site').value;
   const year=parseInt(document.getElementById('fb-year').value);
   const amountStr=document.getElementById('fb-amount').value;
   const amount=parseInt(amountStr);
   if(!site||!year||amountStr===''||isNaN(amount)){alert('現場・年度・金額は必須です');return;}
-  const payload={site_id:site,year,month:null,budget:amount,memo:document.getElementById('fb-memo').value||null,updated_at:new Date().toISOString(),is_active:true};
+  const memo=document.getElementById('fb-memo').value||null;
+  let error;
   if(budgetId){
-    const{data:updated,error}=await sb.from('site_budgets').update(payload).eq('id',budgetId).select();
-    if(error||!updated?.length){alert('保存に失敗しました');return;}
+    const res=await sb.rpc('update_site_budget_secure',{
+      session_token_input:token,
+      id_input:budgetId,
+      site_id_input:site,
+      year_input:year,
+      amount_input:amount,
+      memo_input:memo
+    });
+    error=res.error;
   }else{
-    const{error}=await sb.from('site_budgets').upsert(payload,{onConflict:'site_id,year,month'});
-    if(error){alert('保存に失敗しました：'+error.message);return;}
+    const res=await sb.rpc('upsert_site_budget_secure',{
+      session_token_input:token,
+      site_id_input:site,
+      year_input:year,
+      amount_input:amount,
+      memo_input:memo
+    }).maybeSingle();
+    error=res.error;
   }
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageBudgets();
 }
 
 async function deleteBudget(id){
   if(!confirm('この実行予算を取り消しますか？'))return;
-  const{error}=await sb.from('site_budgets').update({is_active:false}).eq('id',id);
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('deactivate_site_budget_secure',{session_token_input:token,id_input:id});
   if(error){alert('取り消しに失敗しました：'+error.message);return;}
   await pageBudgets();
 }
 
 async function restoreBudget(id){
-  const{data:b,error:fetchErr}=await sb.from('site_budgets').select('*').eq('id',id).single();
-  if(fetchErr||!b){alert('予算データの取得に失敗しました');return;}
-
-  let dupQ=sb.from('site_budgets').select('id').eq('site_id',b.site_id).eq('year',b.year).eq('is_active',true).neq('id',id);
-  if(b.month===null){dupQ=dupQ.is('month',null);}else{dupQ=dupQ.eq('month',b.month);}
-  const{data:dups,error:dupErr}=await dupQ.limit(1);
-  if(dupErr){alert('復元前チェックに失敗しました：'+dupErr.message);return;}
-  if(dups&&dups.length>0){alert('同じ現場・年度の有効な予算が既に存在します。先に現在の予算を取り消してください。');return;}
-
   if(!confirm('この実行予算を取り消し済みから通常一覧に戻しますか？\n復元すると、原価管理の予算集計にも再度反映されます。'))return;
-  const{error}=await sb.from('site_budgets').update({is_active:true}).eq('id',id);
-  if(error){alert('復元に失敗しました：'+error.message);return;}
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('restore_site_budget_secure',{session_token_input:token,id_input:id});
+  if(error){
+    const msg=error.message?.includes('Duplicate active budget exists')
+      ?'同じ現場・年度の有効な予算が既に存在します。先に現在の予算を取り消してください。'
+      :'復元に失敗しました：'+error.message;
+    alert(msg);return;
+  }
   await pageBudgets();
 }
 

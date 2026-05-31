@@ -494,7 +494,7 @@ function updateGPinDots(){
 async function tryGLogin(){
   const empId=document.getElementById('loginName').value;
   if(!empId){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
-  const{data:user,error}=await sb.rpc('verify_admin_pin',{admin_id_input:empId,pin_input:gPin}).maybeSingle();
+  const{data:user,error}=await sb.rpc('create_admin_session',{admin_id_input:empId,pin_input:gPin}).maybeSingle();
   if(error){document.getElementById('loginError').style.display='block';gPin='';updateGPinDots();return;}
   if(user){
     gCurrentUser=user;
@@ -509,7 +509,9 @@ async function tryGLogin(){
   }
 }
 
-function gLogout(){
+async function gLogout(){
+  const token=gCurrentUser?.session_token;
+  if(token){try{await sb.rpc('revoke_admin_session',{session_token_input:token});}catch(e){}}
   sessionStorage.removeItem('genkaUser');
   location.reload();
 }

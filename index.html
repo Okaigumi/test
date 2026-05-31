@@ -869,7 +869,7 @@ function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).clas
 async function tryLogin(){
   const empId=document.getElementById('nameSelect').value;
   if(!empId){document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();return;}
-  const{data:user,error}=await sb.rpc('verify_employee_pin',{employee_id_input:empId,pin_input:state.pin}).maybeSingle();
+  const{data:user,error}=await sb.rpc('create_employee_session',{employee_id_input:empId,pin_input:state.pin}).maybeSingle();
   if(error){document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();return;}
   if(user){
     state.currentUser=user;
@@ -879,7 +879,11 @@ async function tryLogin(){
   }else{document.getElementById('loginError').style.display='block';state.pin='';updatePinDots();}
 }
 
-function logout(){sessionStorage.removeItem('currentUser');location.reload();}
+async function logout(){
+  const token=state.currentUser?.session_token;
+  if(token){try{await sb.rpc('revoke_employee_session',{session_token_input:token});}catch(e){}}
+  sessionStorage.removeItem('currentUser');location.reload();
+}
 
 // ===== START =====
 async function startApp(){
@@ -1332,6 +1336,8 @@ function cancelEdit(){
 
 // ===== SUBMIT =====
 async function submitReport(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const msg=document.getElementById('validationMsg');
   const date=document.getElementById('reportDate').value;
   const matIds=Object.keys(state.materialQty);
@@ -1344,31 +1350,31 @@ async function submitReport(){
   const end=document.getElementById('endTime').value;
   const{normal,overtime}=calcTime(start,end);
 
-  const payload={
-    employee_id:state.currentUser.id,
-    report_date:date,
-    site_ids:state.selectedSites,
-    material_ids:matIds,
-    material_quantities:state.materialQty,
-    subcontractor_ids:state.selectedSubs,
-    sub_machines:state.subMachines,
-    start_time:start,end_time:end,
-    normal_mins:normal,overtime_mins:overtime,
-    work_type:currentWorkType,
-    memo:document.getElementById('memo').value,
-    photo_count:state.photos.length,
-    photo_urls:[],
-    dump_count:state.dumpCount,
-    guard_count:state.guardCount,
-    dump_company:state.dumpCompany
+  const rpcArgs={
+    session_token_input:token,
+    report_date_input:date,
+    site_ids_input:state.selectedSites,
+    material_ids_input:matIds,
+    start_time_input:start,
+    end_time_input:end,
+    memo_input:document.getElementById('memo').value||null,
+    normal_mins_input:normal,
+    overtime_mins_input:overtime,
+    material_quantities_input:state.materialQty,
+    work_type_input:currentWorkType,
+    subcontractor_ids_input:state.selectedSubs,
+    sub_machines_input:state.subMachines,
+    dump_count_input:state.dumpCount,
+    guard_count_input:state.guardCount,
+    dump_company_input:state.dumpCompany||null
   };
 
   let error, reportId=editingReportId;
   if(editingReportId){
-    const res=await sb.from('reports').update(payload).eq('id',editingReportId);
+    const res=await sb.rpc('update_report_secure',{...rpcArgs,id_input:editingReportId});
     error=res.error;
   }else{
-    const res=await sb.from('reports').insert(payload).select('id').single();
+    const res=await sb.rpc('create_report_secure',rpcArgs).maybeSingle();
     error=res.error;
     if(res.data) reportId=res.data.id;
   }
@@ -1383,7 +1389,12 @@ async function submitReport(){
   if(state.photos.length>0&&reportId){
     btn.innerHTML='<span>⏳</span> 写真アップロード中...';
     const urls=await uploadPhotos(reportId);
-    const{error:photoErr}=await sb.from('reports').update({photo_urls:urls,photo_count:urls.length}).eq('id',reportId);
+    const{error:photoErr}=await sb.rpc('update_report_photo_secure',{
+      session_token_input:token,
+      id_input:reportId,
+      photo_urls_input:urls,
+      photo_count_input:urls.length
+    });
     if(photoErr) alert('写真の保存に失敗しました。日報は提出済みです。再アップロードをご確認ください。');
   }
 

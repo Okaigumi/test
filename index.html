@@ -2068,20 +2068,22 @@ function openLeaveRequest(){
 }
 
 async function submitLeaveRequest(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const date=document.getElementById('leaveDate').value;
   if(!date){alert('日付を選択してください');return;}
   const btn=document.getElementById('leaveSubmitBtn');
   btn.disabled=true;btn.textContent='送信中...';
 
-  const{error}=await sb.from('paid_leave_requests').insert({
-    employee_id:state.currentUser.id,
-    leave_date:date,
-    leave_type:currentLeaveType,
-    reason:document.getElementById('leaveReason').value||null
-  });
+  const{error}=await sb.rpc('create_paid_leave_request_secure',{
+    session_token_input:token,
+    leave_date_input:date,
+    leave_type_input:currentLeaveType,
+    reason_input:document.getElementById('leaveReason').value||null
+  }).maybeSingle();
 
   btn.disabled=false;btn.textContent='申請する';
-  if(error){alert('送信に失敗しました');return;}
+  if(error){alert('送信に失敗しました：'+error.message);return;}
   document.getElementById('leaveModal').classList.remove('show');
   await loadLeaveData();
 }
@@ -2184,11 +2186,14 @@ async function loadLeaveAdmin(){
 }
 
 async function reviewLeave(reqId,status){
-  await sb.from('paid_leave_requests').update({
-    status:status,
-    reviewed_by:state.currentUser.id,
-    reviewed_at:new Date().toISOString()
-  }).eq('id',reqId);
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('review_paid_leave_request_secure',{
+    session_token_input:token,
+    id_input:reqId,
+    status_input:status
+  });
+  if(error){alert('処理に失敗しました：'+error.message);return;}
   await loadLeaveAdmin();
 }
 
@@ -2202,14 +2207,18 @@ function openGrantModal(empId,empName){
 }
 
 async function saveGrant(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const year=parseInt(document.getElementById('grantYear').value);
   const days=parseFloat(document.getElementById('grantDays').value);
   if(!year||isNaN(days)){alert('入力してください');return;}
-  await sb.from('paid_leave_grants').upsert({
-    employee_id:grantEmpId,
-    year:year,
-    granted:days
-  },{onConflict:'employee_id,year'});
+  const{error}=await sb.rpc('save_paid_leave_grant_secure',{
+    session_token_input:token,
+    employee_id_input:grantEmpId,
+    year_input:year,
+    days_input:days
+  });
+  if(error){alert('付与に失敗しました：'+error.message);return;}
   document.getElementById('grantModal').classList.remove('show');
   await loadLeaveAdmin();
   alert(`${year}年度 ${days}日を付与しました`);

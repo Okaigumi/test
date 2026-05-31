@@ -679,3 +679,48 @@ REVOKE UPDATE ON public.paid_leave_grants   FROM anon, authenticated;
 
 - `d786ee8` Add paid leave secure RPC SQL
 - `7176ba5` Use secure RPCs for paid leave
+
+---
+
+## 2026-05-31 public スキーマ DELETE 権限の全削除
+
+### 目的
+
+- `public` スキーマ内の全テーブルについて、`anon` / `authenticated` からの直接 DELETE を禁止する
+- 物理削除を封じ、`is_active = false` / `status = 'rejected'` などの論理削除運用に統一する
+- フロント改ざんや誤操作によるレコード削除を防止する
+
+### 事前確認
+
+- `index.html` / `admin-app.html` / `genka-app.html` の全コードで `.delete()` 使用が **0件** であることを確認
+- 既存の削除系処理はすべて論理削除（`is_active = false` / `status = 'rejected'`）で実装済み
+- 直接 INSERT / UPDATE が残るテーブルは存在するが、今回は DELETE のみ対象
+
+### 実行したSQL
+
+```sql
+REVOKE DELETE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+```
+
+### 確認結果
+
+- anon / authenticated の DELETE 権限: **0件**
+- `index.html`: ログイン・日報・有給画面・現場/外注/重機の論理削除系処理 OK
+- `admin-app.html`: ログイン・全機能 OK
+- `genka-app.html`: ログイン・全機能 OK
+- Console 赤エラーなし
+
+### 今回触っていない権限
+
+- INSERT（一部テーブルで残存）
+- UPDATE（一部テーブルで残存）
+- SELECT（変更なし）
+
+### 残課題（次フェーズ）
+
+- `sites` / `site_assignments` / `materials` / `machines` / `machine_locations` の RPC 化
+- `employee_rates` / `unit_rates` の RPC 化
+- 全 RLS ポリシー整理
+- PIN のハッシュ化（bcrypt / pgcrypto）
+- ログイン失敗回数制限
+- sessionStorage token の管理強化

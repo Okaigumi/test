@@ -724,3 +724,67 @@ REVOKE DELETE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 - PIN のハッシュ化（bcrypt / pgcrypto）
 - ログイン失敗回数制限
 - sessionStorage token の管理強化
+
+---
+
+## 2026-05-31 machine_locations secure RPC 化 + REVOKE
+
+### 目的
+
+- 重機移動履歴の登録をセッショントークン付き RPC 経由に限定する
+- `moved_by` をフロントから信用せず、DB 側で `session_token` から `employee_id` を確定する
+- `machine_locations` の直接 INSERT / UPDATE 権限を削除する
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/machine-location-secure-rpc.sql` | 重機移動記録 secure RPC 1本 |
+
+### 作成したRPC
+
+| RPC名 | 用途 |
+|---|---|
+| `create_machine_location_secure(session_token_input, machine_id_input, site_id_input, memo_input)` | 重機移動記録 INSERT。`moved_by` はセッションから確定。`machine_id` / `site_id` の存在確認あり |
+
+- 全従業員（role 制限なし）が記録可能
+- `moved_by` はフロントから受け取らずサーバー確定
+- `moved_at` は DB デフォルト `now()`
+- `SECURITY DEFINER`, `SET search_path = public, extensions`
+- `GRANT EXECUTE TO anon, authenticated`
+
+### フロント変更（index.html）
+
+| 関数 | 変更内容 |
+|---|---|
+| `confirmMachineMove()` | `machine_locations.insert({..., moved_by: state.currentUser.id})` → `create_machine_location_secure`。`moved_by`・`moved_at` を削除。エラーハンドリング追加 |
+
+### 削除した権限
+
+```sql
+REVOKE INSERT ON public.machine_locations FROM anon, authenticated;
+REVOKE UPDATE ON public.machine_locations FROM anon, authenticated;
+```
+
+### 確認結果
+
+- `create_machine_location_secure`: 存在確認済み
+- anon / authenticated に RPC EXECUTE 権限あり
+- `machine_locations` の anon/authenticated INSERT/UPDATE/DELETE: 0件
+- 本番 `index.html` で重機移動記録・現在位置更新確認済み
+- Console 赤エラーなし
+
+### 残課題（次フェーズ）
+
+- `sites` / `site_assignments` の RPC 化
+- `materials` / `machines` の RPC 化
+- `employee_rates` / `unit_rates` の RPC 化
+- 全 RLS ポリシー整理
+- PIN のハッシュ化（bcrypt / pgcrypto）
+- ログイン失敗回数制限
+- sessionStorage token の管理強化
+
+### 関連コミット
+
+- `acf57e6` Add machine location secure RPC SQL
+- `bdf101c` Use secure RPC for machine locations

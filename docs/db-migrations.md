@@ -517,3 +517,94 @@ REVOKE UPDATE ON public.site_budgets FROM anon, authenticated;
 - `ede5b67` Use secure RPCs for genka invoices and budgets
 - `2ec7182` Handle duplicate annual budgets in genka app
 - `c1575bb` Fix annual site budget upsert conflicts
+
+---
+
+## 2026-05-31 reports secure RPC 化 + REVOKE
+
+### 目的
+
+- `reports` への直接 INSERT / UPDATE 権限を `anon` / `authenticated` から削除する
+- 日報登録・修正・写真URL更新を従業員セッショントークン付き RPC 経由に限定する
+- `employee_id` をフロント（sessionStorage）から信用せず、DB側で `session_token` から確定する構造にする
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/employee-report-secure-rpc.sql` | employee_sessions テーブル + 従業員セッション・日報操作 RPC 5本 |
+
+### 追加したテーブル
+
+#### `public.employee_sessions`
+
+| カラム | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | PRIMARY KEY |
+| `employee_id` | uuid | `employees.id` への外部キー（ON DELETE CASCADE） |
+| `token_hash` | text | SHA-256 ハッシュ（生トークンは保存しない） |
+| `expires_at` | timestamptz | 有効期限（ログインから8時間） |
+| `created_at` | timestamptz | 作成日時 |
+
+- RLS 有効化・直接アクセス用ポリシーなし（全ロールの直接操作を禁止）
+- SECURITY DEFINER RPC 経由のみ操作可能
+- インデックス: `token_hash`, `expires_at`, `employee_id`
+
+### 作成したRPC
+
+| RPC名 | 用途 |
+|---|---|
+| `create_employee_session(employee_id_input, pin_input)` | PIN照合 + セッショントークン発行。`verify_employee_pin` の代替 |
+| `revoke_employee_session(session_token_input)` | ログアウト時にセッションをDBから削除 |
+| `create_report_secure(session_token_input, ...)` | セッション検証 + `employee_id` サーバー確定 + 日報 INSERT |
+| `update_report_secure(session_token_input, id_input, ...)` | セッション検証 + 本人確認（`employee_id` 一致）+ 日報 UPDATE |
+| `update_report_photo_secure(session_token_input, id_input, ...)` | セッション検証 + 本人確認 + `photo_urls` / `photo_count` UPDATE |
+
+- 全 RPC: `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = public, extensions`
+- セッション検証: `encode(digest(session_token_input, 'sha256'), 'hex')` で `employee_sessions.token_hash` と照合
+- `employee_id` は引数から受け取らず、セッションから `v_employee_id` として確定
+- update 系は `WHERE id = id_input AND employee_id = v_employee_id` で本人のみ更新可能
+- `GRANT EXECUTE TO anon, authenticated`
+
+### フロント変更（index.html）
+
+| 関数 | 変更内容 |
+|---|---|
+| `tryLogin()` | `verify_employee_pin` → `create_employee_session`。戻り値に `session_token` が追加される |
+| `logout()` | `function` → `async function`。`revoke_employee_session` を呼んでから sessionStorage 削除 |
+| `submitReport()` 新規 | `reports.insert(payload)` → `create_report_secure(rpcArgs)`。`employee_id` を引数から削除 |
+| `submitReport()` 修正 | `reports.update(payload)` → `update_report_secure({...rpcArgs, id_input: editingReportId})` |
+| 写真URL更新 | `reports.update({photo_urls, photo_count})` → `update_report_photo_secure({session_token_input, id_input, ...})` |
+
+- `sessionStorage.currentUser` に `session_token` が含まれるようになった
+- `payload` から `employee_id`, `status`, `photo_urls`, `photo_count` を除去
+
+### 削除した権限
+
+```sql
+REVOKE INSERT ON public.reports FROM anon, authenticated;
+REVOKE UPDATE ON public.reports FROM anon, authenticated;
+```
+
+### 確認結果
+
+- `employee_sessions` RLS: true
+- `employee_sessions` ポリシー: 0件（直接アクセス禁止）
+- RPC 5本: 存在確認済み
+- anon / authenticated に RPC EXECUTE 権限: 10件（5本 × 2ロール）
+- `reports` の anon/authenticated INSERT/UPDATE: 0件
+- 本番 `index.html` で従業員ログイン・日報新規登録・日報修正・写真付き日報・ログアウト確認済み
+- Console 赤エラーなし
+
+### 残課題（次フェーズ）
+
+- `paid_leave_requests` の RPC 化
+- PIN のハッシュ化（bcrypt / pgcrypto）
+- ログイン失敗回数制限
+- Supabase Auth / Edge Function 化による本格認証
+- sessionStorage token の XSS 対策
+
+### 関連コミット
+
+- `3f3163c` Add employee report secure RPC SQL
+- `dad8f4c` Use secure RPCs for employee reports

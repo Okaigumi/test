@@ -218,6 +218,7 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
       <div class="nav-section">人員</div>
       <button class="nav-item" onclick="showPage('employees')" id="nav-employees"><span class="nav-icon">👷</span>従業員</button>
       <button class="nav-item" onclick="showPage('admins')" id="nav-admins"><span class="nav-icon">🔐</span>管理者</button>
+      <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🌴</span>有給管理</button>
     </nav>
     <div class="sidebar-footer">
       <div class="user-info">
@@ -339,11 +340,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理'};
+  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines};
+  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave};
   if(pages[name]) await pages[name]();
 }
 
@@ -1243,6 +1244,125 @@ async function saveAdmin(){const adminId=_editAdminId;
   }
   if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageAdmins();
+}
+
+// ===== PAID LEAVE PAGE =====
+let _leaveGrantEmpId=null;
+
+async function pageLeave(){
+  const[grantsRes,approvedRes,pendingRes]=await Promise.all([
+    sb.from('paid_leave_grants').select('*'),
+    sb.from('paid_leave_requests').select('*').eq('status','approved'),
+    sb.from('paid_leave_requests').select('*').eq('status','pending').order('leave_date',{ascending:true})
+  ]);
+  const grants=grantsRes.data||[];
+  const approved=approvedRes.data||[];
+  const pending=pendingRes.data||[];
+  const workers=_employees.filter(e=>e.role!=='admin');
+
+  function leaveTypeLabel(t){return t==='full'?'全日':t==='am'?'午前休':'午後休';}
+
+  const empRows=workers.map(e=>{
+    const granted=grants.filter(g=>g.employee_id===e.id).reduce((s,g)=>s+Number(g.granted),0);
+    const used=approved.filter(r=>r.employee_id===e.id).reduce((s,r)=>s+(r.leave_type==='full'?1:0.5),0);
+    const rem=granted-used;
+    const remColor=rem<=2?'var(--orange)':'var(--green)';
+    return `<tr>
+      <td style="font-weight:500;">${escapeHtml(e.name)}</td>
+      <td class="money">${granted}日</td>
+      <td class="money">${used}日</td>
+      <td class="money" style="color:${remColor};font-weight:600;">${rem}日</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openLeaveGrantModal('${e.id}')">付与設定</button></td>
+    </tr>`;
+  }).join('');
+
+  const pendingRows=pending.length===0
+    ?'<tr><td colspan="5" class="empty">未処理の申請はありません</td></tr>'
+    :pending.map(r=>{
+      const emp=_employees.find(e=>e.id===r.employee_id);
+      return `<tr>
+        <td style="font-weight:500;">${escapeHtml(emp?.name||'不明')}</td>
+        <td style="font-family:'DM Mono',monospace;">${escapeHtml(r.leave_date)}</td>
+        <td>${leaveTypeLabel(r.leave_type)}</td>
+        <td style="color:var(--text2);font-size:12px;">${escapeHtml(r.reason||'-')}</td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="reviewLeaveRequest('${r.id}','approved')">承認</button>
+          <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="reviewLeaveRequest('${r.id}','rejected')">却下</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+  const html=`
+    <div class="card">
+      <div class="card-header"><div class="card-title">従業員別 有給状況</div></div>
+      <table class="data-table">
+        <thead><tr><th>従業員</th><th>付与日数</th><th>使用日数</th><th>残日数</th><th>操作</th></tr></thead>
+        <tbody>${empRows||'<tr><td colspan="5" class="empty">従業員がいません</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">未処理の有給申請</div></div>
+      <table class="data-table">
+        <thead><tr><th>従業員</th><th>取得日</th><th>種別</th><th>理由</th><th>操作</th></tr></thead>
+        <tbody>${pendingRows}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function reviewLeaveRequest(reqId,status){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const label=status==='approved'?'承認':'却下';
+  if(!confirm('この申請を'+label+'しますか？'))return;
+  const{error}=await sb.rpc('review_paid_leave_request_secure',{
+    session_token_input:token,
+    id_input:reqId,
+    status_input:status
+  });
+  if(error){alert(label+'に失敗しました：'+error.message);return;}
+  await pageLeave();
+}
+
+function openLeaveGrantModal(empId){
+  _leaveGrantEmpId=empId;
+  const emp=_employees.find(e=>e.id===empId);
+  const empName=emp?escapeHtml(emp.name):'不明';
+  const body=`
+    <div class="form-grid">
+      <div class="form-group form-full">
+        <label class="form-label">年度</label>
+        <input type="number" class="form-input" id="lg-year" value="${new Date().getFullYear()}">
+      </div>
+      <div class="form-group form-full">
+        <label class="form-label">付与日数</label>
+        <input type="number" class="form-input" id="lg-days" value="10" step="0.5" min="0">
+      </div>
+    </div>`;
+  openModal('🌴 '+empName+' の有給付与',body,`
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveLeaveGrant()">保存</button>`);
+}
+
+async function saveLeaveGrant(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const year=parseInt(document.getElementById('lg-year').value);
+  const days=parseFloat(document.getElementById('lg-days').value);
+  if(!year||isNaN(days)){alert('年度と日数を入力してください');return;}
+  const btn=document.querySelector('#modalFooter .btn-primary');
+  if(btn)btn.disabled=true;
+  const{error}=await sb.rpc('save_paid_leave_grant_secure',{
+    session_token_input:token,
+    employee_id_input:_leaveGrantEmpId,
+    year_input:year,
+    days_input:days
+  });
+  if(btn)btn.disabled=false;
+  if(error){alert('保存に失敗しました：'+error.message);return;}
+  closeModal();
+  await pageLeave();
+  alert(year+'年度 '+days+'日を付与しました');
 }
 
 window.addEventListener('DOMContentLoaded',init);

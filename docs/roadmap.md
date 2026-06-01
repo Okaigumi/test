@@ -27,6 +27,16 @@
 - docs/db-migrations.md 整備：進行中、主要フェーズ記録済み
 - docs/sql 配下に各RPC SQLを保存済み
 
+### ローカルDBバックアップ基盤構築
+
+- scripts/backup-supabase.ps1 作成：完了
+- .env.backup.local.example 作成：完了
+- .gitignore 作成（backups/ / .env.backup.local 等を除外）：完了
+- docs/backup-policy.md 作成：完了
+- バックアップスクリプト作成（scripts/backup-supabase.ps1）：完了
+- 実バックアップ取得確認：完了
+- Supabase Storage photos バケットのバックアップ：未対応
+
 ## Phase 1：運用開始前チェック
 
 状態：進行中
@@ -130,15 +140,20 @@ notices.is_active を基本に表示・非表示を管理する。
 
 ## Phase 7：バックアップ・復旧
 
-状態：未着手
+状態：一部完了
 
-### やること
+### 完了
 
-- Supabaseバックアップ確認
+- ローカルDBバックアップ基盤構築（scripts/backup-supabase.ps1）
+- バックアップ方針ドキュメント（docs/backup-policy.md）
+- 実バックアップ取得確認
+
+### 残り
+
+- Supabase Storage photos バケットのバックアップ方式決定
 - 重要テーブルのCSVエクスポート手順整理
-- 誤操作時の復旧手順作成
+- 復旧手順作成
 - 復旧テスト
-- 運用前後のバックアップ方針決定
 
 ## Phase 8：業務効率化
 

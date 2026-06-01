@@ -1,0 +1,8 @@
+# バックアップファイル（本番DB情報を含む可能性があるためGit管理外）
+backups/
+*.dump
+*.backup
+*.sql.zip
+
+# ローカル環境変数（接続文字列・パスワードを含む）
+.env.backup.local

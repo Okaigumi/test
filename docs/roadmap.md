@@ -119,19 +119,27 @@
 
 ## Phase 6：admin-app.html 改善
 
-状態：未着手
+状態：一部完了
+
+### 完了
+
+- 有給管理メニュー追加（admin-app.html サイドバー）
+- 既存RPC（review_paid_leave_request_secure / save_paid_leave_grant_secure）を admin_sessions 対応に修正
+- 本番動作確認済み（従業員別有給状況・承認/却下・有給付与）
 
 ### 候補
 
-- 有給管理メニュー追加
 - お知らせ管理メニュー追加
 - 社員権限管理の見やすさ改善
 - テストデータ整理用の管理UI
 
-### 有給管理
+### 有給管理（追加済み）
 
-現在は index.html の「有給」タブに集約されている。
-将来的には admin-app.html に「有給管理」メニューとして移す。
+admin-app.html の「有給管理」メニューで以下が操作できる。
+- 従業員別有給状況の確認（付与・使用・残日数）
+- 未処理申請の承認・却下（review_paid_leave_request_secure）
+- 従業員への有給付与（save_paid_leave_grant_secure）
+- index.html 側の既存有給機能は残存（削除していない）
 
 ### お知らせ管理
 
@@ -172,7 +180,6 @@ notices.is_active を基本に表示・非表示を管理する。
 ## 保留・改善候補
 
 - favicon.ico 追加
-- admin-app.html に有給管理追加
 - admin-app.html にお知らせ管理追加
 - notices の掲載開始日・終了日管理
 - staging / production 環境分離

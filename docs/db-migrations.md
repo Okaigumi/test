@@ -788,3 +788,59 @@ REVOKE UPDATE ON public.machine_locations FROM anon, authenticated;
 
 - `acf57e6` Add machine location secure RPC SQL
 - `bdf101c` Use secure RPC for machine locations
+
+---
+
+## 2026-06-01 paid_leave RPC admin_sessions 対応 + admin-app.html 有給管理追加
+
+### 目的
+
+- admin-app.html から有給申請の承認/却下・有給付与を操作できるようにする
+- admin-app.html は `admin_sessions`（genka_admins ユーザー）でセッション管理するが、既存の有給 RPC は `employee_sessions` 固定だった
+- `CREATE OR REPLACE` で 2 本の RPC を修正し、`admin_sessions` 経由のセッションも受け付けるよう拡張した
+- 直接書き込み権限は一切復活させていない
+
+### 修正したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/paid-leave-admin-session-compatible-rpc.sql` | 有給 RPC 2 本の `admin_sessions` 対応修正（Supabase SQL Editor で実行済み） |
+
+### 修正したRPC
+
+| RPC名 | 変更内容 |
+|---|---|
+| `review_paid_leave_request_secure` | `employee_sessions` で管理者が確認できない場合、`admin_sessions + genka_admins` でも検証するよう拡張。`reviewed_by`: `employee_sessions` 経由は `employees.id`、`admin_sessions` 経由は `NULL` |
+| `save_paid_leave_grant_secure` | 同上の検証拡張。`v_employee_id` を書き込みに使わないため `NULL` 問題なし |
+
+- 引数名・戻り値は既存仕様から変更なし
+- `SECURITY DEFINER`, `SET search_path = public, extensions` は維持
+- `GRANT EXECUTE TO anon, authenticated` は維持
+- `paid_leave_requests` / `paid_leave_grants` の直接 INSERT/UPDATE 権限は復活させていない
+
+### フロント変更（admin-app.html のみ）
+
+| 変更内容 | 詳細 |
+|---|---|
+| サイドバーに「有給管理」追加 | 人員セクションに 🌴 有給管理（`nav-leave`）を追加 |
+| `showPage()` に `leave` を追加 | `titles` / `pages` マップに `leave` エントリ追加 |
+| `pageLeave()` 追加 | 従業員別有給状況テーブル + 未処理申請テーブルを表示 |
+| `reviewLeaveRequest(reqId, status)` 追加 | 承認/却下 → `review_paid_leave_request_secure` |
+| `openLeaveGrantModal(empId)` 追加 | 付与モーダル。名前は `_employees` から取得（onclick 属性への埋め込みを避けた安全設計） |
+| `saveLeaveGrant()` 追加 | 付与保存 → `save_paid_leave_grant_secure` |
+
+- `index.html` 側の既存有給機能は変更・削除していない
+- `genka-app.html` は変更していない
+- Storage / photos 関連は変更していない
+
+### 確認結果
+
+- `review_paid_leave_request_secure` / `save_paid_leave_grant_secure`: 存在確認済み
+- `paid_leave_requests` / `paid_leave_grants` の anon/authenticated 直接 INSERT/UPDATE: 0件（変化なし）
+- 本番 `admin-app.html` で有給管理画面表示・付与・承認/却下・ログアウト確認済み
+- `index.html` 側への状態反映確認済み
+- Console 赤エラーなし
+
+### 関連コミット
+
+- `b74897f` Add paid leave management to admin app

@@ -219,6 +219,8 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
       <button class="nav-item" onclick="showPage('employees')" id="nav-employees"><span class="nav-icon">👷</span>従業員</button>
       <button class="nav-item" onclick="showPage('admins')" id="nav-admins"><span class="nav-icon">🔐</span>管理者</button>
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🌴</span>有給管理</button>
+      <div class="nav-section">お知らせ</div>
+      <button class="nav-item" onclick="showPage('notices')" id="nav-notices"><span class="nav-icon">📢</span>お知らせ管理</button>
     </nav>
     <div class="sidebar-footer">
       <div class="user-info">
@@ -340,11 +342,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理'};
+  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave};
+  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices};
   if(pages[name]) await pages[name]();
 }
 
@@ -1363,6 +1365,153 @@ async function saveLeaveGrant(){
   closeModal();
   await pageLeave();
   alert(year+'年度 '+days+'日を付与しました');
+}
+
+// ===== NOTICES PAGE =====
+let _editingNoticeId=null;
+let _noticesCache=[];
+
+async function pageNotices(){
+  _editingNoticeId=null;
+  await loadNotices();
+}
+
+async function loadNotices(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data,error}=await sb.rpc('list_notices_admin_secure',{session_token_input:token});
+  if(error){alert('お知らせの取得に失敗しました：'+error.message);return;}
+  _noticesCache=data||[];
+  renderNoticesPage();
+}
+
+function renderNoticesPage(){
+  const notices=_noticesCache;
+  const isEditing=_editingNoticeId!==null;
+  const editingNotice=isEditing?notices.find(n=>n.id===_editingNoticeId):null;
+
+  const formTitle=isEditing?'📝 お知らせを編集':'➕ 新規お知らせ';
+  const currentContent=editingNotice?escapeHtml(editingNotice.content):'';
+  const currentActive=editingNotice?editingNotice.is_active:true;
+
+  const rows=notices.length===0
+    ?'<tr><td colspan="4" class="empty">お知らせはありません</td></tr>'
+    :notices.map(n=>{
+      const badge=n.is_active
+        ?'<span style="color:var(--green);font-weight:600;">公開</span>'
+        :'<span style="color:var(--text3);">非公開</span>';
+      const d=new Date(n.created_at);
+      const dateStr=d.getFullYear()+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0');
+      const preview=escapeHtml(n.content.length>60?n.content.slice(0,60)+'…':n.content);
+      const toggleLabel=n.is_active?'非公開にする':'公開にする';
+      const rowStyle=_editingNoticeId===n.id?' style="background:var(--accent-light);"':'';
+      return `<tr${rowStyle}>
+        <td style="white-space:pre-wrap;word-break:break-all;">${preview}</td>
+        <td style="text-align:center;">${badge}</td>
+        <td style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${dateStr}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="editNotice('${n.id}')">編集</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:4px;" onclick="toggleNoticeActive('${n.id}')">${toggleLabel}</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+  const html=`
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="card-title">${formTitle}</div>
+        ${isEditing?'<button class="btn btn-secondary btn-sm" onclick="resetNoticeForm()">新規作成に戻る</button>':''}
+      </div>
+      <div style="padding:16px;">
+        <div class="form-group form-full" style="margin-bottom:12px;">
+          <label class="form-label">お知らせ本文</label>
+          <textarea class="form-input" id="notice-content" rows="4" placeholder="お知らせの内容を入力してください" style="resize:vertical;">${currentContent}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label class="form-label">公開状態</label>
+          <div style="display:flex;gap:16px;margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+              <input type="radio" name="notice-active" value="true" ${currentActive?'checked':''}> 公開
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+              <input type="radio" name="notice-active" value="false" ${!currentActive?'checked':''}> 非公開
+            </label>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveNotice()">${isEditing?'更新する':'追加する'}</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">お知らせ一覧（${notices.length}件）</div></div>
+      <table class="data-table">
+        <thead><tr><th>本文</th><th style="text-align:center;">状態</th><th>作成日</th><th>操作</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('pageContent').innerHTML=html;
+}
+
+async function saveNotice(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+
+  const contentEl=document.getElementById('notice-content');
+  const content=contentEl?contentEl.value.trim():'';
+  if(!content){alert('お知らせ本文を入力してください');return;}
+
+  const activeEl=document.querySelector('input[name="notice-active"]:checked');
+  const isActive=activeEl?activeEl.value==='true':true;
+
+  const btn=document.querySelector('#pageContent .btn-primary');
+  if(btn)btn.disabled=true;
+
+  let error;
+  if(_editingNoticeId){
+    ({error}=await sb.rpc('update_notice_secure',{
+      session_token_input:token,
+      id_input:_editingNoticeId,
+      content_input:content,
+      is_active_input:isActive
+    }));
+  }else{
+    ({error}=await sb.rpc('create_notice_secure',{
+      session_token_input:token,
+      content_input:content,
+      is_active_input:isActive
+    }));
+  }
+
+  if(btn)btn.disabled=false;
+  if(error){alert('保存に失敗しました：'+error.message);return;}
+  _editingNoticeId=null;
+  await loadNotices();
+}
+
+function editNotice(id){
+  _editingNoticeId=id;
+  renderNoticesPage();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function toggleNoticeActive(id){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const notice=_noticesCache.find(n=>n.id===id);
+  if(!notice)return;
+  const{error}=await sb.rpc('update_notice_secure',{
+    session_token_input:token,
+    id_input:id,
+    content_input:notice.content,
+    is_active_input:!notice.is_active
+  });
+  if(error){alert('更新に失敗しました：'+error.message);return;}
+  await loadNotices();
+}
+
+function resetNoticeForm(){
+  _editingNoticeId=null;
+  renderNoticesPage();
 }
 
 window.addEventListener('DOMContentLoaded',init);

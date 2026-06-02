@@ -42,6 +42,26 @@
 - Storage photos バックアップスクリプト作成（scripts/backup-supabase-storage.ps1）：完了
 - Storage photos バックアップ実行確認（OK=2 / ERROR=0）：完了
 
+### 正式ドメイン設定（Vercelカスタムドメイン）
+
+- ドメイン取得（okaigumi.co.jp）：完了（XServer）
+- Vercel にカスタムドメイン system.okaigumi.co.jp を追加：完了
+- XServer DNS に system の CNAME レコードを追加：完了
+- DNS反映・Vercel側確認：完了
+- 正式URLでの動作確認：完了
+
+**正式URL（社内案内はこちらに統一）**
+
+| 用途 | URL |
+|------|-----|
+| 従業員用（日報） | https://system.okaigumi.co.jp/ |
+| 管理者用 | https://system.okaigumi.co.jp/admin |
+| 原価管理用 | https://system.okaigumi.co.jp/genka |
+
+- `/admin` と `/genka` は `vercel.json` の rewrite により短縮URLとして動作
+- DNS は XServer で管理
+- 旧URL `test-zeta-snowy-21.vercel.app` は開発・確認用として引き続き使用可能
+
 ## Phase 1：運用開始前チェック
 
 状態：進行中
@@ -61,9 +81,17 @@
 
 ### URL整理
 
-- 従業員用：https://test-zeta-snowy-21.vercel.app/
-- 管理者用：https://test-zeta-snowy-21.vercel.app/admin-app.html
-- 原価管理用：https://test-zeta-snowy-21.vercel.app/genka-app.html
+**正式URL（社内案内はこちらに統一）**
+
+- 従業員用：https://system.okaigumi.co.jp/
+- 管理者用：https://system.okaigumi.co.jp/admin
+- 原価管理用：https://system.okaigumi.co.jp/genka
+
+**開発・確認用URL（旧Vercel URL）**
+
+- https://test-zeta-snowy-21.vercel.app/
+- https://test-zeta-snowy-21.vercel.app/admin-app.html
+- https://test-zeta-snowy-21.vercel.app/genka-app.html
 
 ## Phase 2：小規模運用開始
 

@@ -23,9 +23,11 @@ Node.js と npx がインストールされていない場合、スクリプト�
 
 **DBバックアップだけでは写真データは保護されません。**
 
-写真データを保護する場合は Supabase ダッシュボードから Storage バケットを別途エクスポートするか、Supabase の有料プランのバックアップ機能を利用してください。
+写真バックアップは `scripts/backup-supabase-storage.ps1` で実施します（詳細は後述）。
 
 ## バックアップ手順
+
+### 1. DBバックアップ（毎回実施）
 
 1. `.env.backup.local` が存在することを確認する
    - 存在しない場合は `.env.backup.local.example` を参考に作成する
@@ -38,6 +40,62 @@ Node.js と npx がインストールされていない場合、スクリプト�
 
 4. `backups\YYYYMMDD-HHMMSS.sql.zip` が作成されたことを確認する
 5. zip ファイルを安全な場所（外付けHDD・クラウドストレージ等）に保存する
+
+### 2. Storage 写真バックアップ（DBバックアップの後に実施）
+
+**方式：** `reports.photo_urls` に記録済みの Public URL をもとにダウンロードする。
+
+**対象：** 日報 (`reports`) テーブルの `photo_urls` に記録された写真のみ。  
+Storage 上の孤立ファイル（アップロード成功後に DB 更新が失敗した例外ケース）は対象外。
+
+**秘密情報：** service role key は使用しない。Supabase Storage List API は使用しない。  
+`.env.backup.local` への追加設定は不要（写真は Public URL から直接ダウンロードできる）。
+
+#### 実行手順
+
+1. DBバックアップを完了し、`backups\YYYYMMDD-HHMMSS.sql.zip` が存在することを確認する
+2. PowerShell を開き、プロジェクトルートへ移動する
+3. スクリプトを実行する
+
+```powershell
+.\scripts\backup-supabase-storage.ps1 -SqlZipPath .\backups\YYYYMMDD-HHMMSS.sql.zip
+```
+
+4. 結果を確認する
+
+```
+OK=N  SKIPPED=0  ERROR=0
+Complete : backups\YYYYMMDD-HHMMSS-storage.zip
+```
+
+#### 出力
+
+| ファイル | 内容 |
+|---------|------|
+| `backups\YYYYMMDD-HHMMSS-storage.zip` | zip（ERROR=0 の場合のみ作成） |
+| zip内 `photos\{reportId}\{filename}.jpg` | 日報に紐付いた写真ファイル |
+| zip内 `storage-backup-manifest.csv` | ファイル単位のダウンロード結果（OK / SKIPPED / ERROR） |
+| zip内 `backup-info.txt` | 実行日時・件数サマリー |
+
+#### ERROR が出た場合
+
+- zip は作成されず、`backups\YYYYMMDD-HHMMSS-storage\` フォルダが残る
+- 残ったフォルダの `storage-backup-manifest.csv` の ERROR 行を確認する
+- 原因を解消してから再実行する
+- 再実行時は通常、新しいタイムスタンプのバックアップフォルダが作成され、全 URL を再取得する
+- 同じ出力フォルダ内に同名ファイルが既に存在する場合のみ SKIPPED として記録される
+- 不要になった ERROR フォルダは内容確認後に手動削除する
+- スクリプトは `exit 1` で終了する
+
+#### 再実行時の注意
+
+- 同じ出力フォルダ内に同名ファイルがある場合のみ上書きせず SKIPPED として記録する
+- 通常の再実行では新しいタイムスタンプフォルダへ全件ダウンロードされる
+- `-DataSqlPath` を使えば zip 展開済みの `data.sql` を直接指定することもできる
+
+```powershell
+.\scripts\backup-supabase-storage.ps1 -DataSqlPath .\path\to\data.sql
+```
 
 ## バックアップのタイミング
 
@@ -55,7 +113,7 @@ Node.js と npx がインストールされていない場合、スクリプト�
 
 | 対象 | 理由 |
 |------|------|
-| `backups/` | 本番DBの全データを含む |
+| `backups/` | 本番DBの全データ・日報写真を含む |
 | `.env.backup.local` | DB接続文字列・パスワードを含む |
 | `*.dump` / `*.backup` / `*.sql.zip` | 同上 |
 

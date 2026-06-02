@@ -35,7 +35,12 @@
 - docs/backup-policy.md 作成：完了
 - バックアップスクリプト作成（scripts/backup-supabase.ps1）：完了
 - 実バックアップ取得確認：完了
-- Supabase Storage photos バケットのバックアップ：未対応
+
+### Storage photos バックアップ
+
+- Supabase Storage photos バケットのバックアップ方式決定：完了
+- Storage photos バックアップスクリプト作成（scripts/backup-supabase-storage.ps1）：完了
+- Storage photos バックアップ実行確認（OK=2 / ERROR=0）：完了
 
 ## Phase 1：運用開始前チェック
 
@@ -155,10 +160,12 @@ notices.is_active を基本に表示・非表示を管理する。
 - ローカルDBバックアップ基盤構築（scripts/backup-supabase.ps1）
 - バックアップ方針ドキュメント（docs/backup-policy.md）
 - 実バックアップ取得確認
+- Supabase Storage photos バケットのバックアップ方式決定（reports.photo_urls Public URL 方式）
+- Storage photos バックアップスクリプト作成（scripts/backup-supabase-storage.ps1）
+- Storage photos バックアップ実行確認（OK=2 / ERROR=0）
 
 ### 残り
 
-- Supabase Storage photos バケットのバックアップ方式決定
 - 重要テーブルのCSVエクスポート手順整理
 - 復旧手順作成
 - 復旧テスト

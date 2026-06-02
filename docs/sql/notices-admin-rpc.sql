@@ -152,7 +152,11 @@ BEGIN
   END IF;
 
   -- Confirm the target notice exists before updating
-  IF NOT EXISTS (SELECT 1 FROM public.notices WHERE id = id_input) THEN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.notices n
+    WHERE n.id = id_input
+  ) THEN
     RAISE EXCEPTION 'Notice not found';
   END IF;
 

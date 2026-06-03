@@ -844,3 +844,71 @@ REVOKE UPDATE ON public.machine_locations FROM anon, authenticated;
 ### 関連コミット
 
 - `b74897f` Add paid leave management to admin app
+
+---
+
+## 2026-06-02 notices 管理RPC追加 + 権限整理
+
+### 目的
+
+- admin-app.html からお知らせの新規作成・編集・公開/非公開切替ができるよう notices 管理 RPC を追加する
+- notices への直接 INSERT / UPDATE を `anon` / `authenticated` から削除し、RPC 経由のみに限定する
+- anon / authenticated の SELECT は `index.html` のお知らせ表示用に残す
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/notices-admin-rpc.sql` | notices 管理 RPC 3本 |
+
+### 作成したRPC
+
+| RPC名 | 用途 |
+|---|---|
+| `list_notices_admin_secure(session_token_input)` | お知らせ一覧取得（非公開含む全件）。管理者セッション検証付き |
+| `create_notice_secure(session_token_input, ...)` | お知らせ INSERT。管理者セッション検証付き |
+| `update_notice_secure(session_token_input, id_input, ...)` | お知らせ UPDATE。管理者セッション検証付き |
+
+- 全 RPC: `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = public, extensions`
+- セッション検証: `admin_sessions` テーブルで `token_hash` 照合
+- `GRANT EXECUTE TO anon, authenticated`
+
+### 削除した権限
+
+```sql
+REVOKE INSERT     ON public.notices FROM anon, authenticated;
+REVOKE UPDATE     ON public.notices FROM anon, authenticated;
+REVOKE DELETE     ON public.notices FROM anon, authenticated;
+REVOKE TRUNCATE   ON public.notices FROM anon, authenticated;
+REVOKE REFERENCES ON public.notices FROM anon, authenticated;
+REVOKE TRIGGER    ON public.notices FROM anon, authenticated;
+```
+
+### 残した権限
+
+- `anon` / `authenticated` の `notices` SELECT は **残存**
+  - `index.html` の従業員向けお知らせ表示（`is_active = true` 絞り込み）で使用
+
+### バグ修正
+
+#### update_notice_secure の id ambiguous エラー修正（コミット `1909c0b`）
+
+`UPDATE public.notices SET ... WHERE id = id_input` の記述で PostgreSQL が `id` をカラムと引数の両方に解釈し `ERROR: column reference "id" is ambiguous` が発生した。`public.notices` に別名 `n` を付け、`n.id = id_input` と明示して解消。
+
+### 確認結果
+
+- RPC 3本: 存在確認済み
+- anon / authenticated に RPC EXECUTE 権限あり
+- `notices` の anon/authenticated INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER: 0件
+- `notices` SELECT は anon/authenticated に残存（index.html 表示用）
+- 本番 `https://system.okaigumi.co.jp/admin` で以下を確認済み：
+  - お知らせ管理メニュー表示
+  - お知らせ一覧表示
+  - 公開/非表示切替
+  - 本文編集
+  - 従業員画面（index.html）への表示/非表示反映
+
+### 関連コミット
+
+- `acf24c6` Add admin notice management
+- `1909c0b` Fix notice update RPC id reference

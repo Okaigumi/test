@@ -2,7 +2,7 @@
 
 ## 現在地
 
-- 最新コミット：cd3ebfa Document machine location RPC hardening
+- 最新コミット：1909c0b Fix notice update RPC id reference
 - 現在フェーズ：運用開始前チェック
 - 運用状態：小規模運用開始直前
 - 作業PC運用：平日は仕事用PC、それ以外は自宅PC。GitHub経由で同期。
@@ -159,10 +159,14 @@
 - 有給管理メニュー追加（admin-app.html サイドバー）
 - 既存RPC（review_paid_leave_request_secure / save_paid_leave_grant_secure）を admin_sessions 対応に修正
 - 本番動作確認済み（従業員別有給状況・承認/却下・有給付与）
+- お知らせ管理メニュー追加（admin-app.html サイドバー）
+- notices 管理 RPC 3本追加（list_notices_admin_secure / create_notice_secure / update_notice_secure）
+- notices の anon/authenticated 直接書き込み権限削除（INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER を REVOKE）
+- anon/authenticated の SELECT は index.html のお知らせ表示用に残存
+- 本番動作確認済み（https://system.okaigumi.co.jp/admin）
 
 ### 候補
 
-- お知らせ管理メニュー追加
 - 社員権限管理の見やすさ改善
 - テストデータ整理用の管理UI
 
@@ -174,10 +178,17 @@ admin-app.html の「有給管理」メニューで以下が操作できる。
 - 従業員への有給付与（save_paid_leave_grant_secure）
 - index.html 側の既存有給機能は残存（削除していない）
 
-### お知らせ管理
+### お知らせ管理（追加済み）
 
-notices.is_active を基本に表示・非表示を管理する。
-将来的には admin-app.html で新規作成・編集・非表示切替ができるようにする。
+admin-app.html の「お知らせ管理」メニューで以下が操作できる。
+- お知らせ一覧表示（非公開含む全件）
+- お知らせ新規作成（create_notice_secure）
+- 本文編集（update_notice_secure）
+- 公開/非公開切替（is_active による表示/非表示管理。物理削除は行わない）
+- 従業員画面（index.html）への反映確認
+
+削除機能は実装せず、`is_active = false` による非表示管理に統一。
+本番確認済み URL: https://system.okaigumi.co.jp/admin
 
 ## Phase 7：バックアップ・復旧
 
@@ -215,7 +226,6 @@ notices.is_active を基本に表示・非表示を管理する。
 ## 保留・改善候補
 
 - favicon.ico 追加
-- admin-app.html にお知らせ管理追加
 - notices の掲載開始日・終了日管理
 - staging / production 環境分離
 - 操作マニュアル作成

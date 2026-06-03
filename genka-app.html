@@ -972,14 +972,14 @@ async function loadData(){
             <div style="height:100%;width:${barW}%;background:white;border-radius:5px;transition:width .5s;"></div>
           </div>
           <div style="text-align:right;">
-            <button onclick="openBudgetModal('${selectedSiteId}','${escapeHtml(siteName)}')" style="font-size:11px;padding:5px 14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
+            <button onclick="openBudgetModal(this.dataset.siteId,this.dataset.siteName)" data-site-id="${selectedSiteId}" data-site-name="${escapeHtml(siteName)}" style="font-size:11px;padding:5px 14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:white;border-radius:20px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;" class="no-print">✏️ 予算を編集</button>
           </div>
         </div>`;
     }else{
       document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
         <div style="background:var(--surface2);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;">
           <div style="font-size:14px;color:var(--text2);margin-bottom:8px;">実行予算が未設定です</div>
-          <button onclick="openBudgetModal('${selectedSiteId}','${escapeHtml(siteName)}')" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
+          <button onclick="openBudgetModal(this.dataset.siteId,this.dataset.siteName)" data-site-id="${selectedSiteId}" data-site-name="${escapeHtml(siteName)}" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">📋 実行予算を設定する</button>
         </div>`;
     }
     hero.style.display='block';
@@ -1067,7 +1067,7 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={},
       </div>`
     :`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
         <span style="font-size:12px;color:var(--text3);">📋 実行予算未設定</span>
-        <button onclick="openBudgetModal('${sid}','${escapeHtml(site.name)}')" style="font-size:12px;padding:5px 12px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:500;" class="no-print">予算を設定する</button>
+        <button onclick="openBudgetModal(this.dataset.siteId,this.dataset.siteName)" data-site-id="${sid}" data-site-name="${escapeHtml(site.name)}" style="font-size:12px;padding:5px 12px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:500;" class="no-print">予算を設定する</button>
       </div>`;
 
     return `<div class="site-card print-card" style="${cardBorder}">
@@ -1076,7 +1076,7 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={},
           <div class="site-card-title">🏗️ ${escapeHtml(site.name)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.laborDays}人日 ｜ ダンプ${s.dumpTai}台 ｜ 警備員${s.guardPpl}人${hasInv?' ｜ 📄請求書あり':''}</div>
         </div>
-        ${budget>0?`<button onclick="openBudgetModal('${sid}','${escapeHtml(site.name)}')" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;flex-shrink:0;" class="no-print">予算編集</button>`:''}
+        ${budget>0?`<button onclick="openBudgetModal(this.dataset.siteId,this.dataset.siteName)" data-site-id="${sid}" data-site-name="${escapeHtml(site.name)}" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;flex-shrink:0;" class="no-print">予算編集</button>`:''}
       </div>
       ${budgetBlock}
       <div class="cost-breakdown">

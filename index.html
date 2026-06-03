@@ -1340,13 +1340,14 @@ async function copyFromYesterday(){
 
 function cancelEdit(){
   editingReportId=null;
-  state.selectedSites=[];state.materialQty={};state.selectedSubs=[];state.subMachines={};
+  state.selectedSites=[];state.materialQty={};state.selectedSubs=[];state.subMachines={};state.photos=[];
   document.getElementById('reportDate').value=localToday();
   document.getElementById('memo').value='';
+  document.getElementById('photoInput').value='';
   document.getElementById('editBanner').style.display='none';
   document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
   setWorkType('normal');
-  renderSiteChips();renderMaterialRows();
+  renderSiteChips();renderMaterialRows();renderPhotos();
 }
 
 // ===== SUBMIT =====
@@ -2170,7 +2171,7 @@ async function loadLeaveAdmin(){
     const rem=granted-used;
     const pct=granted>0?Math.round((rem/granted)*100):0;
     const color=rem<=2?'var(--warn)':'var(--accent)';
-    return `<div class="staff-item" onclick="openGrantModal('${e.id}','${escapeHtml(e.name)}')">
+    return `<div class="staff-item" onclick="openGrantModal(this.dataset.empId,this.dataset.empName)" data-emp-id="${e.id}" data-emp-name="${escapeHtml(e.name)}">
       <div class="staff-avatar">${escapeHtml(e.name.slice(0,2))}</div>
       <div class="staff-info">
         <div class="staff-name">${escapeHtml(e.name)}</div>

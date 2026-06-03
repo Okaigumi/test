@@ -2,7 +2,7 @@
 
 ## 現在地
 
-- 最新コミット：1909c0b Fix notice update RPC id reference
+- 最新実装コミット：8a0e811 Add notice attachment support
 - 現在フェーズ：運用開始前チェック
 - 運用状態：小規模運用開始直前
 - 作業PC運用：平日は仕事用PC、それ以外は自宅PC。GitHub経由で同期。
@@ -164,6 +164,14 @@
 - notices の anon/authenticated 直接書き込み権限削除（INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER を REVOKE）
 - anon/authenticated の SELECT は index.html のお知らせ表示用に残存
 - 本番動作確認済み（https://system.okaigumi.co.jp/admin）
+- お知らせ添付機能追加（画像・PDF 各1件）
+- notices に attachment_url / attachment_path / attachment_type / attachment_name / updated_at を追加
+- CHECK制約 notices_attachment_type_check 追加（NULL / image / pdf のみ）
+- 既存RPC 3本の戻り値を attachment 系カラム・updated_at 含む構成に拡張
+- 添付専用RPC 2本追加（update_notice_attachment_secure / delete_notice_attachment_secure）
+- Storage バケット notice-attachments 作成（public、INSERT-only policy）
+- admin-app.html・index.html に添付UI・表示実装
+- 本番動作確認済み（https://system.okaigumi.co.jp/admin・https://system.okaigumi.co.jp/）
 
 ### 候補
 
@@ -178,17 +186,31 @@ admin-app.html の「有給管理」メニューで以下が操作できる。
 - 従業員への有給付与（save_paid_leave_grant_secure）
 - index.html 側の既存有給機能は残存（削除していない）
 
-### お知らせ管理（追加済み）
+### お知らせ管理・添付（追加済み）
 
 admin-app.html の「お知らせ管理」メニューで以下が操作できる。
-- お知らせ一覧表示（非公開含む全件）
+- お知らせ一覧表示（非公開含む全件・添付有無アイコン付き）
 - お知らせ新規作成（create_notice_secure）
 - 本文編集（update_notice_secure）
 - 公開/非公開切替（is_active による表示/非表示管理。物理削除は行わない）
-- 従業員画面（index.html）への反映確認
+- 画像またはPDF 1件の添付（update_notice_attachment_secure）
+- 添付削除（delete_notice_attachment_secure によるDB上のNULL化のみ）
+- 添付差し替えは新ファイルを選んで保存すると上書き
 
-削除機能は実装せず、`is_active = false` による非表示管理に統一。
-本番確認済み URL: https://system.okaigumi.co.jp/admin
+index.html の従業員画面でのお知らせ表示：
+- 添付なし: 本文のみ（従来通り）
+- 画像添付: `width:100%; max-height:240px` のプレビュー。クリックで別タブ表示
+- PDF添付: 「📄 ファイル名」のボタン風リンク。クリックで別タブ表示
+
+Storage 設計：
+- バケット: `notice-attachments`（public）
+- path: `notices/{noticeId}/{timestamp}_{sanitized_filename}`
+- INSERT-only policy。DELETE policy は意図的に作成しない
+- 添付削除時は Storage ファイルを残し DB の attachment_* を NULL 化
+- 孤立ファイルは当面許容、必要に応じて手動整理
+
+お知らせ自体の削除機能は実装せず、`is_active = false` による非表示管理に統一。
+本番確認済み URL: https://system.okaigumi.co.jp/admin / https://system.okaigumi.co.jp/
 
 ## Phase 7：バックアップ・復旧
 

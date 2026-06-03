@@ -912,3 +912,124 @@ REVOKE TRIGGER    ON public.notices FROM anon, authenticated;
 
 - `acf24c6` Add admin notice management
 - `1909c0b` Fix notice update RPC id reference
+
+---
+
+## 2026-06-03 notices 添付機能追加（カラム追加・RPC拡張・Storage）
+
+### 目的
+
+- admin-app.html のお知らせ管理から画像またはPDFを1件添付できるようにする
+- 従業員画面 index.html でお知らせに画像プレビューまたはPDFリンクを表示する
+- notices テーブルに attachment 系カラムを追加し、Storage バケット `notice-attachments` を整備する
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/notice-attachments-rpc.sql` | notices カラム追加・CHECK 制約・RPC 5本再作成/追加・Storage policy |
+
+### notices テーブル追加カラム
+
+```sql
+ALTER TABLE public.notices
+  ADD COLUMN IF NOT EXISTS attachment_url  TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_path TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_type TEXT,
+  ADD COLUMN IF NOT EXISTS attachment_name TEXT,
+  ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ;
+```
+
+### CHECK 制約
+
+```sql
+ALTER TABLE public.notices
+  ADD CONSTRAINT notices_attachment_type_check
+  CHECK (attachment_type IS NULL OR attachment_type IN ('image', 'pdf'));
+```
+
+| 値 | 意味 |
+|---|---|
+| NULL | 添付なし |
+| 'image' | 画像（JPEG / PNG / WebP） |
+| 'pdf' | PDF |
+
+### 既存RPC 3本の戻り値拡張（DROP + CREATE）
+
+PostgreSQL では RETURNS TABLE の列構成変更に CREATE OR REPLACE が使えないため、DROP FUNCTION IF EXISTS + CREATE FUNCTION で再作成。GRANT EXECUTE も再付与。
+
+| RPC名 | 変更内容 |
+|---|---|
+| `list_notices_admin_secure` | 戻り値に attachment_url / path / type / name / updated_at を追加 |
+| `create_notice_secure` | 同上。INSERT 時に `updated_at = now()` を付与 |
+| `update_notice_secure` | 同上。UPDATE の SET に `updated_at = now()` を追加 |
+
+### 追加RPC 2本
+
+| RPC名 | 用途 |
+|---|---|
+| `update_notice_attachment_secure(session_token_input, id_input, ...)` | 添付保存・差し替え。`attachment_type` の値チェックあり。Storage アップロードはフロント側で先行実施 |
+| `delete_notice_attachment_secure(session_token_input, id_input)` | `attachment_*` カラムを NULL 化のみ。Storage 上のファイルは削除しない |
+
+- 全 RPC: `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = public, extensions`
+- セッション検証: `admin_sessions` テーブルで `token_hash` 照合
+- `GRANT EXECUTE TO anon, authenticated`（全 5 本）
+
+### Storage バケット設定（Supabase ダッシュボードで実施）
+
+| 項目 | 設定値 |
+|---|---|
+| バケット名 | `notice-attachments` |
+| 公開設定 | public bucket |
+| ファイルサイズ上限 | 10 MB |
+| 許可 MIME type | image/jpeg / image/png / image/webp / application/pdf |
+
+### Storage RLS policy
+
+| ポリシー | 内容 |
+|---|---|
+| `notice_attachments_insert` | anon に `notices/` prefix 配下への INSERT を許可 |
+| DELETE policy | 意図的に作成しない（public URL から path が判明した場合の第三者削除を防ぐため） |
+| SELECT policy | public bucket のため不要（作成しない） |
+
+### 添付削除の方針
+
+- `delete_notice_attachment_secure` は DB の `attachment_*` カラムを NULL 化するのみ
+- Storage 上のファイルは削除しない（孤立ファイルは当面許容）
+- 必要に応じて手動または管理スクリプトで整理する予定
+
+### フロント変更
+
+#### admin-app.html
+
+| 変更内容 | 詳細 |
+|---|---|
+| フォームに添付UI追加 | `input[type=file]`（accept: JPEG/PNG/WebP/PDF）、現在の添付プレビュー表示、削除ボタン |
+| 一覧テーブルに添付列追加 | 画像 / PDF のリンク表示、添付なしは `-` |
+| `saveNotice()` 拡張 | ファイル検証（MIME・サイズ）→ Storage upload → `getPublicUrl` → `update_notice_attachment_secure` |
+| `deleteNoticeAttachment(id)` 追加 | `delete_notice_attachment_secure` RPC のみ呼び出し。Storage remove は使用しない |
+
+#### index.html
+
+| 変更内容 | 詳細 |
+|---|---|
+| `escapeAttr()` 追加 | URL を href 属性に安全に埋め込むためのヘルパー（`escapeHtml` と同実装） |
+| `loadNotice()` 拡張 | `attachment_type` で画像 / PDF / 添付なしを分岐表示。画像は `width:100%; max-height:240px`、PDF はボタン風リンク |
+
+### 確認結果
+
+- notices テーブルに attachment 系カラム 5 本追加済み
+- `notices_attachment_type_check` 制約: 存在確認済み
+- RPC 5 本存在確認済み（list / create / update / update_attachment / delete_attachment）
+- anon / authenticated に RPC EXECUTE 権限: 10 件確認済み
+- `notices` の anon/authenticated SELECT: 残存（index.html 表示用）
+- `notice-attachments` バケット: public、INSERT-only policy
+- 本番 `https://system.okaigumi.co.jp/admin` で以下を確認済み：
+  - 画像添付・PDF添付・既存お知らせへの添付追加・添付削除・公開/非公開切替
+- 本番 `https://system.okaigumi.co.jp/` で以下を確認済み：
+  - 従業員画面での画像表示・PDF リンク表示
+- Console 重大エラーなし
+
+### 関連コミット
+
+- `8a0e811` Add notice attachment support

@@ -1394,8 +1394,20 @@ function renderNoticesPage(){
   const currentContent=editingNotice?escapeHtml(editingNotice.content):'';
   const currentActive=editingNotice?editingNotice.is_active:true;
 
+  // Current attachment display in form
+  let currentAttachmentHtml='<span style="color:var(--text3);font-size:12px;">添付なし</span>';
+  if(isEditing&&editingNotice?.attachment_url){
+    const url=escapeHtml(editingNotice.attachment_url);
+    const name=escapeHtml(editingNotice.attachment_name||'添付ファイル');
+    if(editingNotice.attachment_type==='image'){
+      currentAttachmentHtml=`<div style="margin-bottom:6px;"><a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="添付画像" style="max-height:80px;max-width:200px;border-radius:4px;border:1px solid var(--border);display:block;"></a><button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="deleteNoticeAttachment('${editingNotice.id}')">添付を削除</button></div>`;
+    }else if(editingNotice.attachment_type==='pdf'){
+      currentAttachmentHtml=`<div style="margin-bottom:6px;"><div style="font-size:13px;margin-bottom:4px;">📄 <a href="${url}" target="_blank" rel="noopener">${name}</a></div><button class="btn btn-secondary btn-sm" onclick="deleteNoticeAttachment('${editingNotice.id}')">添付を削除</button></div>`;
+    }
+  }
+
   const rows=notices.length===0
-    ?'<tr><td colspan="4" class="empty">お知らせはありません</td></tr>'
+    ?'<tr><td colspan="5" class="empty">お知らせはありません</td></tr>'
     :notices.map(n=>{
       const badge=n.is_active
         ?'<span style="color:var(--green);font-weight:600;">公開</span>'
@@ -1405,9 +1417,16 @@ function renderNoticesPage(){
       const preview=escapeHtml(n.content.length>60?n.content.slice(0,60)+'…':n.content);
       const toggleLabel=n.is_active?'非公開にする':'公開にする';
       const rowStyle=_editingNoticeId===n.id?' style="background:var(--accent-light);"':'';
+      let attachCell='-';
+      if(n.attachment_url){
+        const aUrl=escapeHtml(n.attachment_url);
+        const aLabel=n.attachment_type==='pdf'?'PDF':'画像';
+        attachCell=`<a href="${aUrl}" target="_blank" rel="noopener" style="font-size:12px;">${aLabel}</a>`;
+      }
       return `<tr${rowStyle}>
         <td style="white-space:pre-wrap;word-break:break-all;">${preview}</td>
         <td style="text-align:center;">${badge}</td>
+        <td style="text-align:center;">${attachCell}</td>
         <td style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${dateStr}</td>
         <td>
           <button class="btn btn-secondary btn-sm" onclick="editNotice('${n.id}')">編集</button>
@@ -1438,13 +1457,19 @@ function renderNoticesPage(){
             </label>
           </div>
         </div>
+        <div class="form-group form-full" style="margin-bottom:16px;">
+          <label class="form-label">添付ファイル（画像またはPDF・任意）</label>
+          ${currentAttachmentHtml}
+          <input type="file" id="notice-attachment" accept="image/jpeg,image/png,image/webp,application/pdf" style="display:block;margin-top:8px;font-size:13px;">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">画像 5MB / PDF 10MB まで。JPEG・PNG・WebP・PDF のみ可。</div>
+        </div>
         <button class="btn btn-primary" onclick="saveNotice()">${isEditing?'更新する':'追加する'}</button>
       </div>
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">お知らせ一覧（${notices.length}件）</div></div>
       <table class="data-table">
-        <thead><tr><th>本文</th><th style="text-align:center;">状態</th><th>作成日</th><th>操作</th></tr></thead>
+        <thead><tr><th>本文</th><th style="text-align:center;">状態</th><th style="text-align:center;">添付</th><th>作成日</th><th>操作</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1463,10 +1488,22 @@ async function saveNotice(){
   const activeEl=document.querySelector('input[name="notice-active"]:checked');
   const isActive=activeEl?activeEl.value==='true':true;
 
+  // File validation
+  const fileInput=document.getElementById('notice-attachment');
+  const file=fileInput?.files?.[0]||null;
+  if(file){
+    const allowed=['image/jpeg','image/png','image/webp','application/pdf'];
+    if(!allowed.includes(file.type)){alert('画像（JPEG/PNG/WebP）またはPDFのみ添付できます');return;}
+    const maxBytes=file.type==='application/pdf'?10*1024*1024:5*1024*1024;
+    if(file.size>maxBytes){alert(file.type==='application/pdf'?'PDFは10MBまでです':'画像は5MBまでです');return;}
+  }
+
   const btn=document.querySelector('#pageContent .btn-primary');
   if(btn)btn.disabled=true;
 
+  let noticeId=_editingNoticeId;
   let error;
+
   if(_editingNoticeId){
     ({error}=await sb.rpc('update_notice_secure',{
       session_token_input:token,
@@ -1475,15 +1512,36 @@ async function saveNotice(){
       is_active_input:isActive
     }));
   }else{
-    ({error}=await sb.rpc('create_notice_secure',{
+    let data;
+    ({data,error}=await sb.rpc('create_notice_secure',{
       session_token_input:token,
       content_input:content,
       is_active_input:isActive
     }));
+    if(!error&&data?.[0]?.id)noticeId=data[0].id;
+  }
+
+  if(error){if(btn)btn.disabled=false;alert('保存に失敗しました：'+error.message);return;}
+
+  // Upload attachment if file selected
+  if(file&&noticeId){
+    const sanitized=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const path=`notices/${noticeId}/${Date.now()}_${sanitized}`;
+    const{error:upErr}=await sb.storage.from('notice-attachments').upload(path,file,{contentType:file.type});
+    if(upErr){if(btn)btn.disabled=false;alert('ファイルのアップロードに失敗しました：'+upErr.message);return;}
+    const{data:urlData}=sb.storage.from('notice-attachments').getPublicUrl(path);
+    const{error:attErr}=await sb.rpc('update_notice_attachment_secure',{
+      session_token_input:token,
+      id_input:noticeId,
+      attachment_url_input:urlData.publicUrl,
+      attachment_path_input:path,
+      attachment_type_input:file.type==='application/pdf'?'pdf':'image',
+      attachment_name_input:file.name
+    });
+    if(attErr){if(btn)btn.disabled=false;alert('添付情報の保存に失敗しました：'+attErr.message);return;}
   }
 
   if(btn)btn.disabled=false;
-  if(error){alert('保存に失敗しました：'+error.message);return;}
   _editingNoticeId=null;
   await loadNotices();
 }
@@ -1512,6 +1570,18 @@ async function toggleNoticeActive(id){
 function resetNoticeForm(){
   _editingNoticeId=null;
   renderNoticesPage();
+}
+
+async function deleteNoticeAttachment(id){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  if(!confirm('添付を削除しますか？\nStorageのファイルは残りますが、従業員画面からは非表示になります。'))return;
+  const{error}=await sb.rpc('delete_notice_attachment_secure',{
+    session_token_input:token,
+    id_input:id
+  });
+  if(error){alert('添付の削除に失敗しました：'+error.message);return;}
+  await loadNotices();
 }
 
 window.addEventListener('DOMContentLoaded',init);

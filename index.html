@@ -821,6 +821,7 @@ let state={currentUser:null,sites:[],materials:[],subcontractors:[],selectedSite
 function toMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
 function fmtMins(m){if(m<=0)return '0h';const h=Math.floor(m/60),min=m%60;return min>0?`${h}h${min}m`:`${h}h`;}
 function escapeHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escapeAttr(s){return escapeHtml(s);}
 
 function calcTime(startStr,endStr){
   const s=toMins(startStr);
@@ -936,7 +937,21 @@ async function loadMaterials(){
 async function loadNotice(){
   const{data}=await sb.from('notices').select('*').eq('is_active',true).order('created_at',{ascending:false});
   if(data&&data.length>0){
-    document.getElementById('noticeText').innerHTML=data.map(n=>`<div style="padding:4px 0;border-bottom:1px solid #e8d88a;">${escapeHtml(n.content)}</div>`).join('').replace(/border-bottom:[^"]+(?="[^>]*><\/div>$)/,'');
+    document.getElementById('noticeText').innerHTML=data.map((n,i)=>{
+      const isLast=i===data.length-1;
+      const border=isLast?'':'border-bottom:1px solid #e8d88a;';
+      let attachHtml='';
+      if(n.attachment_url){
+        const url=escapeAttr(n.attachment_url);
+        if(n.attachment_type==='image'){
+          attachHtml=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="添付画像" style="width:100%;max-height:240px;object-fit:contain;border-radius:8px;margin-top:8px;display:block;"></a>`;
+        }else if(n.attachment_type==='pdf'){
+          const name=escapeHtml(n.attachment_name||'PDFを開く');
+          attachHtml=`<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-top:8px;padding:10px 14px;background:#f0f0f0;border-radius:8px;font-size:13px;color:#5a4000;text-decoration:none;">📄 ${name}</a>`;
+        }
+      }
+      return `<div style="padding:4px 0;${border}">${escapeHtml(n.content)}${attachHtml}</div>`;
+    }).join('');
     document.getElementById('noticeCard').style.display='block';
   }
 }

@@ -1033,3 +1033,107 @@ PostgreSQL では RETURNS TABLE の列構成変更に CREATE OR REPLACE が使�
 ### 関連コミット
 
 - `8a0e811` Add notice attachment support
+
+---
+
+## 2026-06-03 public.cost_entries テーブル削除
+
+### 目的
+
+未使用のまま残存していた `public.cost_entries` テーブルを物理削除する。
+
+### 削除理由
+
+以下のすべてを確認した上で削除を実施した。
+
+| 確認項目 | 結果 |
+|---|---|
+| データ行数 | 0 行 |
+| HTML コード参照（index.html / admin-app.html / genka-app.html） | 0 件 |
+| docs/sql/ 参照 | 0 件（`ce_delete` ポリシー削除履歴は 2026-05-28 の記録に存在するが、テーブル自体の SELECT/INSERT/UPDATE 参照はなし） |
+| scripts/ 参照 | 0 件 |
+| 外部キーによる参照（他テーブルから cost_entries を参照する FK） | なし |
+| VIEW からの参照 | なし |
+| FUNCTION / RPC からの参照 | なし |
+| TRIGGER | なし |
+| 旧設計由来と思われる未使用テーブル | 該当 |
+
+### 削除前バックアップ
+
+| ファイル | 内容 |
+|---|---|
+| `backups/20260603-163056.sql.zip` | DB フルバックアップ（roles / schema / data） |
+| `backups/20260603-163212-storage.zip` | Storage photos バックアップ |
+
+### 削除前の cost_entries 定義（バックアップより）
+
+```sql
+CREATE TABLE IF NOT EXISTS "public"."cost_entries" (
+    "id"          uuid        DEFAULT gen_random_uuid() NOT NULL,
+    "site_id"     uuid,
+    "report_date" date        NOT NULL,
+    "category"    text        NOT NULL,
+    "description" text,
+    "amount"      integer     DEFAULT 0 NOT NULL,
+    "created_at"  timestamptz DEFAULT now() NOT NULL
+);
+```
+
+- `site_id` → `public.sites(id)` への外部キー（自テーブルからのみ。被参照なし）
+- RLS 有効。ポリシー 3 件存在（`ce_read` / `ce_update` / `ce_write`）
+
+### 実行したSQL
+
+```sql
+DROP TABLE IF EXISTS public.cost_entries RESTRICT;
+```
+
+- `CASCADE` は使用しない
+- `RESTRICT` により、万一参照が残っていた場合はエラーで停止する設計
+
+### RLS ポリシーの扱い
+
+テーブル削除に伴い、以下のポリシーも自動削除された。
+
+| ポリシー名 | 種別 |
+|---|---|
+| `ce_read` | SELECT |
+| `ce_update` | UPDATE |
+| `ce_write` | INSERT |
+
+### GRANT の扱い
+
+以下の権限もテーブル削除に伴い自動削除された。
+
+```sql
+-- 削除前に存在していた権限（参考）
+GRANT SELECT, INSERT, UPDATE ON public.cost_entries TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.cost_entries TO authenticated;
+GRANT ALL ON public.cost_entries TO service_role;
+```
+
+### 削除後確認
+
+```sql
+-- テーブルが存在しないこと
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name = 'cost_entries';
+-- → 0 行
+
+-- OID が NULL であること
+SELECT to_regclass('public.cost_entries');
+-- → null
+
+-- ポリシーが存在しないこと
+SELECT policyname
+FROM pg_policies
+WHERE tablename = 'cost_entries';
+-- → 0 行
+```
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md` のみ（本エントリ追記）
+- HTML / scripts / backups / `.env.backup.local` は変更なし

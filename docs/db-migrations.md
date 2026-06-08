@@ -1137,3 +1137,121 @@ WHERE tablename = 'cost_entries';
 
 - `docs/db-migrations.md` のみ（本エントリ追記）
 - HTML / scripts / backups / `.env.backup.local` は変更なし
+
+---
+
+## 2026-06-08 集計出力機能 Phase 1-1 — 工事分類・発注者区分マスタ追加
+
+### 目的
+
+- 工事（現場）に「工事分類」を紐付けるための `site_categories` マスタを追加する
+- 発注者（会社）に「発注者区分」を紐付けるための `company_categories` マスタを追加する
+- CSV 集計出力機能における工事一覧（projects_summary.csv）の工事分類・発注者区分列に対応する
+- `sites` に `category_id`（工事分類）と `contract_amount`（請負金額）を追加する
+- `companies` に `category_id`（発注者区分）を追加する
+
+### 追加したテーブル
+
+#### `public.site_categories`（工事分類マスタ）
+
+| カラム | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | PRIMARY KEY |
+| `name` | text | 工事分類名（UNIQUE） |
+| `is_active` | boolean | 論理削除フラグ（DEFAULT true） |
+| `sort_order` | integer | 表示順（DEFAULT 0） |
+| `created_at` | timestamptz | 作成日時 |
+
+#### `public.company_categories`（発注者区分マスタ）
+
+| カラム | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | PRIMARY KEY |
+| `name` | text | 発注者区分名（UNIQUE） |
+| `is_active` | boolean | 論理削除フラグ（DEFAULT true） |
+| `sort_order` | integer | 表示順（DEFAULT 0） |
+| `created_at` | timestamptz | 作成日時 |
+
+### 追加したカラム
+
+| テーブル | カラム | 型 | 内容 |
+|---|---|---|---|
+| `public.sites` | `category_id` | uuid FK → site_categories(id)（NULL可）| 工事分類 |
+| `public.sites` | `contract_amount` | integer（NULL可）| 請負金額（円、税込/税抜の扱いは集計仕様で統一）|
+| `public.companies` | `category_id` | uuid FK → company_categories(id)（NULL可）| 発注者区分 |
+
+### 追加したインデックス
+
+| インデックス名 | 対象 | 用途 |
+|---|---|---|
+| `idx_sites_category_id` | `public.sites (category_id)` | 集計時の工事分類 JOIN 高速化 |
+| `idx_companies_category_id` | `public.companies (category_id)` | 集計時の発注者区分 JOIN 高速化 |
+
+### 初期データ
+
+**site_categories**
+
+| name | sort_order |
+|---|---|
+| 民間造成 | 1 |
+| 公共道路 | 2 |
+| 河川 | 3 |
+| 治山 | 4 |
+| 上下水道 | 5 |
+| 災害対応 | 6 |
+| その他 | 99 |
+
+**company_categories**
+
+| name | sort_order |
+|---|---|
+| 民間 | 1 |
+| 兵庫県 | 2 |
+| 西脇市 | 3 |
+| 国交省 | 4 |
+| 農政局 | 5 |
+| その他 | 99 |
+
+### RLS・権限
+
+| テーブル | SELECT | INSERT / UPDATE / DELETE |
+|---|---|---|
+| `site_categories` | anon / authenticated 許可 | anon / authenticated 禁止（ダッシュボード直接操作）|
+| `company_categories` | anon / authenticated 許可 | anon / authenticated 禁止（ダッシュボード直接操作）|
+
+- 両テーブルとも RLS 有効・SELECT ポリシー（`USING (true)`）を設定
+- ポリシーは `DROP POLICY IF EXISTS` → `CREATE POLICY` の形で再実行安全とした
+- `anon` / `authenticated` の INSERT / UPDATE / DELETE 権限なしを確認済み
+- 将来 admin-app.html に管理 UI を追加するタイミングで管理者セッション付き secure RPC を作成する
+
+### 税込/税抜の扱い
+
+- `sites.contract_amount` は「請負金額（円）」として保持する
+- 税込/税抜の統一は工程2（CSV出力RPC設計）で確定するため、本フェーズでは断定しない
+
+### 既存画面・RPC への影響
+
+- `index.html` / `admin-app.html` / `genka-app.html`：影響なし（新カラムは既存 payload に含まれず NULL のまま）
+- 既存 secure RPC 全般：影響なし（sites / companies の新カラムを参照しない）
+- `report_summary` VIEW：影響なし（sites / companies を JOIN していない）
+
+### 確認結果
+
+- `site_categories` / `company_categories` テーブル: 存在確認済み
+- 初期データ: site_categories 7 件 / company_categories 6 件 投入確認済み
+- `sites` に `category_id` / `contract_amount` 追加確認済み
+- `companies` に `category_id` 追加確認済み
+- `idx_sites_category_id` / `idx_companies_category_id` 作成確認済み
+- 両テーブル RLS 有効・SELECT ポリシー設定済み
+- `anon` / `authenticated` の書き込み権限: 0 件
+
+### 実行したSQL
+
+`docs/sql/phase1-schema-categories.sql`
+
+### ローカルファイル変更
+
+- `docs/sql/phase1-schema-categories.sql` 新規作成
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/roadmap.md`（集計出力機能 Phase 1-1 完了を追記）
+- HTML / scripts / backups / `.env.backup.local` は変更なし

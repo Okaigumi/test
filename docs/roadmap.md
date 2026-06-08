@@ -233,7 +233,7 @@ Storage 設計：
 
 ## Phase 8：業務効率化
 
-状態：未着手
+状態：一部着手（集計出力機能の設計開始）
 
 ### 候補
 
@@ -244,6 +244,33 @@ Storage 設計：
 - 日報集計
 - 材料・外注・重機集計
 - スマホUI改善
+
+### 集計出力機能（CSV出力 + ローカルHTMLビューア）
+
+方針・前提仕様：
+
+- MVPはCSV出力＋ローカルHTMLビューア
+- 工事年度は4月始まりの公共発注年度
+- 会社損益集計は将来RPC側で起点月パラメータ4または9により切替
+- 複数現場日報はsite_ids件数で均等按分
+- 現場なし日報は工事按分対象外
+- 発注者・工事分類はマスタ参照方式
+- 発注者はcompaniesの個社名とcompany_categoriesの発注者区分の二層構造
+- 出力RPCは将来、管理者セッション付きSECURITY DEFINER参照系RPCで実装する
+
+対象CSV：projects_summary.csv / project_cost_details.csv / attendance_details.csv / machine_details.csv
+
+#### Phase 1-1：スキーマ追加（完了）
+
+- `site_categories`（工事分類マスタ）新設：完了
+- `company_categories`（発注者区分マスタ）新設：完了
+- `sites` に `category_id` / `contract_amount` 追加：完了
+- `companies` に `category_id` 追加：完了
+- JOIN用インデックス（idx_sites_category_id / idx_companies_category_id）追加：完了
+- RLS SELECT policy 設定・書き込み権限なし確認：完了
+- 初期データ投入（site_categories 7件 / company_categories 6件）：完了
+- 記録：docs/db-migrations.md「2026-06-08 集計出力機能 Phase 1-1」
+- SQL：docs/sql/phase1-schema-categories.sql
 
 ## 保留・改善候補
 

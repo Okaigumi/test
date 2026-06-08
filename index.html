@@ -1466,7 +1466,7 @@ function renderHistory(data){
     return `<div class="report-item">
       <div class="report-item-header" onclick="showDetail(${i})">
         <div class="report-item-date">${r.report_date} <span style="font-size:11px;font-weight:400;color:var(--text3);">${r.start_time}〜${r.end_time}</span></div>
-        <div class="status-pill ${r.status==='confirmed'?'confirmed':'pending'}">${r.status==='confirmed'?'✓ 確認済':'⏳ 確認待'}</div>
+        <div class="status-pill ${r.status==='confirmed'?'confirmed':'pending'}">${r.status==='confirmed'?'✓ 確認済':'⏳ 提出済み'}</div>
       </div>
       <div onclick="showDetail(${i})">
         <div class="report-sites"><span class="report-site-tag">${siteNames||'現場なし'}</span></div>
@@ -1515,7 +1515,7 @@ function showDetail(i){
     <div class="modal-row"><span class="modal-key">🚚 大型ダンプ</span><span class="modal-val">${r.dump_count||0}台${r.dump_company?' ('+escapeHtml(r.dump_company)+')':''}</span></div>
     <div class="modal-row"><span class="modal-key">🦺 警備員</span><span class="modal-val">${r.guard_count||0}人</span></div>
     <div class="modal-row"><span class="modal-key">メモ</span><span class="modal-val">${escapeHtml(r.memo||'なし')}</span></div>
-    <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 確認待ち'}</span></div>
+    <div class="modal-row"><span class="modal-key">ステータス</span><span class="modal-val" style="color:${r.status==='confirmed'?'var(--success)':'var(--warn)'}">${r.status==='confirmed'?'✓ 確認済み':'⏳ 提出済み'}</span></div>
     <div style="margin-top:12px;"><div style="font-size:13px;font-weight:500;margin-bottom:6px;">📷 写真</div>${photoHtml}</div>
   `;
   document.getElementById('detailModal').classList.add('show');

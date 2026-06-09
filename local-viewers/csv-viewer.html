@@ -5,88 +5,163 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>岡井組 CSVビューア</title>
 <!--
-  ローカルHTML CSVビューア（Phase 2-4-1）
+  ローカルHTML CSVビューア（Phase 2-4-3：ページ切替型・白ベース業務帳票）
   - admin-app.html で出力したCSVをローカルで読み込んで確認する
-  - Supabase接続なし / 外部ライブラリなし / APIキーなし
+  - Supabase接続なし / 外部ライブラリなし / 外部CDNなし / APIキーなし
   - file:// で動くオフラインビューア
   - 仕様：docs/local-viewer-spec.md
+  - 集計ロジック（buildAttendanceReports 等）は二重計上防止を維持
 -->
 <style>
 :root{
-  --bg:#0F1117;--surface:#1A1D27;--surface2:#232736;--border:#2C3148;
-  --accent:#4F8EF7;--text:#F1F3F9;--text2:#8B91A8;--text3:#4A5068;
-  --green:#34D399;--orange:#FB923C;--red:#F87171;--radius:10px;
+  --bg:#ffffff;--ink:#1a1d23;--muted:#5b6270;--faint:#8a909c;
+  --line:#e1e4ea;--head:#f3f5f7;--accent:#1f3a8a;--accent-bg:#eaf0ff;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Segoe UI','Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px;line-height:1.5;}
-.wrap{max-width:1200px;margin:0 auto;}
-h1{font-size:20px;font-weight:700;margin-bottom:6px;}
-.desc{font-size:13px;color:var(--text2);margin-bottom:20px;}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;}
-.card-title{font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;}
-.file-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-input[type=file]{font-size:13px;color:var(--text);}
-.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
-.summary-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
-.summary-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;}
-.summary-val{font-size:15px;font-weight:600;margin-top:4px;word-break:break-all;}
-.msg{font-size:13px;padding:8px 12px;border-radius:6px;margin-bottom:6px;}
-.msg-warn{background:rgba(251,146,60,.12);color:var(--orange);border:1px solid rgba(251,146,60,.25);}
-.msg-error{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.25);}
-.msg-info{background:rgba(79,142,247,.12);color:var(--accent);border:1px solid rgba(79,142,247,.25);}
+body{background:var(--bg);color:var(--ink);line-height:1.55;
+  font-family:"Yu Gothic","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;}
+
+/* ===== ファイルパネル ===== */
+.file-panel{border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.file-panel h1{font-size:17px;font-weight:700;}
+.file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+input[type=file]{font:inherit;font-size:13px;}
+.file-name{font-size:12px;color:var(--muted);}
+.preload{padding:40px 24px;color:var(--muted);font-size:14px;}
+
+/* ===== レイアウト ===== */
+.app{display:flex;align-items:flex-start;}
+.viewer-nav{width:220px;flex-shrink:0;border-right:1px solid var(--line);
+  padding:16px 10px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.nav-title{font-size:12px;font-weight:700;color:var(--faint);letter-spacing:.05em;padding:4px 10px 12px;}
+.nav-btn{display:block;width:100%;text-align:left;border:none;background:none;font:inherit;font-size:13px;
+  color:var(--muted);padding:9px 12px;border-radius:6px;cursor:pointer;margin-bottom:2px;}
+.nav-btn:hover{background:var(--head);color:var(--ink);}
+.nav-btn.active{background:var(--accent-bg);color:var(--accent);font-weight:700;}
+.main{flex:1;min-width:0;padding:22px 28px;max-width:1080px;}
+
+/* ===== 帳票ヘッダ ===== */
+.report-header{margin-bottom:14px;}
+.report-header h1{font-size:20px;font-weight:700;margin-bottom:4px;}
+.rh-meta{font-size:12px;color:var(--muted);}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+.chip{border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted);}
+.chip b{color:var(--ink);font-weight:700;}
+
+/* ===== カード/汎用 ===== */
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 20px;margin-bottom:18px;box-shadow:none;}
+.card-title{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px;}
+.note{font-size:12px;color:var(--muted);margin-top:8px;}
 .hidden{display:none;}
-.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;}
+
+/* ===== サマリーグリッド ===== */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
+.summary-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+.summary-label{font-size:11px;color:var(--faint);}
+.summary-val{font-size:16px;font-weight:600;margin-top:4px;word-break:break-all;font-variant-numeric:tabular-nums;}
+
+/* ===== メッセージ ===== */
+.msg{font-size:13px;padding:8px 12px;border-radius:6px;margin-bottom:6px;border:1px solid;}
+.msg-warn{background:#fff8ee;color:#9a5b00;border-color:#f0d9b5;}
+.msg-error{background:#fdecec;color:#a32020;border-color:#f0c2c2;}
+
+/* ===== テーブル ===== */
+.table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
 table{border-collapse:collapse;width:100%;font-size:12px;}
-th{background:var(--surface2);color:var(--text3);text-align:left;padding:8px 10px;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border);position:sticky;top:0;}
-td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top;white-space:pre-wrap;word-break:break-word;max-width:340px;}
-tr:hover td{background:var(--surface2);}
-.note{font-size:12px;color:var(--text3);margin-top:8px;}
+th{background:var(--head);color:var(--ink);text-align:left;padding:8px 10px;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--line);}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;white-space:pre-wrap;word-break:break-word;max-width:340px;}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;}
+
+/* ===== 出勤簿ブロック ===== */
+.emp-block{margin-bottom:26px;}
+.emp-head{font-size:15px;font-weight:700;margin-bottom:4px;}
+.emp-meta{font-size:12px;color:var(--muted);margin-bottom:8px;}
+
+/* ===== ボタン ===== */
+.link-btn{border:none;background:none;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;padding:0;}
+.back-btn{border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;margin-bottom:14px;}
+.back-btn:hover{background:var(--head);}
+
+/* ===== 印刷 ===== */
+@media print{
+  @page{margin:12mm;}
+  .no-print,.viewer-nav,.file-panel{display:none!important;}
+  body{background:#fff;color:#000;}
+  .app{display:block;}
+  .main{max-width:none;padding:0;}
+  .card{border:none;box-shadow:none;padding:0;margin-bottom:14px;}
+  thead{display:table-header-group;}
+  .emp-block{break-inside:avoid;}
+  .viewer-page.hidden{display:none!important;}
+  a,.link-btn{color:#000;text-decoration:none;}
+  .table-scroll{overflow:visible;border:none;}
+  th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  tr.total-row td{background:#f0f0f0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<!-- ファイルパネル（印刷時は非表示） -->
+<div class="file-panel no-print">
   <h1>岡井組 CSVビューア</h1>
-  <div class="desc">admin画面から出力したCSVをローカルで読み込んで確認します。Supabaseには接続しません。</div>
-
-  <div class="card">
-    <div class="card-title">CSV読み込み</div>
-    <div class="file-row">
-      <input type="file" id="fileInput" accept=".csv,text/csv">
-      <span id="fileName" class="note"></span>
-    </div>
+  <div class="file-row">
+    <input type="file" id="fileInput" accept=".csv,text/csv">
+    <span id="fileName" class="file-name"></span>
   </div>
+</div>
 
-  <div id="errorCard" class="card hidden">
-    <div class="card-title">エラー</div>
-    <div id="errorArea"></div>
-  </div>
+<div id="preLoad" class="preload">CSVファイルを選択してください。admin画面から出力したCSVをローカルで確認できます（Supabaseには接続しません）。</div>
 
-  <div id="warnCard" class="card hidden">
-    <div class="card-title">警告</div>
-    <div id="warnArea"></div>
-  </div>
+<div id="viewerBody" class="hidden">
+  <div class="app">
+    <!-- ナビ（印刷時は非表示） -->
+    <aside class="viewer-nav no-print">
+      <div class="nav-title">メニュー</div>
+      <button class="nav-btn" data-page="dashboard" onclick="showViewerPage('dashboard')">ダッシュボード</button>
+      <button class="nav-btn" data-page="monthly" onclick="showViewerPage('monthly')">月別サマリー</button>
+      <button class="nav-btn" data-page="employee" onclick="showViewerPage('employee')">従業員別サマリー</button>
+      <button class="nav-btn" data-page="empMonthly" onclick="showViewerPage('empMonthly')">従業員別 月別出勤簿</button>
+      <button class="nav-btn" data-page="overall" onclick="showViewerPage('overall')">全体出勤簿</button>
+      <button class="nav-btn" data-page="raw" onclick="showViewerPage('raw')">生データ</button>
+      <button class="nav-btn" data-page="messages" onclick="showViewerPage('messages')">警告・エラー</button>
+    </aside>
 
-  <div id="summaryCard" class="card hidden">
-    <div class="card-title">読み込み結果サマリー</div>
-    <div id="summaryArea" class="summary-grid"></div>
-  </div>
+    <main class="main">
+      <!-- 帳票ヘッダ（印刷時も残す） -->
+      <div class="report-header" id="reportHeader"></div>
+      <!-- 画面用チップ（印刷時は非表示） -->
+      <div class="chips no-print" id="commonChips"></div>
 
-  <div id="attMonthlyCard" class="card hidden">
-    <div class="card-title">月別サマリー（出勤・労務）</div>
-    <div id="attMonthlyArea"></div>
-  </div>
+      <section id="page-dashboard" class="viewer-page">
+        <div class="card"><div class="card-title">ダッシュボード</div><div id="dashboardArea" class="summary-grid"></div></div>
+      </section>
 
-  <div id="attEmployeeCard" class="card hidden">
-    <div class="card-title">従業員別サマリー（出勤・労務）</div>
-    <div id="attEmployeeArea"></div>
-  </div>
+      <section id="page-monthly" class="viewer-page hidden">
+        <div class="card"><div class="card-title">月別サマリー（出勤・労務）</div><div id="monthlyArea"></div></div>
+      </section>
 
-  <div id="tableCard" class="card hidden">
-    <div class="card-title">データ（生テーブル）</div>
-    <div id="tableNote" class="note"></div>
-    <div class="table-scroll">
-      <table id="dataTable"><thead></thead><tbody></tbody></table>
-    </div>
+      <section id="page-employee" class="viewer-page hidden">
+        <div class="card"><div class="card-title">従業員別サマリー（出勤・労務）</div><div class="note no-print" style="margin-top:0;margin-bottom:10px;">従業員名をクリックすると、その従業員の月別出勤簿を表示します。</div><div id="employeeArea"></div></div>
+      </section>
+
+      <section id="page-empMonthly" class="viewer-page hidden">
+        <div class="card"><div class="card-title">従業員別 月別出勤簿</div><div id="empMonthlyArea"></div></div>
+      </section>
+
+      <section id="page-overall" class="viewer-page hidden">
+        <div class="card"><div class="card-title">全体出勤簿</div><div id="overallArea"></div></div>
+      </section>
+
+      <section id="page-raw" class="viewer-page hidden">
+        <div class="card"><div class="card-title">生データ</div><div id="rawNote" class="note"></div><div id="rawArea"></div></div>
+      </section>
+
+      <section id="page-messages" class="viewer-page hidden">
+        <div class="card"><div class="card-title">警告・エラー</div><div id="messagesArea"></div></div>
+      </section>
+    </main>
   </div>
 </div>
 
@@ -114,6 +189,11 @@ const CSV_TYPES={
 };
 
 const MAX_DISPLAY_ROWS=300;
+const VIEWER_PAGES=['dashboard','monthly','employee','empMonthly','overall','raw','messages'];
+
+// 読み込み状態
+let state={loaded:false,fileName:'',csvType:null,csvLabel:'',headers:[],rows:[],
+  reports:null,warnings:[],errors:[],minDate:'',maxDate:'',generatedAt:''};
 
 // ===== CSVパーサ（自前・文字単位ステートマシン） =====
 // 返り値：array of arrays（行 × セル）。クォート未閉じは例外。
@@ -168,210 +248,6 @@ function detectCsvType(headers){
   return{key:matches[0].key,label:matches[0].label,multiple:matches.length>1,matches};
 }
 
-// ===== DOMヘルパー（textContentのみ・innerHTML不使用） =====
-function clear(el){el.replaceChildren();}
-function addMsg(area,cls,text){
-  const d=document.createElement('div');
-  d.className='msg '+cls;
-  d.textContent=text;
-  area.appendChild(d);
-}
-function addSummary(area,label,val){
-  const item=document.createElement('div');
-  item.className='summary-item';
-  const l=document.createElement('div');
-  l.className='summary-label';l.textContent=label;
-  const v=document.createElement('div');
-  v.className='summary-val';v.textContent=val;
-  item.appendChild(l);item.appendChild(v);
-  area.appendChild(item);
-}
-
-// ===== 画面リセット =====
-function resetView(){
-  for(const id of ['errorCard','warnCard','summaryCard','attMonthlyCard','attEmployeeCard','tableCard']){
-    document.getElementById(id).classList.add('hidden');
-  }
-  clear(document.getElementById('errorArea'));
-  clear(document.getElementById('warnArea'));
-  clear(document.getElementById('summaryArea'));
-  clear(document.getElementById('attMonthlyArea'));
-  clear(document.getElementById('attEmployeeArea'));
-  clear(document.getElementById('dataTable').querySelector('thead'));
-  clear(document.getElementById('dataTable').querySelector('tbody'));
-  document.getElementById('tableNote').textContent='';
-}
-
-function showErrors(errors){
-  if(!errors.length)return;
-  const card=document.getElementById('errorCard');
-  const area=document.getElementById('errorArea');
-  card.classList.remove('hidden');
-  errors.forEach(e=>addMsg(area,'msg-error',e));
-}
-function showWarnings(warnings){
-  if(!warnings.length)return;
-  const card=document.getElementById('warnCard');
-  const area=document.getElementById('warnArea');
-  card.classList.remove('hidden');
-  warnings.forEach(w=>addMsg(area,'msg-warn',w));
-}
-
-// ===== メイン処理 =====
-function handleText(fileName,text){
-  resetView();
-  const warnings=[];
-  const errors=[];
-
-  // 文字化け検知
-  if(text.indexOf('�')!==-1){
-    warnings.push('文字化けの可能性があります。Excelで保存し直したShift_JIS CSVではなく、admin画面から出力したUTF-8 CSVを読み込んでください。');
-  }
-
-  // パース
-  let matrix;
-  try{
-    matrix=parseCsvToMatrix(text);
-  }catch(err){
-    errors.push(err.code==='UNCLOSED_QUOTE'?'クォートが閉じていません。':('CSVの解析に失敗しました：'+err.message));
-    showErrors(errors);
-    showWarnings(warnings);
-    return;
-  }
-
-  // 空CSV / ヘッダなし
-  if(matrix.length===0){
-    errors.push('CSVが空です。ヘッダ行がありません。');
-    showErrors(errors);
-    showWarnings(warnings);
-    return;
-  }
-
-  // ヘッダ（トリムしてBOM残り対策）
-  const headers=matrix[0].map(h=>h.trim());
-  if(headers.length===0||headers.every(h=>h==='')){
-    errors.push('ヘッダ行がありません。');
-    showErrors(errors);
-    showWarnings(warnings);
-    return;
-  }
-
-  // CSV種別判定
-  const detected=detectCsvType(headers);
-  if(detected.key===null){
-    errors.push('未知のCSV形式です。admin画面から出力したCSVを選択してください。');
-    showErrors(errors);
-    showWarnings(warnings);
-    return;
-  }
-  if(detected.multiple){
-    const labels=detected.matches.map(m=>m.label).join(' / ');
-    warnings.push('複数のCSV種別に一致しました（'+labels+'）。必須列数が最も多い「'+detected.label+'」として扱います。');
-  }
-  const csvType=detected.key;
-  const csvLabel=detected.label;
-
-  // データ行 → オブジェクト配列
-  const dataMatrix=matrix.slice(1);
-  let colCountMismatch=0;
-  let hasExtra=false;
-  const rows=dataMatrix.map(cells=>{
-    const obj={};
-    headers.forEach((h,idx)=>{obj[h]=idx<cells.length?cells[idx]:'';});
-    if(cells.length<headers.length)colCountMismatch++;
-    if(cells.length>headers.length){
-      colCountMismatch++;hasExtra=true;
-      for(let k=headers.length;k<cells.length;k++)obj['__extra_'+(k-headers.length+1)]=cells[k];
-    }
-    return obj;
-  });
-  if(colCountMismatch>0){
-    warnings.push('データ行の列数がヘッダ列数と一致しない行が'+colCountMismatch+'件あります。不足列は空文字として扱います。'+(hasExtra?'超過列は __extra_N として保持しています。':''));
-  }
-
-  // attendance_details：report_id ピボット（警告件数に反映するためサマリー描画より前に実行）
-  let attReports=null;
-  if(csvType==='attendance_details'){
-    const built=buildAttendanceReports(rows);
-    attReports=built.reports;
-    built.warnings.forEach(w=>warnings.push(w));
-  }
-
-  // サマリー
-  const summaryArea=document.getElementById('summaryArea');
-  document.getElementById('summaryCard').classList.remove('hidden');
-  const displayCount=Math.min(rows.length,MAX_DISPLAY_ROWS);
-  addSummary(summaryArea,'ファイル名',fileName);
-  addSummary(summaryArea,'CSV種別',csvLabel+'（'+csvType+'）');
-  addSummary(summaryArea,'ヘッダ列数',String(headers.length));
-  addSummary(summaryArea,'データ行数',String(rows.length));
-  addSummary(summaryArea,'表示行数',String(displayCount));
-  addSummary(summaryArea,'警告件数',String(warnings.length));
-  addSummary(summaryArea,'エラー件数',String(errors.length));
-
-  // attendance_details 簡易情報（集計サマリーはPhase 2-4-2で実装）
-  if(csvType==='attendance_details'&&rows.length>0){
-    const dates=rows.map(r=>r['report_date']).filter(v=>v!=='');
-    const minDate=dates.length?dates.reduce((a,b)=>a<b?a:b):'';
-    const maxDate=dates.length?dates.reduce((a,b)=>a>b?a:b):'';
-    const reportIds=new Set(rows.map(r=>r['report_id']).filter(v=>v!==''));
-    const empIds=new Set(rows.map(r=>r['employee_id']).filter(v=>v!==''));
-    addSummary(summaryArea,'最小 report_date',minDate||'（なし）');
-    addSummary(summaryArea,'最大 report_date',maxDate||'（なし）');
-    addSummary(summaryArea,'report_id ユニーク数',String(reportIds.size));
-    addSummary(summaryArea,'employee_id ユニーク数',String(empIds.size));
-  }
-
-  // 出勤簿サマリー（attendance_details のみ。他CSVはサマリーカード非表示のまま）
-  if(csvType==='attendance_details'&&attReports){
-    renderAttendanceSummaries(attReports);
-  }
-
-  // 警告・エラー表示
-  showWarnings(warnings);
-  showErrors(errors);
-
-  // 生テーブル（textContentで安全に描画）
-  renderTable(headers,rows);
-}
-
-function renderTable(headers,rows){
-  const tableCard=document.getElementById('tableCard');
-  const note=document.getElementById('tableNote');
-  const thead=document.getElementById('dataTable').querySelector('thead');
-  const tbody=document.getElementById('dataTable').querySelector('tbody');
-  tableCard.classList.remove('hidden');
-
-  if(rows.length===0){
-    note.textContent='データ0件です。';
-  }else if(rows.length>MAX_DISPLAY_ROWS){
-    note.textContent='全'+rows.length+'件のうち先頭'+MAX_DISPLAY_ROWS+'行のみ表示しています。';
-  }else{
-    note.textContent='全'+rows.length+'件を表示しています。';
-  }
-
-  // ヘッダ行
-  const trh=document.createElement('tr');
-  headers.forEach(h=>{
-    const th=document.createElement('th');
-    th.textContent=h;
-    trh.appendChild(th);
-  });
-  thead.appendChild(trh);
-
-  // データ行（最大300行）
-  const limit=Math.min(rows.length,MAX_DISPLAY_ROWS);
-  for(let i=0;i<limit;i++){
-    const tr=document.createElement('tr');
-    headers.forEach(h=>{
-      const td=document.createElement('td');
-      td.textContent=rows[i][h]!==undefined?rows[i][h]:'';
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  }
-}
-
 // ===== 数値・表示ヘルパー =====
 function toNumber(v){
   if(v===null||v===undefined||v==='')return 0;
@@ -395,6 +271,32 @@ function formatNumber(v,digits){
   const parts=fixed.split('.');
   const frac=parts[1].replace(/0+$/,'');
   return frac?parts[0]+'.'+frac:parts[0];
+}
+function formatReportStatus(status){
+  const map={pending:'提出済み',confirmed:'確認済み',approved:'承認済み',rejected:'差戻し'};
+  return map[status]||status||'';
+}
+function formatMonthLabel(ym){
+  const m=/^(\d{4})-(\d{2})$/.exec(ym);
+  if(!m)return ym;
+  return m[1]+'年'+String(Number(m[2]))+'月';
+}
+function nowStamp(){
+  const d=new Date();const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+
+// ===== DOMヘルパー（textContentのみ・innerHTML不使用） =====
+function clear(el){el.replaceChildren();}
+function noteEl(text){const d=document.createElement('div');d.className='note';d.textContent=text;return d;}
+function addMsg(area,cls,text){
+  const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;area.appendChild(d);
+}
+function addSummary(area,label,val){
+  const item=document.createElement('div');item.className='summary-item';
+  const l=document.createElement('div');l.className='summary-label';l.textContent=label;
+  const v=document.createElement('div');v.className='summary-val';v.textContent=val;
+  item.appendChild(l);item.appendChild(v);area.appendChild(item);
 }
 
 // ===== attendance_details: report_id ピボット（Layer 2 reports 生成） =====
@@ -491,7 +393,7 @@ function buildEmployeeAttendanceSummary(reports){
   reports.forEach(rep=>{
     const key=rep.employee_id||('name:'+rep.employee_name);
     let a=map.get(key);
-    if(!a){a={employee_name:rep.employee_name,daySet:new Set(),reportSet:new Set(),normal_mins:0,overtime_mins:0,labor_days:0,labor_cost:0};map.set(key,a);}
+    if(!a){a={employee_id:rep.employee_id,employee_name:rep.employee_name,daySet:new Set(),reportSet:new Set(),normal_mins:0,overtime_mins:0,labor_days:0,labor_cost:0};map.set(key,a);}
     a.daySet.add(rep.report_date);
     a.reportSet.add(rep.report_id);
     a.normal_mins+=rep.normal_mins;
@@ -500,72 +402,382 @@ function buildEmployeeAttendanceSummary(reports){
     a.labor_cost+=rep.labor_cost_total;
   });
   const arr=Array.from(map.values()).map(a=>({
-    employee_name:a.employee_name,work_days:a.daySet.size,report_count:a.reportSet.size,
+    employee_id:a.employee_id,employee_name:a.employee_name,work_days:a.daySet.size,report_count:a.reportSet.size,
     normal_mins:a.normal_mins,overtime_mins:a.overtime_mins,labor_days:a.labor_days,labor_cost:a.labor_cost
   }));
   arr.sort((x,y)=>x.employee_name<y.employee_name?-1:(x.employee_name>y.employee_name?1:0));
   return arr;
 }
 
-// ===== サマリーテーブル描画（textContentで安全に） =====
+// ===== 出勤簿 日別ブロック生成（overall / empMonthly 共通） =====
+// reports（Layer2）のみ使用。normal_mins/overtime_mins は report単位値。
+const DAILY_COLS=[
+  {label:'日付',cls:'',fmt:r=>r.report_date},
+  {label:'現場名',cls:'',fmt:r=>r.site_names.join('・')},
+  {label:'開始',cls:'',fmt:r=>r.start_time},
+  {label:'終了',cls:'',fmt:r=>r.end_time},
+  {label:'通常',cls:'num',fmt:r=>formatMinutes(r.normal_mins)},
+  {label:'残業',cls:'num',fmt:r=>formatMinutes(r.overtime_mins)},
+  {label:'人工',cls:'num',fmt:r=>formatNumber(r.labor_days_total,2)},
+  {label:'労務費',cls:'num',fmt:r=>formatMoney(r.labor_cost_total)},
+  {label:'状態',cls:'',fmt:r=>formatReportStatus(r.report_status)},
+  {label:'メモ',cls:'',fmt:r=>r.memo}
+];
+
+function buildAttendanceBlock(headingText,reportList){
+  // 並び：report_date 昇順 → start_time 昇順 → report_id 昇順
+  const list=reportList.slice().sort((a,b)=>{
+    if(a.report_date!==b.report_date)return a.report_date<b.report_date?-1:1;
+    if(a.start_time!==b.start_time)return a.start_time<b.start_time?-1:1;
+    return a.report_id<b.report_id?-1:(a.report_id>b.report_id?1:0);
+  });
+  const dateSet=new Set(),reportSet=new Set();
+  let sN=0,sO=0,sD=0,sC=0;
+  list.forEach(r=>{dateSet.add(r.report_date);reportSet.add(r.report_id);sN+=r.normal_mins;sO+=r.overtime_mins;sD+=r.labor_days_total;sC+=r.labor_cost_total;});
+
+  const block=document.createElement('div');block.className='emp-block';
+  const head=document.createElement('div');head.className='emp-head';head.textContent=headingText;block.appendChild(head);
+  const meta=document.createElement('div');meta.className='emp-meta';
+  meta.textContent='出勤日数：'+dateSet.size+'日　稼働件数：'+reportSet.size+'件　通常時間：'+formatMinutes(sN)+'　残業時間：'+formatMinutes(sO)+'　人工：'+formatNumber(sD,2)+'　労務費：'+formatMoney(sC)+'円';
+  block.appendChild(meta);
+
+  const scroll=document.createElement('div');scroll.className='table-scroll';
+  const table=document.createElement('table');
+  const thead=document.createElement('thead');const trh=document.createElement('tr');
+  DAILY_COLS.forEach(c=>{const th=document.createElement('th');th.textContent=c.label;if(c.cls)th.className=c.cls;trh.appendChild(th);});
+  thead.appendChild(trh);table.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  list.forEach(r=>{const tr=document.createElement('tr');DAILY_COLS.forEach(c=>{const td=document.createElement('td');td.textContent=c.fmt(r);if(c.cls)td.className=c.cls;tr.appendChild(td);});tbody.appendChild(tr);});
+
+  // 合計行（通常・残業・人工・労務費）
+  const totals={'通常':formatMinutes(sN),'残業':formatMinutes(sO),'人工':formatNumber(sD,2),'労務費':formatMoney(sC)};
+  const trt=document.createElement('tr');trt.className='total-row';
+  DAILY_COLS.forEach((c,idx)=>{const td=document.createElement('td');if(idx===0)td.textContent='合計';else if(totals[c.label]!==undefined)td.textContent=totals[c.label];else td.textContent='';if(c.cls)td.className=c.cls;trt.appendChild(td);});
+  tbody.appendChild(trt);
+
+  table.appendChild(tbody);scroll.appendChild(table);block.appendChild(scroll);
+  return block;
+}
+
+// ===== サマリーテーブル描画（textContent・列ごとにnumクラス対応） =====
 function renderSummaryTable(container,columns,dataArr){
   clear(container);
-  const scroll=document.createElement('div');
-  scroll.className='table-scroll';
+  const scroll=document.createElement('div');scroll.className='table-scroll';
   const table=document.createElement('table');
-  const thead=document.createElement('thead');
-  const trh=document.createElement('tr');
-  columns.forEach(c=>{const th=document.createElement('th');th.textContent=c.label;trh.appendChild(th);});
-  thead.appendChild(trh);
-  table.appendChild(thead);
+  const thead=document.createElement('thead');const trh=document.createElement('tr');
+  columns.forEach(c=>{const th=document.createElement('th');th.textContent=c.label;if(c.cls)th.className=c.cls;trh.appendChild(th);});
+  thead.appendChild(trh);table.appendChild(thead);
   const tbody=document.createElement('tbody');
   if(dataArr.length===0){
-    const tr=document.createElement('tr');
-    const td=document.createElement('td');
-    td.colSpan=columns.length;td.textContent='データ0件です。';
-    tr.appendChild(td);tbody.appendChild(tr);
+    const tr=document.createElement('tr');const td=document.createElement('td');
+    td.colSpan=columns.length;td.textContent='データ0件です。';tr.appendChild(td);tbody.appendChild(tr);
   }else{
     dataArr.forEach(row=>{
       const tr=document.createElement('tr');
       columns.forEach(c=>{
         const td=document.createElement('td');
-        td.textContent=c.fmt?c.fmt(row[c.key],row):String(row[c.key]);
+        if(c.cls)td.className=c.cls;
+        if(c.render)c.render(td,row);
+        else td.textContent=c.fmt?c.fmt(row[c.key],row):String(row[c.key]);
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
   }
-  table.appendChild(tbody);
-  scroll.appendChild(table);
-  container.appendChild(scroll);
+  table.appendChild(tbody);scroll.appendChild(table);container.appendChild(scroll);
 }
 
-function renderAttendanceSummaries(reports){
-  const monthly=buildMonthlyAttendanceSummary(reports);
-  const byEmp=buildEmployeeAttendanceSummary(reports);
-  const monthlyCols=[
+// ===== ページ切替 =====
+function showViewerPage(pageName){
+  VIEWER_PAGES.forEach(p=>{
+    const sec=document.getElementById('page-'+p);
+    if(sec)sec.classList.toggle('hidden',p!==pageName);
+  });
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===pageName));
+}
+
+// ===== 従業員名クリック → 従業員別 月別出勤簿 =====
+function showEmployeeMonthlyAttendance(employeeId){
+  renderEmployeeMonthlyAttendance(employeeId);
+  showViewerPage('empMonthly');
+}
+
+function renderEmployeeMonthlyAttendance(employeeId){
+  const area=document.getElementById('empMonthlyArea');
+  clear(area);
+  const back=document.createElement('button');
+  back.className='back-btn no-print';
+  back.textContent='← 従業員別サマリーに戻る';
+  back.addEventListener('click',()=>showViewerPage('employee'));
+  area.appendChild(back);
+
+  const reps=(state.reports||[]).filter(r=>r.employee_id===employeeId);
+  if(reps.length===0){area.appendChild(noteEl('対象の従業員データがありません。'));return;}
+
+  const empName=reps[0].employee_name||'(名前なし)';
+  const title=document.createElement('div');
+  title.className='emp-head';title.style.fontSize='17px';title.style.marginBottom='12px';
+  title.textContent=empName+' 出勤簿';
+  area.appendChild(title);
+
+  // 月ごとにグループ化（report_date.slice(0,7)）
+  const monthMap=new Map();
+  reps.forEach(r=>{
+    const ym=(r.report_date&&r.report_date.length>=7)?r.report_date.slice(0,7):'(不明)';
+    if(!monthMap.has(ym))monthMap.set(ym,[]);
+    monthMap.get(ym).push(r);
+  });
+  const months=Array.from(monthMap.keys()).sort((a,b)=>a<b?-1:(a>b?1:0));
+  months.forEach(ym=>{
+    area.appendChild(buildAttendanceBlock(formatMonthLabel(ym),monthMap.get(ym)));
+  });
+}
+
+// ===== 各ページ描画 =====
+function renderReportHeader(){
+  const rh=document.getElementById('reportHeader');clear(rh);
+  const h=document.createElement('h1');h.textContent='岡井組 CSVビューア';rh.appendChild(h);
+  const meta=document.createElement('div');meta.className='rh-meta';
+  const period=(state.minDate||state.maxDate)?(state.minDate+' 〜 '+state.maxDate):'—';
+  meta.textContent='CSV種別：'+(state.csvLabel||'—')+'　対象期間：'+period+'　出力日時：'+state.generatedAt;
+  rh.appendChild(meta);
+}
+
+function renderCommonChips(){
+  const c=document.getElementById('commonChips');clear(c);
+  const period=(state.minDate||state.maxDate)?(state.minDate+' 〜 '+state.maxDate):'—';
+  const data=[
+    ['ファイル名',state.fileName],
+    ['CSV種別',state.csvLabel||'—'],
+    ['データ行数',String(state.rows.length)],
+    ['対象期間',period],
+    ['警告件数',String(state.warnings.length)]
+  ];
+  data.forEach(([label,val])=>{
+    const chip=document.createElement('div');chip.className='chip';
+    const b=document.createElement('b');b.textContent=label+'：';
+    chip.appendChild(b);chip.appendChild(document.createTextNode(val));
+    c.appendChild(chip);
+  });
+}
+
+function renderDashboard(){
+  const area=document.getElementById('dashboardArea');clear(area);
+  const period=(state.minDate||state.maxDate)?(state.minDate+' 〜 '+state.maxDate):'—';
+  addSummary(area,'CSV種別',state.csvLabel||'—');
+  addSummary(area,'データ行数',String(state.rows.length));
+  if(state.csvType==='attendance_details'&&state.reports){
+    const reps=state.reports;
+    const empSet=new Set();let sN=0,sO=0,sD=0,sC=0;
+    reps.forEach(r=>{if(r.employee_id)empSet.add(r.employee_id);sN+=r.normal_mins;sO+=r.overtime_mins;sD+=r.labor_days_total;sC+=r.labor_cost_total;});
+    addSummary(area,'report件数',String(reps.length));
+    addSummary(area,'従業員数',String(empSet.size));
+    addSummary(area,'対象期間',period);
+    addSummary(area,'通常時間合計',formatMinutes(sN));
+    addSummary(area,'残業時間合計',formatMinutes(sO));
+    addSummary(area,'人工合計',formatNumber(sD,2));
+    addSummary(area,'労務費合計',formatMoney(sC)+' 円');
+  }
+  addSummary(area,'警告件数',String(state.warnings.length));
+  addSummary(area,'エラー件数',String(state.errors.length));
+}
+
+function renderMonthlyPage(){
+  const area=document.getElementById('monthlyArea');clear(area);
+  if(state.csvType!=='attendance_details'||!state.reports){area.appendChild(noteEl('このCSVではサマリー未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  const monthly=buildMonthlyAttendanceSummary(state.reports);
+  const cols=[
     {key:'month',label:'月'},
-    {key:'employees',label:'従業員数'},
-    {key:'work_days',label:'出勤日数'},
-    {key:'report_count',label:'稼働件数'},
-    {key:'normal_mins',label:'通常時間',fmt:v=>formatMinutes(v)},
-    {key:'overtime_mins',label:'残業時間',fmt:v=>formatMinutes(v)},
-    {key:'labor_days',label:'人工合計',fmt:v=>formatNumber(v,2)},
-    {key:'labor_cost',label:'労務費合計',fmt:v=>formatMoney(v)}
+    {key:'employees',label:'従業員数',cls:'num'},
+    {key:'work_days',label:'出勤日数',cls:'num'},
+    {key:'report_count',label:'稼働件数',cls:'num'},
+    {key:'normal_mins',label:'通常時間',cls:'num',fmt:v=>formatMinutes(v)},
+    {key:'overtime_mins',label:'残業時間',cls:'num',fmt:v=>formatMinutes(v)},
+    {key:'labor_days',label:'人工合計',cls:'num',fmt:v=>formatNumber(v,2)},
+    {key:'labor_cost',label:'労務費合計',cls:'num',fmt:v=>formatMoney(v)}
   ];
-  const empCols=[
-    {key:'employee_name',label:'従業員'},
-    {key:'work_days',label:'出勤日数'},
-    {key:'report_count',label:'稼働件数'},
-    {key:'normal_mins',label:'通常時間',fmt:v=>formatMinutes(v)},
-    {key:'overtime_mins',label:'残業時間',fmt:v=>formatMinutes(v)},
-    {key:'labor_days',label:'人工合計',fmt:v=>formatNumber(v,2)},
-    {key:'labor_cost',label:'労務費合計',fmt:v=>formatMoney(v)}
+  renderSummaryTable(area,cols,monthly);
+}
+
+function renderEmployeePage(){
+  const area=document.getElementById('employeeArea');clear(area);
+  if(state.csvType!=='attendance_details'||!state.reports){area.appendChild(noteEl('このCSVではサマリー未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  const data=buildEmployeeAttendanceSummary(state.reports);
+  const cols=[
+    {label:'従業員',render:(td,row)=>{
+      const btn=document.createElement('button');btn.className='link-btn';btn.textContent=row.employee_name||'(名前なし)';
+      btn.addEventListener('click',()=>showEmployeeMonthlyAttendance(row.employee_id));
+      td.appendChild(btn);
+    }},
+    {key:'work_days',label:'出勤日数',cls:'num'},
+    {key:'report_count',label:'稼働件数',cls:'num'},
+    {key:'normal_mins',label:'通常時間',cls:'num',fmt:v=>formatMinutes(v)},
+    {key:'overtime_mins',label:'残業時間',cls:'num',fmt:v=>formatMinutes(v)},
+    {key:'labor_days',label:'人工合計',cls:'num',fmt:v=>formatNumber(v,2)},
+    {key:'labor_cost',label:'労務費合計',cls:'num',fmt:v=>formatMoney(v)}
   ];
-  document.getElementById('attMonthlyCard').classList.remove('hidden');
-  document.getElementById('attEmployeeCard').classList.remove('hidden');
-  renderSummaryTable(document.getElementById('attMonthlyArea'),monthlyCols,monthly);
-  renderSummaryTable(document.getElementById('attEmployeeArea'),empCols,byEmp);
+  renderSummaryTable(area,cols,data);
+}
+
+function renderOverallPage(){
+  const area=document.getElementById('overallArea');clear(area);
+  if(state.csvType!=='attendance_details'||!state.reports){area.appendChild(noteEl('このCSVでは出勤簿未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  if(state.reports.length===0){area.appendChild(noteEl('データ0件です。'));return;}
+  // 従業員ごとにグループ化（従業員名昇順）
+  const groups=new Map();
+  state.reports.forEach(rep=>{
+    const key=rep.employee_id||('name:'+rep.employee_name);
+    let g=groups.get(key);
+    if(!g){g={employee_name:rep.employee_name,reports:[]};groups.set(key,g);}
+    g.reports.push(rep);
+  });
+  const groupArr=Array.from(groups.values()).sort((a,b)=>a.employee_name<b.employee_name?-1:(a.employee_name>b.employee_name?1:0));
+  groupArr.forEach(g=>{area.appendChild(buildAttendanceBlock(g.employee_name||'(名前なし)',g.reports));});
+}
+
+function renderEmpMonthlyDefault(){
+  const area=document.getElementById('empMonthlyArea');clear(area);
+  if(state.csvType!=='attendance_details'){area.appendChild(noteEl('このCSVでは出勤簿未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  area.appendChild(noteEl('「従業員別サマリー」で従業員名をクリックすると、その従業員の月別出勤簿を表示します。'));
+}
+
+function renderRawPage(){
+  const note=document.getElementById('rawNote');
+  const area=document.getElementById('rawArea');clear(area);
+  const rows=state.rows,headers=state.headers;
+  if(rows.length===0){note.textContent='データ0件です。';}
+  else if(rows.length>MAX_DISPLAY_ROWS){note.textContent='全'+rows.length+'件のうち先頭'+MAX_DISPLAY_ROWS+'行のみ表示しています。';}
+  else{note.textContent='全'+rows.length+'件を表示しています。';}
+  const scroll=document.createElement('div');scroll.className='table-scroll';
+  const table=document.createElement('table');
+  const thead=document.createElement('thead');const trh=document.createElement('tr');
+  headers.forEach(h=>{const th=document.createElement('th');th.textContent=h;trh.appendChild(th);});
+  thead.appendChild(trh);table.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  const limit=Math.min(rows.length,MAX_DISPLAY_ROWS);
+  for(let i=0;i<limit;i++){
+    const tr=document.createElement('tr');
+    headers.forEach(h=>{const td=document.createElement('td');td.textContent=rows[i][h]!==undefined?rows[i][h]:'';tr.appendChild(td);});
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);scroll.appendChild(table);area.appendChild(scroll);
+}
+
+function renderMessagesPage(){
+  const area=document.getElementById('messagesArea');clear(area);
+  if(state.errors.length===0&&state.warnings.length===0){
+    area.appendChild(noteEl('警告・エラーはありません。'));
+    return;
+  }
+  if(state.errors.length>0){
+    const h=document.createElement('div');h.className='card-title';h.textContent='エラー（'+state.errors.length+'件）';area.appendChild(h);
+    state.errors.forEach(e=>addMsg(area,'msg-error',e));
+  }
+  if(state.warnings.length>0){
+    const h=document.createElement('div');h.className='card-title';h.style.marginTop='14px';h.textContent='警告（'+state.warnings.length+'件）';area.appendChild(h);
+    state.warnings.forEach(w=>addMsg(area,'msg-warn',w));
+  }
+}
+
+function renderAllPages(){
+  renderReportHeader();
+  renderCommonChips();
+  renderDashboard();
+  renderMonthlyPage();
+  renderEmployeePage();
+  renderEmpMonthlyDefault();
+  renderOverallPage();
+  renderRawPage();
+  renderMessagesPage();
+}
+
+// ===== メイン処理 =====
+function handleText(fileName,text){
+  // 状態初期化
+  state={loaded:true,fileName:fileName,csvType:null,csvLabel:'',headers:[],rows:[],
+    reports:null,warnings:[],errors:[],minDate:'',maxDate:'',generatedAt:nowStamp()};
+  document.getElementById('preLoad').classList.add('hidden');
+  document.getElementById('viewerBody').classList.remove('hidden');
+
+  // 文字化け検知
+  if(text.indexOf('�')!==-1){
+    state.warnings.push('文字化けの可能性があります。Excelで保存し直したShift_JIS CSVではなく、admin画面から出力したUTF-8 CSVを読み込んでください。');
+  }
+
+  // パース
+  let matrix;
+  try{
+    matrix=parseCsvToMatrix(text);
+  }catch(err){
+    state.errors.push(err.code==='UNCLOSED_QUOTE'?'クォートが閉じていません。':('CSVの解析に失敗しました：'+err.message));
+    renderAllPages();showViewerPage('messages');return;
+  }
+  if(matrix.length===0){
+    state.errors.push('CSVが空です。ヘッダ行がありません。');
+    renderAllPages();showViewerPage('messages');return;
+  }
+
+  // ヘッダ（トリムしてBOM残り対策）
+  const headers=matrix[0].map(h=>h.trim());
+  if(headers.length===0||headers.every(h=>h==='')){
+    state.errors.push('ヘッダ行がありません。');
+    renderAllPages();showViewerPage('messages');return;
+  }
+  state.headers=headers;
+
+  // CSV種別判定
+  const detected=detectCsvType(headers);
+  if(detected.key===null){
+    state.errors.push('未知のCSV形式です。admin画面から出力したCSVを選択してください。');
+    renderAllPages();showViewerPage('messages');return;
+  }
+  if(detected.multiple){
+    const labels=detected.matches.map(m=>m.label).join(' / ');
+    state.warnings.push('複数のCSV種別に一致しました（'+labels+'）。必須列数が最も多い「'+detected.label+'」として扱います。');
+  }
+  state.csvType=detected.key;
+  state.csvLabel=detected.label;
+
+  // データ行 → オブジェクト配列
+  const dataMatrix=matrix.slice(1);
+  let colCountMismatch=0;let hasExtra=false;
+  const rows=dataMatrix.map(cells=>{
+    const obj={};
+    headers.forEach((h,idx)=>{obj[h]=idx<cells.length?cells[idx]:'';});
+    if(cells.length<headers.length)colCountMismatch++;
+    if(cells.length>headers.length){
+      colCountMismatch++;hasExtra=true;
+      for(let k=headers.length;k<cells.length;k++)obj['__extra_'+(k-headers.length+1)]=cells[k];
+    }
+    return obj;
+  });
+  state.rows=rows;
+  if(colCountMismatch>0){
+    state.warnings.push('データ行の列数がヘッダ列数と一致しない行が'+colCountMismatch+'件あります。不足列は空文字として扱います。'+(hasExtra?'超過列は __extra_N として保持しています。':''));
+  }
+
+  // attendance_details：report_id ピボット
+  if(state.csvType==='attendance_details'){
+    const built=buildAttendanceReports(rows);
+    state.reports=built.reports;
+    built.warnings.forEach(w=>state.warnings.push(w));
+    // 対象期間（report_date）
+    const dates=rows.map(r=>r['report_date']).filter(v=>v&&v!=='');
+    if(dates.length){
+      state.minDate=dates.reduce((a,b)=>a<b?a:b);
+      state.maxDate=dates.reduce((a,b)=>a>b?a:b);
+    }
+  }else{
+    // 他CSV：日付列があれば対象期間を推定（任意）
+    const dateKey=state.csvType==='project_cost_details'?'invoice_date':null;
+    if(dateKey){
+      const dates=rows.map(r=>r[dateKey]).filter(v=>v&&v!=='');
+      if(dates.length){state.minDate=dates.reduce((a,b)=>a<b?a:b);state.maxDate=dates.reduce((a,b)=>a>b?a:b);}
+    }
+  }
+
+  renderAllPages();
+  showViewerPage('dashboard');
 }
 
 // ===== ファイル選択 =====
@@ -576,8 +788,11 @@ document.getElementById('fileInput').addEventListener('change',function(e){
   const reader=new FileReader();
   reader.onload=function(){handleText(file.name,String(reader.result));};
   reader.onerror=function(){
-    resetView();
-    showErrors(['ファイルが読めません。']);
+    state={loaded:true,fileName:file.name,csvType:null,csvLabel:'',headers:[],rows:[],
+      reports:null,warnings:[],errors:['ファイルが読めません。'],minDate:'',maxDate:'',generatedAt:nowStamp()};
+    document.getElementById('preLoad').classList.add('hidden');
+    document.getElementById('viewerBody').classList.remove('hidden');
+    renderAllPages();showViewerPage('messages');
   };
   reader.readAsText(file,'UTF-8');
 });

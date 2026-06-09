@@ -1,0 +1,537 @@
+# ローカルCSVビューアー 複数CSV統合モード設計（工事別月別原価ビュー）
+
+- 対象：ローカルHTML CSVビューアー（`local-viewers/csv-viewer.html`）の次フェーズ
+- フェーズ：Phase 2-4-7-0「複数CSV統合モード設計」
+- 状態：**設計のみ。実装は未着手。**
+- 関連：[`docs/local-viewer-spec.md`](local-viewer-spec.md) / [`docs/csv-export-spec.md`](csv-export-spec.md) / [`docs/roadmap.md`](roadmap.md)
+- 名称案：**複数CSV統合モード** / **工事別月別原価ビュー**
+
+本ドキュメントは設計仕様であり、ここに書かれた関数名・データ構造・列名は実装時の指針である。
+列名はすべて `docs/csv-export-spec.md`（Phase 1-2 CSV列定義）に準拠する。判断できない結合キー・列は「13. 未確定事項」に明記する。
+
+---
+
+## 1. 目的
+
+- 完了工事・過去工事の原価を、ローカル（オフライン）で確認する。
+- 工事別に月別原価を確認する。
+- 工事別に労務費・請求書明細・重機情報を横断して確認する。
+- CSVバックアップを単なる保存ではなく、閲覧・分析に使えるようにする。
+- Supabase接続なし、APIキーなし、外部CDNなし、`file://` で動くローカルHTMLビューアーとして維持する。
+
+既存の単体CSV専用ビュー（attendance_details / projects_summary / project_cost_details / machine_details）は維持したうえで、新たに「複数CSVを同時に読み込んで工事単位で横断表示する」モードを追加する。
+
+---
+
+## 2. 対象CSV
+
+```text
+projects_summary.csv
+attendance_details.csv
+project_cost_details.csv
+machine_details.csv
+```
+
+役割：
+
+```text
+projects_summary.csv
+→ 工事マスタ・最終集計・請負金額・発注者・工事分類。統合ビューの「工事」軸。
+
+attendance_details.csv
+→ 労務費・出勤日・従業員・日報由来の工事別労務明細（report_date / labor_cost）。
+
+project_cost_details.csv
+→ 請求書由来の材料費・外注費・重機リース・その他費用など（invoice_date / amount / cost_category）。
+
+machine_details.csv
+→ 重機台帳（1行＝1重機）。稼働日・現場・稼働時間を持たないため、
+   単体では月別/現場別重機費を出せない。当面は台帳参照に留める。
+```
+
+---
+
+## 3. CSV読み込み方式
+
+### 採用方式（初期実装）
+
+**方式A（4つのファイル選択枠）＋ 自動判定補助** を採用する。
+
+```text
+方式A：4つのファイル選択枠を用意する
+  - projects_summary
+  - attendance_details
+  - project_cost_details
+  - machine_details
+
+方式B（不採用・将来拡張）：複数ファイルを一括選択して、CSV種別判定で自動振り分ける
+```
+
+採用理由：
+
+- どのCSVが読み込まれているか分かりやすい。
+- 不足CSVを明示しやすい。
+- 間違ったCSVを読み込んだときに警告しやすい。
+- 将来、一括ドロップ（方式B）にも拡張しやすい。
+
+「自動判定補助」とは：各枠に読み込まれたファイルに対し、既存の `detectCsvType()` を実行し、枠の期待種別と一致しない場合に警告を出す（例：projects_summary 枠に attendance_details を入れたら警告）。
+
+### 読込UIに含める要素
+
+- 読込済みCSVの表示（ファイル名・種別・行数）
+- 行数表示
+- CSV種別表示（`detectCsvType()` の結果）
+- 必須CSV / 任意CSV の区分表示
+- 各枠の再読み込み / クリア、全体クリア
+- **UTF-8 BOM対応**（既存パーサの BOM 除去を流用）
+- **既存CSVパーサ（`parseCsvToMatrix` 等）の利用**
+- **CSV種別判定は既存ロジック（`detectCsvType` / `CSV_TYPES`）を使う**
+
+既存の単体モードのパーサ・種別判定をそのまま流用し、複数CSVモード用に新規パーサは作らない。
+
+---
+
+## 4. 必須CSV・任意CSV
+
+```text
+必須：
+  projects_summary.csv
+
+任意：
+  attendance_details.csv
+  project_cost_details.csv
+  machine_details.csv
+```
+
+理由：
+
+- 工事一覧・工事詳細・工事別月別原価の「軸」は projects_summary（工事マスタ）。
+- 労務費の月別内訳は attendance_details が必要。
+- 請求書由来の月別内訳は project_cost_details が必要。
+- machine_details は台帳であり、月別/現場別重機費の算出には不十分。
+
+不足CSVがある場合の表示方針：
+
+```text
+projects_summary 未読込
+→ 統合モードを開始できない（必須）。「工事マスタCSVを読み込んでください」と表示。
+
+attendance_details 未読込
+→ 労務費の月別内訳は表示不可（「労務明細CSV未読込」と注記、該当列は —）。
+
+project_cost_details 未読込
+→ 請求書由来の月別内訳は表示不可（「請求書明細CSV未読込」と注記、該当列は —）。
+
+machine_details 未読込
+→ 重機台帳情報は表示不可（重機情報ページに「重機台帳CSV未読込」と注記）。
+```
+
+不足を「静かに0」とせず、「未読込のため表示不可」と分かるように表示する。
+
+---
+
+## 5. 結合キー設計
+
+`docs/csv-export-spec.md` で確認した実際の列名で記述する。
+
+### 確定している結合キー
+
+3つのCSVは **`project_id`（= `sites.id`・UUID文字列）** を共通の工事キーとして持つ。
+
+```text
+projects_summary.csv
+  - project_id   （= sites.id・必須）        ← 工事キー（マスタ側）
+  - site_name    （= sites.name・必須）
+
+attendance_details.csv
+  - project_id   （= site_ids要素 = sites.id・任意※現場なし日報は空）
+  - site_name    （= sites.name・任意）
+  - report_date  （月キー）
+  - labor_cost   （労務費）
+
+project_cost_details.csv
+  - project_id   （= invoices.site_id = sites.id・任意※現場なし請求書は空）
+  - site_name    （= sites.name・任意）
+  - invoice_date （月キー）
+  - amount       （金額・生値）
+  - cost_category（subcontract / material / machine_lease / other）
+
+machine_details.csv
+  - machine_id   （= machines.id）
+  - machine_name （= machines.name）
+  - ※ project_id / site_id / 日付 を持たない
+```
+
+### 結合方針
+
+- **工事の結合キーは `project_id`（= sites.id）を最優先とする。** 3CSVとも同一の `sites.id` を指すため、UUID一致で安全に結合できる。
+- `project_id` が空の行：
+  - attendance_details … 現場なし日報（按分対象外）。工事別原価には計上しない（出勤簿としては存在する）。
+  - project_cost_details … 現場なし請求書。工事別原価には計上できない → 確認リストに計上。
+- **`site_name` だけの結合は同名工事リスクがあるため行わない。** ID優先。
+- `project_id` が空で `site_name` のみある行を名称で代替結合するかは任意機能とし、行う場合は **必ず警告を出し、確認リストに「site_name 代替結合が発生した行」として記録する**（既定はOFF推奨）。
+
+### machine_details の扱い（重要）
+
+- `machine_details.csv` は工事ID（site_id）も日付も持たないため、**工事別・月別原価には直接結合できない。**
+- 当面 machine_details は「重機台帳参照」として独立表示し、**工事別月別原価には直接足し込まない。**
+- 重機費の工事別月別反映には、将来 `machine_locations`（現場・日付を持つ稼働データ）や別の稼働明細CSVが必要。
+  - ただし `machine_locations` は移動記録であり稼働時間・使用日数を持たないため、正確な稼働原価化には追加設計が必要（csv-export-spec §8 注記）。
+- なお、請求書由来の重機リース費（`project_cost_details.cost_category = machine_lease`）は工事・日付を持つため、月別原価の「重機費」として **machine_details とは別に** 反映できる（「8. 月別原価の計算ルール」参照）。
+
+---
+
+## 6. 内部データモデル設計
+
+既存の単体CSV `state` とは **別に** 複数CSV用 `multiState` を持つ。
+
+```js
+multiState = {
+  loaded: false,             // projects_summary（必須）が読み込まれたら true
+  files: {                   // 読込済みファイルのメタ（名前・種別・行数）
+    projects_summary: null,  // {fileName, csvType, rowCount} | null
+    attendance_details: null,
+    project_cost_details: null,
+    machine_details: null
+  },
+  rows: {                    // パース済み行（オブジェクト配列）
+    projects_summary: [],
+    attendance_details: [],
+    project_cost_details: [],
+    machine_details: []
+  },
+  indexes: {                 // project_id をキーにした索引（結合用）
+    projectsById: Map,             // project_id -> projects_summary 行
+    attendanceByProjectId: Map,    // project_id -> attendance_details 行[]
+    invoicesByProjectId: Map,      // project_id -> project_cost_details 行[]
+    machinesById: Map              // machine_id -> machine_details 行（工事には紐付かない）
+  },
+  warnings: [],
+  errors: []
+}
+```
+
+実装方針：
+
+- 既存の単体CSV `state` には手を加えず、`multiState` を新設する。
+- 既存の単体CSVビューを壊さない（単体モードと統合モードを分離）。
+- 複数CSVモードは **別ページ/別モード** として追加する（単体ビューと排他または併存切替）。
+- 既存のCSVパーサ・種別判定を流用する。
+- `indexes` は読込完了時に1回構築し、各ページ描画で再利用する。
+
+---
+
+## 7. 表示ページ設計
+
+複数CSV統合モードで追加するページ案：
+
+```text
+統合ダッシュボード
+工事一覧
+工事詳細
+工事別月別原価
+労務明細
+請求書明細
+重機情報
+確認リスト
+生データ
+```
+
+### 統合ダッシュボード
+
+```text
+読込済みCSV（種別ごとに 読込済/未読込）
+工事件数（projects_summary 行数）
+労務明細件数（attendance_details 行数）
+請求書明細件数（project_cost_details 行数）
+重機台帳件数（machine_details 行数）
+警告件数
+不足CSV（未読込の任意CSV一覧）
+```
+
+### 工事一覧
+
+`projects_summary.csv` を軸に表示。工事名クリックで工事詳細へ遷移（`project_id` をキーに）。
+
+```text
+工事名
+発注者（client_name）
+工事分類（category_name）
+年度（fiscal_year）
+請負金額（contract_amount）
+合計原価（total_cost）
+月別原価有無（attendance/invoice いずれかに該当 project_id の明細があるか）
+労務明細有無（attendanceByProjectId に該当 project_id があるか）
+請求書明細有無（invoicesByProjectId に該当 project_id があるか）
+警告
+```
+
+### 工事詳細
+
+工事名クリックで表示。`project_id` で各CSVを横断。
+
+```text
+工事基本情報（site_name / client_name / category_name / fiscal_year / location / start_date / end_date）
+請負金額（contract_amount）
+projects_summary 上の合計原価（total_cost）
+attendance_details 由来の労務費（該当 project_id の labor_cost 合計）
+project_cost_details 由来の請求書金額（該当 project_id の amount 合計）
+差異（projects_summary 値とローカル再集計値の差。9章のルール）
+警告（差異・現場なし・原価率100%以上 等）
+```
+
+工事詳細内は、月別原価 / 労務明細 / 請求書明細 / 重機情報へのページ切替（タブ）を用意する。
+
+### 工事別月別原価（主目的）
+
+選択工事（`project_id`）の月別原価表。
+
+```text
+月（YYYY-MM）
+労務費（attendance_details）
+請求書金額（project_cost_details 合計）
+材料費（cost_category=material）
+外注費（cost_category=subcontract）
+その他費用（cost_category=other）
+重機費（machine_lease。machine_details 由来ではない点に注意）
+月合計（算出可能な費用のみ）
+累計
+```
+
+重要：
+
+- 労務費は `attendance_details.report_date` を月キー（YYYY-MM）にする。
+- 請求書費用は `project_cost_details.invoice_date` を月キーにする。
+- **重機費は machine_details.csv 単体では出せない。** 月別の「重機費」列は請求書由来の `cost_category=machine_lease` を用いる。machine_details 由来の台帳値（リース月額等）は月別原価に足し込まない。
+- 月別合計には算出可能な費用のみを含める。
+- 表上部・列見出しに「何を含めた合計か」を明記する（労務費＋請求書由来費目。台帳リース月額・owned重機費・ダンプ/警備は含まない 等）。
+
+### 労務明細
+
+選択工事に紐づく `attendance_details.csv` の行を表示。
+
+```text
+日付（report_date）
+従業員（employee_name）
+通常時間（normal_mins）
+残業時間（overtime_mins）
+人工（labor_days）
+労務費（labor_cost）
+日報状態（report_status）
+メモ（memo）
+```
+
+- 既存 attendance_details の **report_id ピボット／二重計上防止方針を再利用**する。
+  `normal_mins` / `overtime_mins` を rawRows で生SUMしない（report_id 単位で集約してから扱う）。
+- 金額は `labor_cost` を使う。
+
+### 請求書明細
+
+選択工事に紐づく `project_cost_details.csv` の行を表示。
+
+```text
+請求日（invoice_date）
+業者名（vendor_name）
+費目（cost_category・日本語化）
+摘要（description）
+金額（amount）
+状態（status・日本語化）
+メモ（memo）
+```
+
+### 重機情報
+
+MVPでは machine_details を **台帳として独立表示**（工事ごとではない）。
+
+```text
+重機名（machine_name）
+区分（ownership・日本語化）
+状態（is_active・日本語化）
+リース月額（lease_monthly）
+所有会社（owner_company）
+リース会社（lease_company）
+```
+
+- 工事との紐付け列がないため、**選択工事ごとの重機情報としては表示できない旨を明記**する。
+
+### 確認リスト（横断チェック）
+
+```text
+projects_summary にあるが attendance_details に明細がない工事
+projects_summary にあるが project_cost_details に明細がない工事
+attendance_details にあるが projects_summary に存在しない project_id
+project_cost_details にあるが projects_summary に存在しない project_id
+site_name 代替結合が発生した行（代替結合を許可した場合のみ）
+請負金額未入力（contract_amount 空/0）
+原価率が100%以上（profit_rate が負、または total_cost ≧ contract_amount）
+外注費二重計上注意（report_subcontract_cost と invoice 由来 subcontract の併存）
+machine_details は工事別月別原価に未反映（恒常的な注記）
+```
+
+---
+
+## 8. 月別原価の計算ルール
+
+### 労務費
+
+```text
+attendance_details の labor_cost を、project_id + report_date(月 YYYY-MM) でSUM
+```
+
+注意：
+
+- attendance_details 側で複数現場按分済み（`allocation_ratio` 反映後の `labor_cost`）なら、その値をそのままSUMする。
+- `normal_mins` / `overtime_mins` を rawRows で生SUMしない（按分前の値であり原価ではない）。
+- 労務費の金額は `labor_cost` を使う。
+- 月キーは `report_date` の先頭7文字（YYYY-MM）。
+- 現場なし日報（project_id 空）は工事別原価に含めない。
+
+### 請求書費用
+
+```text
+project_cost_details の amount を、project_id + invoice_date(月 YYYY-MM) でSUM
+```
+
+費目別（`cost_category`）：
+
+```text
+material       → 材料費
+subcontract    → 外注費
+machine_lease  → 重機費（請求書由来のリース費）
+other          → その他費用
+```
+
+- 月キーは `invoice_date` の先頭7文字（YYYY-MM）。
+- `amount` は税込/税抜混在の生値（正規化しない）。合計は概算である旨を注記。
+
+### 重機費
+
+```text
+machine_details.csv は台帳であり、日付・現場がないため、工事別月別原価には直接反映しない。
+月別原価表の「重機費」列は、project_cost_details の cost_category=machine_lease（請求書由来）を用いる。
+```
+
+将来案：
+
+```text
+machine_locations など、現場・日付を持つ重機稼働データと統合して算出する。
+ただし machine_locations が移動記録のみで稼働時間・日数を持たない場合は、
+正確な原価化（稼働時間×単価等）には追加設計が必要。
+```
+
+### 月合計・累計
+
+- 月合計 ＝ 労務費 ＋（材料費 ＋ 外注費 ＋ 重機費(machine_lease) ＋ その他費用）。
+- 累計 ＝ 当月までの月合計の積み上げ。
+- **含めない**：machine_details 由来の台帳リース月額・owned重機費（0円）、ダンプ費・警備費（project_cost_details に明細がないため。projects_summary 側にのみ集計されている）。
+- 合計の定義を表に明記し、projects_summary.total_cost と一致しないことがある旨を注記する。
+
+---
+
+## 9. 差異確認ルール
+
+`projects_summary.csv`（既存RPCの最終集計値）と、明細CSVからローカル再集計した金額の差異を確認事項として表示する。
+
+```text
+労務費：
+  projects_summary.labor_cost
+  vs attendance_details 由来 labor_cost 合計（project_id 一致）
+
+請求書系：
+  projects_summary.material_cost            vs project_cost_details(material) 合計
+  projects_summary.invoice_subcontract_cost vs project_cost_details(subcontract) 合計
+  projects_summary.machine_cost             vs project_cost_details(machine_lease) 合計
+  projects_summary.other_cost               vs project_cost_details(other) 合計
+
+合計：
+  projects_summary.total_cost
+  vs 統合ビューでローカル算出できる合計（8章の月合計の総和）
+```
+
+注意：
+
+- projects_summary は既存RPCの最終集計値、統合ビューはローカル再集計値。
+- 差異が出た場合は **エラーではなく確認事項** として表示する。
+- 差異の主因として想定されるもの（注記する）：
+  - 税込/税抜の非正規化（amount 生値）。
+  - 外注費の二重計上リスク（日報由来 `report_subcontract_cost` と請求書由来 `invoice_subcontract_cost` の合算）。`subcontract_cost_total` は両者合算であり、請求書明細のみの再集計とは一致しない。
+  - ダンプ費・警備費は projects_summary にのみ含まれ、project_cost_details には明細がない。
+  - 重機費は projects_summary では machine_lease 請求書のみ、台帳リース月額・owned は含まない。
+  - pending 日報を含む（report_status で判別可能）。
+
+---
+
+## 10. 画面UI設計
+
+既存の白ベース帳票UIに合わせる。
+
+- 左メニューに「複数CSV統合」または「統合ビュー」を追加し、単体CSVビューと統合ビューを分ける。
+- ファイル読込状況（種別・行数・必須/任意・不足）を画面上部に表示。
+- 不足CSVを明示する。
+- 工事名クリックで工事詳細に遷移（`project_id` をキーに）。
+- 工事詳細内にタブまたはページ切替（月別原価 / 労務明細 / 請求書明細 / 重機情報）を用意。
+- 印刷時は現在ページのみ印刷（既存の印刷CSS方針を踏襲）。
+- CSV由来値は **`textContent` / DOM API で描画**（`innerHTML` に入れない）。
+- Supabase接続なし、外部CDNなし、`file://` で動作。
+
+---
+
+## 11. 実装ステップ案
+
+```text
+Phase 2-4-7-0：複数CSV統合モード設計（今回・完了）
+Phase 2-4-7-1：複数CSV読み込みUIと multiState
+Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）
+Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）
+Phase 2-4-7-4：工事別月別原価ビュー
+Phase 2-4-7-5：差異確認・確認リスト
+Phase 2-4-7-6：印刷・UI調整
+Phase 2-4-7-7：machine_details / machine_locations の将来設計
+```
+
+---
+
+## 12. MVP範囲
+
+### MVPでやる
+
+```text
+複数CSV読込
+工事一覧
+工事詳細
+工事別月別原価
+労務費月別
+請求書費用月別
+確認リスト
+```
+
+### MVPではやらない
+
+```text
+Supabase接続
+DB更新
+CSVの自動保存
+PDF出力
+Excel出力
+重機の正確な月別・現場別原価算出
+会計連携
+完全な差異解消
+```
+
+---
+
+## 13. 未確定事項
+
+```text
+- 各CSVで共通する工事ID列名の最終確認
+  （現時点では projects_summary / attendance_details / project_cost_details の
+   project_id が共通の sites.id である前提。実データでの一致を実装前に再確認する）
+- site_name 代替結合を許容するか（既定はOFF。許容する場合の警告・確認リスト記録方法）
+- machine_locations を統合対象にするか
+- 重機費をどのデータから月別・現場別に出すか
+  （請求書由来 machine_lease のみで足りるか、台帳/稼働データ統合が必要か）
+- 請求書の税込/税抜扱い（正規化しないままの差異表示で運用上問題ないか）
+- 外注費二重計上の表示方法（report_ と invoice_ をどう並記・警告するか）
+- 完了工事のみを対象にするか、進行中工事も対象にするか
+- 統合モードと単体モードのUI上の切替方式（排他/併存）
+```

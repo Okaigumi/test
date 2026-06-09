@@ -1,5 +1,7 @@
 # ローカルHTML CSVビューア仕様
 
+> **関連設計**：複数CSVを同時に読み込み、工事単位で月別原価・労務費・請求書明細・重機情報を横断表示する「複数CSV統合モード」の設計は [`docs/local-viewer-multi-csv-spec.md`](local-viewer-multi-csv-spec.md)（Phase 2-4-7-0・設計のみ・実装未着手）を参照。
+
 ## 1. 目的
 
 - `admin-app.html` で出力したCSVをローカルHTMLで読み込む

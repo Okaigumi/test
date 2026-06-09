@@ -701,6 +701,66 @@ subcontractRows = 0
 - 実データ入り `project_cost_details.csv` での請求書明細ビューアー再検証
 - 重機費・稼働日・現場紐付けを扱うための将来データ設計検討
 
+#### Phase 2-4-7-0：複数CSV統合モード設計（完了）
+
+- 種別：設計ドキュメントのみ。**実装は未着手。**
+- 設計ドキュメント：[`docs/local-viewer-multi-csv-spec.md`](local-viewer-multi-csv-spec.md)（`docs/local-viewer-spec.md` から参照リンクを追加）
+
+**設計対象：**
+
+- ローカルHTML CSVビューアー（`local-viewers/csv-viewer.html`）の「複数CSV統合モード／工事別月別原価ビュー」
+- 複数CSVを同時読込し、工事単位で月別原価・労務費・請求書明細・重機情報・確認事項を横断表示する
+
+**対象CSV：**
+
+- `projects_summary.csv`（工事マスタ・最終集計。統合の軸）
+- `attendance_details.csv`（労務費・出勤・日報由来明細）
+- `project_cost_details.csv`（請求書由来の材料費・外注費・重機リース・その他）
+- `machine_details.csv`（重機台帳。稼働明細ではない）
+
+**必須/任意CSV：**
+
+- 必須：`projects_summary.csv`
+- 任意：`attendance_details.csv` / `project_cost_details.csv` / `machine_details.csv`
+- 不足時は「静かに0」とせず「未読込のため表示不可」と注記表示
+
+**結合方針：**
+
+- 工事の結合キーは `project_id`（= `sites.id`・UUID）を最優先。projects_summary / attendance_details / project_cost_details が共通で保持する
+- `site_name` のみの結合は同名工事リスクのため既定で行わない（許可時は警告＋確認リスト記録）
+- 現場なし行（project_id 空）は工事別原価に含めず確認リストに計上
+
+**工事別月別原価ビュー方針：**
+
+- 労務費＝`attendance_details.labor_cost` を `project_id` ＋ `report_date`（YYYY-MM）でSUM（report_id ピボット／二重計上防止を踏襲、`normal_mins`/`overtime_mins` は生SUMしない）
+- 請求書費用＝`project_cost_details.amount` を `project_id` ＋ `invoice_date`（YYYY-MM）でSUM、`cost_category`（material/subcontract/machine_lease/other）で費目別
+- 重機費列は請求書由来の `machine_lease` を用いる
+- 月合計は算出可能な費用のみ。含めた費用の定義を明記し、projects_summary.total_cost と一致しないことがある旨を注記
+- projects_summary 最終集計値とローカル再集計値の差異はエラーではなく確認事項として表示（税非正規化・外注費二重計上・ダンプ/警備未明細・重機費未反映が主因）
+
+**machine_details の扱い：**
+
+- `machine_details.csv` は重機台帳（1行＝1重機）であり、工事ID・日付・現場を持たない
+- そのため **月別/現場別の重機原価には直接使わず**、当面は重機台帳参照として独立表示する
+- 工事別月別の重機原価化には、将来 `machine_locations` 等の現場・日付を持つ稼働データとの統合設計が必要（ただし machine_locations は移動記録で稼働時間・日数を持たない場合があり、正確な原価化には追加設計が必要）
+
+**MVP範囲：**
+
+- やる：複数CSV読込／工事一覧／工事詳細／工事別月別原価／労務費月別／請求書費用月別／確認リスト
+- やらない：Supabase接続／DB更新／CSV自動保存／PDF・Excel出力／重機の正確な月別現場別原価算出／会計連携／完全な差異解消
+
+**今後の実装ステップ：**
+
+- 2-4-7-1：複数CSV読み込みUIと multiState
+- 2-4-7-2：projects_summary + attendance_details 統合（労務費）
+- 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）
+- 2-4-7-4：工事別月別原価ビュー
+- 2-4-7-5：差異確認・確認リスト
+- 2-4-7-6：印刷・UI調整
+- 2-4-7-7：machine_details / machine_locations の将来設計
+
+**実装状況：未着手（本フェーズは設計のみ）。**
+
 ## 保留・改善候補
 
 - favicon.ico 追加

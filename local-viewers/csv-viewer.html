@@ -119,13 +119,7 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
     <!-- ナビ（印刷時は非表示） -->
     <aside class="viewer-nav no-print">
       <div class="nav-title">メニュー</div>
-      <button class="nav-btn" data-page="dashboard" onclick="showViewerPage('dashboard')">ダッシュボード</button>
-      <button class="nav-btn" data-page="monthly" onclick="showViewerPage('monthly')">月別サマリー</button>
-      <button class="nav-btn" data-page="employee" onclick="showViewerPage('employee')">従業員別サマリー</button>
-      <button class="nav-btn" data-page="empMonthly" onclick="showViewerPage('empMonthly')">従業員別 月別出勤簿</button>
-      <button class="nav-btn" data-page="overall" onclick="showViewerPage('overall')">全体出勤簿</button>
-      <button class="nav-btn" data-page="raw" onclick="showViewerPage('raw')">生データ</button>
-      <button class="nav-btn" data-page="messages" onclick="showViewerPage('messages')">警告・エラー</button>
+      <div id="viewerNavButtons"></div>
     </aside>
 
     <main class="main">
@@ -189,7 +183,28 @@ const CSV_TYPES={
 };
 
 const MAX_DISPLAY_ROWS=300;
-const VIEWER_PAGES=['dashboard','monthly','employee','empMonthly','overall','raw','messages'];
+
+// ===== ページ定義 =====
+// types に 'all' を含むページは全CSV種別で表示。専用ビュー追加時はここに足す。
+const PAGE_DEFS=[
+  {id:'dashboard',label:'ダッシュボード',types:['all']},
+  {id:'monthly',label:'月別サマリー',types:['attendance_details']},
+  {id:'employee',label:'従業員別サマリー',types:['attendance_details']},
+  {id:'empMonthly',label:'従業員別 月別出勤簿',types:['attendance_details']},
+  {id:'overall',label:'全体出勤簿',types:['attendance_details']},
+  {id:'raw',label:'生データ',types:['all']},
+  {id:'messages',label:'警告・エラー',types:['all']}
+];
+
+const VIEWER_PAGES=PAGE_DEFS.map(p=>p.id);
+
+// CSV種別ごとの利用可能ページ
+function getAvailablePageDefs(csvType){
+  return PAGE_DEFS.filter(p=>p.types.includes('all')||p.types.includes(csvType));
+}
+function getAvailablePageIds(csvType){
+  return getAvailablePageDefs(csvType).map(p=>p.id);
+}
 
 // 読み込み状態
 let state={loaded:false,fileName:'',csvType:null,csvLabel:'',headers:[],rows:[],
@@ -487,13 +502,30 @@ function renderSummaryTable(container,columns,dataArr){
   table.appendChild(tbody);scroll.appendChild(table);container.appendChild(scroll);
 }
 
-// ===== ページ切替 =====
+// ===== ナビ描画（CSV種別に応じて動的生成・textContent） =====
+function renderViewerNav(csvType){
+  const area=document.getElementById('viewerNavButtons');
+  clear(area);
+  const defs=getAvailablePageDefs(csvType);
+  defs.forEach(def=>{
+    const btn=document.createElement('button');
+    btn.className='nav-btn';
+    btn.dataset.page=def.id;
+    btn.textContent=def.label;
+    btn.addEventListener('click',()=>showViewerPage(def.id));
+    area.appendChild(btn);
+  });
+}
+
+// ===== ページ切替（許可されていないページはダッシュボードへ） =====
 function showViewerPage(pageName){
+  const available=getAvailablePageIds(state.csvType);
+  const target=available.includes(pageName)?pageName:'dashboard';
   VIEWER_PAGES.forEach(p=>{
     const sec=document.getElementById('page-'+p);
-    if(sec)sec.classList.toggle('hidden',p!==pageName);
+    if(sec)sec.classList.toggle('hidden',p!==target);
   });
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===pageName));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===target));
 }
 
 // ===== 従業員名クリック → 従業員別 月別出勤簿 =====
@@ -680,6 +712,7 @@ function renderMessagesPage(){
 }
 
 function renderAllPages(){
+  renderViewerNav(state.csvType);
   renderReportHeader();
   renderCommonChips();
   renderDashboard();

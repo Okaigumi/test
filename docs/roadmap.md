@@ -320,6 +320,42 @@ Storage 設計：
 - warnings詳細表示
 - 必要に応じてマスタ系テーブル直接権限整理
 
+#### Phase 2-4：ローカルHTML CSVビューア（設計開始）
+
+- 方式：統合ビューア方式（4CSVを1ファイルで扱う）
+- 予定ファイル：`local-viewers/csv-viewer.html`（Git管理・Vercel公開対象外予定）
+- 設計ドキュメント：`docs/local-viewer-spec.md`
+- 初期重点：`attendance_details.csv` の出勤簿表示
+
+**重要注意：**
+
+- `normal_mins` / `overtime_mins` は日報全体値（按分なし）。複数現場で同じ値が複数行に複製されるため、**生行SUM禁止**
+- 時間集計は必ず `report_id` 単位にピボットしてから行う
+- `labor_days` / `labor_cost` は按分後の値なのでSUM可
+- 出勤日数（従業員ごと `DISTINCT report_date`）と稼働件数（`DISTINCT report_id`）は別々に表示
+
+**方針：**
+
+- CSV種別判定は1列目ではなく **必須列集合** で行う
+- 未知CSV形式は「未知のCSV形式です」と明示エラー
+- CSVパースは外部ライブラリなしの自前RFC4180パーサ（UTF-8 BOM / CRLF・LF対応）
+- Excelで保存し直したShift_JIS CSVは原則非対応（`�` 検知で警告）
+- CSV値は `innerHTML` に直接入れず `textContent`／エスケープ（XSS防止）
+
+**フェーズ分割：**
+
+- Phase 2-4-0：設計（`docs/local-viewer-spec.md` 作成・本追記）
+- Phase 2-4-1：CSV読込・自前パーサ・種別判定・生テーブル表示（`.vercelignore` へ `local-viewers/` 追加）
+- Phase 2-4-2：report_id ピボット・月別/従業員別サマリー
+- Phase 2-4-3：従業員別日別明細・現場別内訳
+- Phase 2-4-4：フィルタ・印刷CSS
+- Phase 2-4-5：他CSV（projects_summary / project_cost_details / machine_details）対応
+
+**docs方針：**
+
+- Phase 2-4 は `docs/roadmap.md` と `docs/local-viewer-spec.md` に記録する
+- DB変更・SQL実行・Supabase権限変更がないため `docs/db-migrations.md` には記録しない
+
 ## 保留・改善候補
 
 - favicon.ico 追加

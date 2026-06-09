@@ -1,0 +1,321 @@
+# ローカルHTML CSVビューア仕様
+
+## 1. 目的
+
+- `admin-app.html` で出力したCSVをローカルHTMLで読み込む
+- Supabase接続なし
+- APIキーなし
+- DB変更なし
+- `file://` で動くオフラインビューア
+- 社内の過去工事・出勤簿・原価確認を、CSVバックアップから見やすく確認できるようにする
+
+## 2. 対象CSV
+
+対象は以下4種類。
+
+- `projects_summary.csv`
+- `attendance_details.csv`
+- `project_cost_details.csv`
+- `machine_details.csv`
+
+初期重点は `attendance_details.csv` の出勤簿表示。
+
+## 3. 配置方針
+
+- ビューア本体予定：`local-viewers/csv-viewer.html`
+- Git管理対象
+- Vercel公開対象外予定
+- 実装時に `.vercelignore` へ `local-viewers/` を追加する
+- 今回のPhase 2-4-0では `.vercelignore` はまだ変更しない
+
+## 4. CSVパース方針
+
+- 外部ライブラリなし
+- 自前RFC4180ステートマシンパーサ
+- UTF-8 BOM対応
+- CRLF / LF対応
+- ダブルクォート対応
+- カンマ入り文字列対応
+- 改行入り文字列対応
+- ヘッダ行から列名マップを作る
+- 列順には依存しない
+- Excelで保存し直したShift_JIS等のCSVは原則非対応
+- 文字化け検知として `�` が含まれる場合は警告する
+- 空CSV、ヘッダのみCSVはエラーではなく「データ0件」として正常表示する
+
+## 5. CSV種別判定方針
+
+1列目だけでは判定しない。
+
+CSV種別判定は、ヘッダに含まれる **必須列集合** で行う。
+
+### attendance_details 必須列
+
+```text
+report_id
+report_date
+employee_id
+employee_name
+normal_mins
+overtime_mins
+labor_days
+labor_cost
+report_status
+```
+
+### projects_summary 必須列
+
+```text
+project_id
+site_name
+fiscal_year
+contract_amount
+total_cost
+gross_profit
+profit_rate
+```
+
+### project_cost_details 必須列
+
+```text
+invoice_id
+invoice_date
+project_id
+site_name
+cost_category
+vendor_name
+amount
+status
+```
+
+### machine_details 必須列
+
+```text
+machine_id
+machine_name
+ownership
+lease_monthly
+owned_cost
+is_active
+```
+
+判定ルール：
+
+- 期待する必須列集合をすべて含むCSV種別を採用する
+- 複数種別に一致した場合は警告し、より一致列数の多いものを優先する
+- どの種別にも一致しない場合は「未知のCSV形式です」と明示エラーを表示する
+- 列順には依存しない
+
+## 6. attendance_details.csv の重要な集計ルール
+
+必ず守る。
+
+- `normal_mins` は日報全体値であり、複数現場時に同じ値が複数行へ複製される
+- `overtime_mins` も日報全体値であり、複数現場時に複製される
+- したがって `normal_mins` / `overtime_mins` を生行でSUMしてはいけない
+- 時間集計は必ず `report_id` 単位にピボットしてから行う
+- `labor_days` は按分後の値なのでSUM可
+- `labor_cost` も按分後の値なのでSUM可
+- `allocation_ratio` は按分比率であり、表示・検証用として扱う
+- `start_time` / `end_time` / `work_type` / `memo` / `report_status` はreport単位属性として扱う
+
+## 7. 出勤日数・稼働件数の定義
+
+実データ確認結果：
+
+- 同一従業員・同一日に複数 report_id があるか確認済み
+- 結果：0行
+- 現時点では「1人1日1日報」の運用が成立している
+
+ビューア上の定義：
+
+- 出勤日数：従業員ごとの `DISTINCT report_date`
+- 稼働件数：`DISTINCT report_id`
+- 通常運用では両者は一致する想定
+- ただし将来の例外に備え、出勤日数と稼働件数は別々に表示する
+
+## 8. 内部データモデル
+
+### Layer 1: rawRows
+
+CSVそのままの行。
+
+- 1行 = report × 現場
+- 現場別 `labor_days` / `labor_cost` 集計に使う
+- `normal_mins` / `overtime_mins` の生行SUMは禁止
+
+### Layer 2: reports
+
+`report_id` でピボットした日報単位レコード。
+
+各 `report_id` について：
+
+- `report_date`
+- `employee_id`
+- `employee_name`
+- `work_type`
+- `start_time`
+- `end_time`
+- `normal_mins`
+- `overtime_mins`
+- `report_status`
+- `memo`
+
+などの共有属性は1回だけ採用する。
+
+加えて：
+
+- `site_names`：同一report_id内の `site_name` を集約
+- `labor_days_total`：同一report_id内の `labor_days` SUM
+- `labor_cost_total`：同一report_id内の `labor_cost` SUM
+
+を持つ。
+
+月別・従業員別サマリーは Layer 2 を使う。
+
+## 9. report_id ピボット時の不一致検知
+
+同一 `report_id` 内で、本来一致すべき共有属性が行ごとに違う場合は警告する。
+
+対象候補：
+
+- `report_date`
+- `employee_id`
+- `employee_name`
+- `normal_mins`
+- `overtime_mins`
+- `start_time`
+- `end_time`
+- `work_type`
+- `report_status`
+
+不一致があっても即停止はせず、画面に警告を表示する。
+集計では1行目の値を採用するが、警告によってCSV生成側やデータ異常を発見できるようにする。
+
+## 10. 画面構成案
+
+初期MVP：
+
+- CSV読み込みエリア
+- 読み込み結果サマリー
+- CSV種別表示
+- 行数表示
+- report件数表示
+- 対象期間表示
+- 警告/エラー表示
+- 生テーブル表示
+
+後続：
+
+- 月別サマリー
+- 従業員別サマリー
+- 従業員別日別明細
+- 現場別内訳
+- 対象月フィルタ
+- 従業員フィルタ
+- 現場フィルタ
+- report_statusフィルタ
+- 印刷ボタン
+- 印刷CSS
+
+## 11. 実装フェーズ
+
+### Phase 2-4-0：設計
+
+- `docs/local-viewer-spec.md` 作成
+- `docs/roadmap.md` に Phase 2-4 追加
+
+### Phase 2-4-1：CSV読込・パース・種別判定・生テーブル
+
+- `local-viewers/csv-viewer.html` 新規作成
+- `.vercelignore` に `local-viewers/` を追加
+- ファイル選択でCSV読込
+- 自前CSVパーサ
+- 必須列集合によるCSV種別判定
+- 未知CSV形式の明示エラー
+- 生テーブル表示
+- 実エクスポートCSVで行数一致確認
+
+### Phase 2-4-2：report_idピボット・月別/従業員別サマリー
+
+- attendance_details の report_id ピボット
+- normal_mins / overtime_mins の二重計上防止
+- 出勤日数と稼働件数を別々に表示
+- 月別サマリー
+- 従業員別サマリー
+- ピボット時の共有属性不一致警告
+
+### Phase 2-4-3：従業員別日別明細・現場別内訳
+
+- 従業員別の日別出勤簿
+- site_names結合表示
+- 現場別 labor_days / labor_cost 内訳
+- 現場別 labor_cost SUM が全体と一致するか確認
+
+### Phase 2-4-4：フィルタ・印刷CSS
+
+- 対象月
+- 従業員
+- 現場
+- report_status
+- 印刷ボタン
+- 印刷用CSS
+
+### Phase 2-4-5：他CSV対応
+
+- projects_summary
+- project_cost_details
+- machine_details
+- まずは素テーブル表示
+- 必要に応じて簡易サマリー追加
+
+## 12. セキュリティ・安全性
+
+- CSV値を `innerHTML` に直接入れない
+- `textContent` またはHTMLエスケープを使う
+- memo等にHTMLやJavaScript文字列が含まれていても実行されないようにする
+- Supabase接続なし
+- APIキーなし
+- ローカルファイルはユーザーが選んだものだけ読む
+- Vercel公開対象外にする予定
+
+## 13. 完了条件
+
+### Phase 2-4-1
+
+- 実エクスポートCSVを読める
+- 行数が一致する
+- CSV種別が正しく判定される
+- 未知CSV形式で明示エラーが出る
+- 生テーブルが表示される
+- CSV値がHTMLとして実行されない
+
+### Phase 2-4-2
+
+- `normal_mins` / `overtime_mins` の二重計上がない
+- report_id単位にピボットできる
+- 出勤日数と稼働件数を別々に表示できる
+- 月別・従業員別サマリーが表示できる
+- 同一report_id内の共有属性不一致を警告できる
+
+### Phase 2-4-3
+
+- 従業員別日別明細が表示できる
+- 現場別内訳が表示できる
+- 現場別 `labor_cost` SUM が全体と一致する
+
+### Phase 2-4-4
+
+- フィルタが機能する
+- 印刷で表が崩れない
+
+### Phase 2-4-5
+
+- 4CSV種別が表示可能
+
+## 14. 制約
+
+- Excelで保存し直したShift_JIS CSVは原則非対応
+- CSV列の増減には、必須列集合で可能な範囲で対応
+- 大量データ時の仮想スクロールはMVPでは未対応
+- フロント専用作業のため `docs/db-migrations.md` には記録しない

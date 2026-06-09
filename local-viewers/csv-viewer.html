@@ -180,6 +180,30 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <div class="card"><div class="card-title">工事分類別集計</div><div id="projectCategoryArea"></div></div>
       </section>
 
+      <section id="page-invoiceList" class="viewer-page hidden">
+        <div class="card"><div class="card-title">請求書一覧</div><div class="note no-print" style="margin-top:0;margin-bottom:10px;">project_cost_details.csv（請求書・原価明細）の一覧です。金額は invoices.amount の生値（税込/税抜の正規化なし）です。</div><div id="invoiceListArea"></div></div>
+      </section>
+
+      <section id="page-invoiceVendor" class="viewer-page hidden">
+        <div class="card"><div class="card-title">業者別集計</div><div id="invoiceVendorArea"></div></div>
+      </section>
+
+      <section id="page-invoiceProject" class="viewer-page hidden">
+        <div class="card"><div class="card-title">工事別集計</div><div id="invoiceProjectArea"></div></div>
+      </section>
+
+      <section id="page-invoiceMonth" class="viewer-page hidden">
+        <div class="card"><div class="card-title">月別集計</div><div id="invoiceMonthArea"></div></div>
+      </section>
+
+      <section id="page-invoiceCategory" class="viewer-page hidden">
+        <div class="card"><div class="card-title">費目別集計</div><div id="invoiceCategoryArea"></div></div>
+      </section>
+
+      <section id="page-invoiceChecks" class="viewer-page hidden">
+        <div class="card"><div class="card-title">確認リスト</div><div id="invoiceChecksArea"></div></div>
+      </section>
+
       <section id="page-raw" class="viewer-page hidden">
         <div class="card"><div class="card-title">生データ</div><div id="rawNote" class="note"></div><div id="rawArea"></div></div>
       </section>
@@ -229,6 +253,12 @@ const PAGE_DEFS=[
   {id:'projectYear',label:'年度別集計',types:['projects_summary']},
   {id:'projectClient',label:'発注者別集計',types:['projects_summary']},
   {id:'projectCategory',label:'工事分類別集計',types:['projects_summary']},
+  {id:'invoiceList',label:'請求書一覧',types:['project_cost_details']},
+  {id:'invoiceVendor',label:'業者別集計',types:['project_cost_details']},
+  {id:'invoiceProject',label:'工事別集計',types:['project_cost_details']},
+  {id:'invoiceMonth',label:'月別集計',types:['project_cost_details']},
+  {id:'invoiceCategory',label:'費目別集計',types:['project_cost_details']},
+  {id:'invoiceChecks',label:'確認リスト',types:['project_cost_details']},
   {id:'raw',label:'生データ',types:['all']},
   {id:'messages',label:'警告・エラー',types:['all']}
 ];
@@ -692,6 +722,22 @@ function renderDashboard(){
     addSummary(area,'粗利合計',sContract>0?(formatMoney(sContract-sTotal)+' 円'):'—');
     addSummary(area,'全体原価率',formatPercent(rate));
   }
+  if(state.csvType==='project_cost_details'){
+    let sAmount=0;const vendorSet=new Set(),siteSet=new Set(),catSet=new Set();
+    state.rows.forEach(r=>{
+      sAmount+=toNumber(r['amount']);
+      if(r['vendor_name'])vendorSet.add(r['vendor_name']);
+      if(r['site_name'])siteSet.add(r['site_name']);
+      if(r['cost_category'])catSet.add(r['cost_category']);
+    });
+    const checks=computeInvoiceChecks(state.rows);
+    addSummary(area,'明細件数',String(state.rows.length));
+    addSummary(area,'金額合計',formatMoney(sAmount)+' 円');
+    addSummary(area,'業者数',String(vendorSet.size));
+    addSummary(area,'工事数',String(siteSet.size));
+    addSummary(area,'費目数',String(catSet.size));
+    addSummary(area,'確認件数',String(checks.reviewCount));
+  }
   addSummary(area,'警告件数',String(state.warnings.length));
   addSummary(area,'エラー件数',String(state.errors.length));
 }
@@ -1002,6 +1048,191 @@ function renderProjectCategoryPage(){
   renderSummaryTable(area,cols,groups);
 }
 
+// ===== project_cost_details（請求書・原価明細） =====
+// 列マッピング（docs/csv-export-spec.md §7）：
+//   請求日=invoice_date / 業者名=vendor_name / 工事名=site_name / 費目=cost_category
+//   摘要=description / 金額=amount / 状態=status / メモ=memo
+function formatCostCategory(v){
+  const map={subcontract:'外注費',material:'材料費',machine_lease:'重機リース',other:'その他'};
+  return map[v]||(v||'');
+}
+function formatInvoiceStatus(v){
+  const map={confirmed:'確認済み',posted:'計上済み'};
+  return map[v]||(v||'');
+}
+// ユニーク値を limit 件まで「、」で連結（超過は「他N件」）
+function topUnique(values,limit){
+  const seen=[];
+  values.forEach(v=>{if(v!==''&&v!==undefined&&v!==null&&seen.indexOf(v)===-1)seen.push(v);});
+  if(seen.length===0)return '—';
+  if(seen.length<=limit)return seen.join('、');
+  return seen.slice(0,limit).join('、')+' 他'+(seen.length-limit)+'件';
+}
+// 汎用グループ集計（金額SUM＋業者/工事/費目のユニーク収集）
+function aggregateInvoices(rows,keyFn,emptyLabel){
+  const map=new Map();
+  rows.forEach(r=>{
+    let k=keyFn(r);
+    if(k===null||k===undefined||k==='')k=emptyLabel;
+    let g=map.get(k);
+    if(!g){g={key:k,count:0,amount:0,vendors:[],sites:[],categories:[]};map.set(k,g);}
+    g.count+=1;
+    g.amount+=toNumber(r['amount']);
+    g.vendors.push(r['vendor_name']);
+    g.sites.push(r['site_name']);
+    g.categories.push(formatCostCategory(r['cost_category']));
+  });
+  return Array.from(map.values());
+}
+// データ品質チェック（確認リスト・ダッシュボードで共用）
+function computeInvoiceChecks(rows){
+  let missingSite=0,missingVendor=0,missingCategory=0,zeroAmount=0,missingDate=0,subcontractCount=0;
+  const dupMap=new Map();
+  const reviewSet=new Set();
+  rows.forEach((r,i)=>{
+    const site=r['site_name']||'',vendor=r['vendor_name']||'',cat=r['cost_category']||'',date=r['invoice_date']||'';
+    const amt=r['amount'];
+    const amtEmpty=(amt===undefined||amt===null||amt===''||toNumber(amt)===0);
+    if(site===''){missingSite++;reviewSet.add(i);}
+    if(vendor===''){missingVendor++;reviewSet.add(i);}
+    if(cat===''){missingCategory++;reviewSet.add(i);}
+    if(amtEmpty){zeroAmount++;reviewSet.add(i);}
+    if(date===''){missingDate++;reviewSet.add(i);}
+    if(cat==='subcontract')subcontractCount++;
+    const key=vendor+'|'+date+'|'+toNumber(amt);
+    if(!dupMap.has(key))dupMap.set(key,{vendor:vendor,date:date,amount:toNumber(amt),indices:[]});
+    dupMap.get(key).indices.push(i+1); // CSVデータ行番号（ヘッダ除く・1始まり）
+  });
+  const dups=Array.from(dupMap.values()).filter(d=>d.indices.length>1);
+  dups.forEach(d=>d.indices.forEach(idx=>reviewSet.add(idx-1)));
+  return{missingSite,missingVendor,missingCategory,zeroAmount,missingDate,subcontractCount,dups,reviewCount:reviewSet.size};
+}
+
+// ===== 請求書一覧ページ =====
+function renderInvoiceListPage(){
+  const area=document.getElementById('invoiceListArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const list=state.rows.slice().sort((a,b)=>{
+    const da=a['invoice_date']||'',db=b['invoice_date']||'';
+    if(da!==db)return da<db?-1:1;
+    const va=a['vendor_name']||'',vb=b['vendor_name']||'';
+    return va<vb?-1:(va>vb?1:0);
+  });
+  const cols=[
+    {label:'請求日',key:'invoice_date',fmt:v=>textOr(v)},
+    {label:'業者名',key:'vendor_name',fmt:v=>textOr(v)},
+    {label:'工事名',key:'site_name',fmt:v=>textOr(v)},
+    {label:'費目',render:(td,row)=>{td.textContent=formatCostCategory(row['cost_category'])||'—';}},
+    {label:'摘要',key:'description',fmt:v=>textOr(v)},
+    {label:'金額',key:'amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'状態',render:(td,row)=>{td.textContent=formatInvoiceStatus(row['status'])||'—';}},
+    {label:'メモ',key:'memo',fmt:v=>textOr(v)}
+  ];
+  renderSummaryTable(area,cols,list);
+}
+
+// ===== 業者別集計ページ =====
+function renderInvoiceVendorPage(){
+  const area=document.getElementById('invoiceVendorArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const groups=aggregateInvoices(state.rows,r=>r['vendor_name'],'(未設定)');
+  groups.sort((a,b)=>b.amount-a.amount);
+  const cols=[
+    {label:'業者名',key:'key',fmt:v=>String(v)},
+    {label:'件数',key:'count',cls:'num'},
+    {label:'金額合計',key:'amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'主な費目',render:(td,row)=>{td.textContent=topUnique(row.categories,3);}},
+    {label:'主な工事',render:(td,row)=>{td.textContent=topUnique(row.sites,3);}}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 工事別集計ページ =====
+function renderInvoiceProjectPage(){
+  const area=document.getElementById('invoiceProjectArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const groups=aggregateInvoices(state.rows,r=>r['site_name'],'(現場なし)');
+  groups.sort((a,b)=>b.amount-a.amount);
+  const cols=[
+    {label:'工事名',key:'key',fmt:v=>String(v)},
+    {label:'件数',key:'count',cls:'num'},
+    {label:'金額合計',key:'amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'主な業者',render:(td,row)=>{td.textContent=topUnique(row.vendors,3);}},
+    {label:'主な費目',render:(td,row)=>{td.textContent=topUnique(row.categories,3);}}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 月別集計ページ（invoice_date の YYYY-MM） =====
+function renderInvoiceMonthPage(){
+  const area=document.getElementById('invoiceMonthArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const groups=aggregateInvoices(state.rows,r=>{const d=r['invoice_date'];return(d&&d.length>=7)?d.slice(0,7):'';},'(日付なし)');
+  groups.sort((a,b)=>a.key<b.key?-1:(a.key>b.key?1:0));
+  const cols=[
+    {label:'月',key:'key',fmt:v=>String(v)},
+    {label:'件数',key:'count',cls:'num'},
+    {label:'金額合計',key:'amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'主な業者',render:(td,row)=>{td.textContent=topUnique(row.vendors,3);}},
+    {label:'主な費目',render:(td,row)=>{td.textContent=topUnique(row.categories,3);}}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 費目別集計ページ =====
+function renderInvoiceCategoryPage(){
+  const area=document.getElementById('invoiceCategoryArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const groups=aggregateInvoices(state.rows,r=>{const c=r['cost_category'];return(c===''||c===undefined||c===null)?'':formatCostCategory(c);},'(未設定)');
+  groups.sort((a,b)=>b.amount-a.amount);
+  const cols=[
+    {label:'費目',key:'key',fmt:v=>String(v)},
+    {label:'件数',key:'count',cls:'num'},
+    {label:'金額合計',key:'amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'主な業者',render:(td,row)=>{td.textContent=topUnique(row.vendors,3);}},
+    {label:'主な工事',render:(td,row)=>{td.textContent=topUnique(row.sites,3);}}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 確認リストページ（データ品質） =====
+function renderInvoiceChecksPage(){
+  const area=document.getElementById('invoiceChecksArea');clear(area);
+  if(state.csvType!=='project_cost_details'){area.appendChild(noteEl('このページは請求書明細CSV（project_cost_details.csv）で利用できます。'));return;}
+  const c=computeInvoiceChecks(state.rows);
+
+  const grid=document.createElement('div');grid.className='summary-grid';grid.style.marginBottom='16px';
+  addSummary(grid,'現場名なし',String(c.missingSite)+' 件');
+  addSummary(grid,'業者名なし',String(c.missingVendor)+' 件');
+  addSummary(grid,'費目なし',String(c.missingCategory)+' 件');
+  addSummary(grid,'金額0円または空',String(c.zeroAmount)+' 件');
+  addSummary(grid,'日付なし',String(c.missingDate)+' 件');
+  addSummary(grid,'重複疑い',String(c.dups.length)+' 組');
+  area.appendChild(grid);
+
+  // 重複疑い（同じ業者・同じ日付・同じ金額が複数）
+  const dupTitle=document.createElement('div');dupTitle.className='card-title';dupTitle.textContent='重複疑い（同じ業者・同じ日付・同じ金額）';area.appendChild(dupTitle);
+  area.appendChild(noteEl('対象行は CSV のデータ行番号（ヘッダ行を除く・1始まり）です。'));
+  const dupArea=document.createElement('div');area.appendChild(dupArea);
+  const dupCols=[
+    {label:'業者名',render:(td,row)=>{td.textContent=row.vendor||'(未設定)';}},
+    {label:'日付',render:(td,row)=>{td.textContent=row.date||'(日付なし)';}},
+    {label:'金額',cls:'num',render:(td,row)=>{td.textContent=formatMoney(row.amount);}},
+    {label:'件数',cls:'num',render:(td,row)=>{td.textContent=String(row.indices.length);}},
+    {label:'対象行',render:(td,row)=>{td.textContent=row.indices.join(', ');}}
+  ];
+  renderSummaryTable(dupArea,dupCols,c.dups);
+
+  // 外注費の二重計上注意（エラーではなく確認注意）
+  const subTitle=document.createElement('div');subTitle.className='card-title';subTitle.style.marginTop='16px';subTitle.textContent='外注費の二重計上注意';area.appendChild(subTitle);
+  if(c.subcontractCount>0){
+    area.appendChild(noteEl('外注費に該当する行が'+c.subcontractCount+'件あります。'));
+    area.appendChild(noteEl('外注費は日報由来の外注費と請求書由来の外注費が合算される設計のため、二重計上がないか確認してください。'));
+  }else{
+    area.appendChild(noteEl('外注費（subcontract）に該当する行はありません。'));
+  }
+}
+
 function renderAllPages(){
   renderViewerNav(state.csvType);
   renderReportHeader();
@@ -1016,6 +1247,12 @@ function renderAllPages(){
   renderProjectYearPage();
   renderProjectClientPage();
   renderProjectCategoryPage();
+  renderInvoiceListPage();
+  renderInvoiceVendorPage();
+  renderInvoiceProjectPage();
+  renderInvoiceMonthPage();
+  renderInvoiceCategoryPage();
+  renderInvoiceChecksPage();
   renderRawPage();
   renderMessagesPage();
 }

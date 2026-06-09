@@ -95,6 +95,24 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .kv-list dt{color:var(--faint);}
 .kv-list dd{color:var(--ink);}
 
+/* ===== 複数CSV統合モード ===== */
+.mode-tabs{display:flex;gap:6px;}
+.mode-tab{border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--muted);}
+.mode-tab:hover{background:var(--head);color:var(--ink);}
+.mode-tab.active{background:var(--accent-bg);color:var(--accent);font-weight:700;border-color:var(--accent-bg);}
+.multi-slot{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+.multi-slot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+.multi-slot-title{font-size:13px;font-weight:700;}
+.req-badge{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;}
+.req-required{color:#a32020;border-color:#f0c2c2;background:#fdecec;}
+.req-optional{color:var(--muted);border-color:var(--line);background:#f7f8fa;}
+.multi-slot-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.multi-slot-status{font-size:12px;color:var(--muted);}
+.multi-slot-note{font-size:12px;margin-top:6px;}
+.multi-slot-note.ok{color:#2a7a2a;}
+.multi-slot-note.warn{color:#9a5b00;}
+.multi-slot-note.error{color:#a32020;}
+
 /* ===== 印刷 ===== */
 @media print{
   @page{margin:12mm;}
@@ -118,7 +136,11 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 <!-- ファイルパネル（印刷時は非表示） -->
 <div class="file-panel no-print">
   <h1>岡井組 CSVビューア</h1>
-  <div class="file-row">
+  <div class="mode-tabs">
+    <button type="button" id="modeSingleBtn" class="mode-tab active">単体CSV</button>
+    <button type="button" id="modeMultiBtn" class="mode-tab">複数CSV統合</button>
+  </div>
+  <div class="file-row" id="singleFileRow">
     <input type="file" id="fileInput" accept=".csv,text/csv">
     <span id="fileName" class="file-name"></span>
   </div>
@@ -231,6 +253,40 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       <section id="page-messages" class="viewer-page hidden">
         <div class="card"><div class="card-title">警告・エラー</div><div id="messagesArea"></div></div>
       </section>
+    </main>
+  </div>
+</div>
+
+<!-- 複数CSV統合ビュー（Phase 2-4-7-1：読み込みUIと内部状態のみ） -->
+<div id="multiBody" class="hidden">
+  <div class="app">
+    <main class="main">
+      <div class="report-header">
+        <h1>複数CSV統合ビュー</h1>
+        <div class="rh-meta">projects_summary / attendance_details / project_cost_details / machine_details を同時に読み込み、project_id で横断確認します（Supabaseには接続しません）。</div>
+      </div>
+
+      <div class="card no-print">
+        <div class="card-title">CSV読み込み</div>
+        <div class="note" style="margin-top:0;margin-bottom:10px;">projects_summary.csv は必須です。他3つは任意です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
+        <div id="multiLoadArea"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">読み込み状況</div>
+        <div id="multiStatusArea" class="summary-grid"></div>
+        <div id="multiMissingArea"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">簡易工事一覧</div>
+        <div id="multiProjectArea"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">警告・エラー</div>
+        <div id="multiMessagesArea"></div>
+      </div>
     </main>
   </div>
 </div>
@@ -1556,6 +1612,379 @@ document.getElementById('fileInput').addEventListener('change',function(e){
   };
   reader.readAsText(file,'UTF-8');
 });
+
+// =====================================================================
+// 複数CSV統合モード（Phase 2-4-7-1：読み込みUIと multiState のみ）
+// 既存の単体CSV state には手を加えず、別状態 multiState を持つ。
+// 工事別月別原価の本計算・工事詳細統合・差異確認・確認リストは未実装。
+// =====================================================================
+
+// 読み込み枠の定義（projects_summary のみ必須）
+const MULTI_SLOTS=[
+  {key:'projects_summary',label:'projects_summary.csv',required:true},
+  {key:'attendance_details',label:'attendance_details.csv',required:false},
+  {key:'project_cost_details',label:'project_cost_details.csv',required:false},
+  {key:'machine_details',label:'machine_details.csv',required:false}
+];
+
+// 複数CSV用の内部状態（単体 state とは独立）
+const multiState={
+  loaded:false,                 // projects_summary（必須）が読み込まれたら true
+  files:{                       // 読込済みファイルのメタ {fileName,csvType,csvLabel,rowCount}|null
+    projects_summary:null,
+    attendance_details:null,
+    project_cost_details:null,
+    machine_details:null
+  },
+  rows:{                        // パース済み行（オブジェクト配列）
+    projects_summary:[],
+    attendance_details:[],
+    project_cost_details:[],
+    machine_details:[]
+  },
+  indexes:{                     // 読込完了時に1回構築する索引
+    projectsById:new Map(),         // project_id -> projects_summary 行
+    attendanceByProjectId:new Map(),// project_id -> attendance_details 行[]
+    invoicesByProjectId:new Map(),  // project_id -> project_cost_details 行[]
+    machinesById:new Map()          // machine_id -> machine_details 行
+  },
+  slotNotes:{                   // 各枠の読込結果メモ {type:'ok'|'warn'|'error',text}|null
+    projects_summary:null,
+    attendance_details:null,
+    project_cost_details:null,
+    machine_details:null
+  },
+  // インデックス構築時の派生集計（メッセージ生成に使用）
+  emptyProjectId:{attendance:0,invoice:0,project:0},
+  dupProjectId:0,
+  warnings:[],
+  errors:[]
+};
+
+// 行列（ヘッダ＋データ）→ オブジェクト配列（既存 handleText と同方針）
+function matrixToRows(headers,dataMatrix){
+  return dataMatrix.map(cells=>{
+    const obj={};
+    headers.forEach((h,idx)=>{obj[h]=idx<cells.length?cells[idx]:'';});
+    return obj;
+  });
+}
+
+// 値が空かどうか（trim後）
+function isBlankId(v){return v===null||v===undefined||String(v).trim()==='';}
+
+// 1枠ぶんのCSV読み込み（既存パーサ・既存種別判定を流用）
+function loadMultiSlot(slotKey,fileName,text){
+  // 当該枠を一旦リセット
+  multiState.files[slotKey]=null;
+  multiState.rows[slotKey]=[];
+  multiState.slotNotes[slotKey]=null;
+
+  const slotDef=MULTI_SLOTS.find(s=>s.key===slotKey);
+  const slotLabel=slotDef?slotDef.label:slotKey;
+
+  // パース
+  let matrix;
+  try{
+    matrix=parseCsvToMatrix(text);
+  }catch(err){
+    const reason=(err.code==='UNCLOSED_QUOTE')?'クォートが閉じていません。':('CSV解析に失敗しました：'+err.message);
+    multiState.slotNotes[slotKey]={type:'error',text:fileName+'：'+reason};
+    finalizeMulti();return;
+  }
+  if(matrix.length===0){
+    multiState.slotNotes[slotKey]={type:'error',text:fileName+'：CSVが空です。ヘッダ行がありません。'};
+    finalizeMulti();return;
+  }
+
+  // ヘッダ・種別判定
+  const headers=matrix[0].map(h=>h.trim());
+  const detected=detectCsvType(headers);
+  if(detected.key===null){
+    multiState.slotNotes[slotKey]={type:'error',text:fileName+'：未知のCSV形式です。'};
+    finalizeMulti();return;
+  }
+  if(detected.key!==slotKey){
+    multiState.slotNotes[slotKey]={type:'warn',
+      text:'指定枠（'+slotLabel+'）と異なるCSV種別（'+detected.label+'）が選択されました。読み込みません。'};
+    finalizeMulti();return;
+  }
+
+  // データ行 → オブジェクト配列
+  const rows=matrixToRows(headers,matrix.slice(1));
+  multiState.rows[slotKey]=rows;
+  multiState.files[slotKey]={fileName:fileName,csvType:detected.key,csvLabel:detected.label,rowCount:rows.length};
+  multiState.slotNotes[slotKey]={type:'ok',text:fileName+'：読み込み済み（'+rows.length+'行）'};
+  finalizeMulti();
+}
+
+// 1枠ぶんをクリア
+function clearMultiSlot(slotKey){
+  multiState.files[slotKey]=null;
+  multiState.rows[slotKey]=[];
+  multiState.slotNotes[slotKey]=null;
+  finalizeMulti();
+}
+
+// インデックス再構築 → メッセージ再計算 → 再描画
+function finalizeMulti(){
+  rebuildMultiIndexes();
+  multiState.loaded=!!multiState.files.projects_summary;
+  recomputeMultiMessages();
+  renderMultiView();
+}
+
+// project_id / machine_id を軸にした索引を作り直す
+function rebuildMultiIndexes(){
+  const idx=multiState.indexes;
+  idx.projectsById=new Map();
+  idx.attendanceByProjectId=new Map();
+  idx.invoicesByProjectId=new Map();
+  idx.machinesById=new Map();
+  multiState.emptyProjectId={attendance:0,invoice:0,project:0};
+  multiState.dupProjectId=0;
+
+  // projects_summary：project_id をキー（重複・空は記録）
+  multiState.rows.projects_summary.forEach(r=>{
+    const id=isBlankId(r['project_id'])?'':String(r['project_id']).trim();
+    if(id===''){multiState.emptyProjectId.project++;return;}
+    if(idx.projectsById.has(id))multiState.dupProjectId++;
+    idx.projectsById.set(id,r);
+  });
+
+  // attendance_details：project_id をキーに配列で保持（空は計上せず警告対象）
+  multiState.rows.attendance_details.forEach(r=>{
+    const id=isBlankId(r['project_id'])?'':String(r['project_id']).trim();
+    if(id===''){multiState.emptyProjectId.attendance++;return;}
+    if(!idx.attendanceByProjectId.has(id))idx.attendanceByProjectId.set(id,[]);
+    idx.attendanceByProjectId.get(id).push(r);
+  });
+
+  // project_cost_details：project_id をキーに配列で保持（空は計上せず警告対象）
+  multiState.rows.project_cost_details.forEach(r=>{
+    const id=isBlankId(r['project_id'])?'':String(r['project_id']).trim();
+    if(id===''){multiState.emptyProjectId.invoice++;return;}
+    if(!idx.invoicesByProjectId.has(id))idx.invoicesByProjectId.set(id,[]);
+    idx.invoicesByProjectId.get(id).push(r);
+  });
+
+  // machine_details：machine_id をキー（工事別索引には入れない）
+  multiState.rows.machine_details.forEach(r=>{
+    const id=isBlankId(r['machine_id'])?'':String(r['machine_id']).trim();
+    if(id==='')return;
+    idx.machinesById.set(id,r);
+  });
+}
+
+// 警告・エラー配列を再計算（枠メモ＋派生警告を集約）
+function recomputeMultiMessages(){
+  const warnings=[];
+  const errors=[];
+
+  // 各枠の読込メモ（error/warn）を集約
+  MULTI_SLOTS.forEach(slot=>{
+    const note=multiState.slotNotes[slot.key];
+    if(!note)return;
+    if(note.type==='error')errors.push(note.text);
+    else if(note.type==='warn')warnings.push(note.text);
+  });
+
+  // 未読込CSVの注記（必須/任意で文言を分ける）
+  if(!multiState.files.projects_summary)
+    warnings.push('projects_summary.csv が未読込です（統合ビューの必須CSVが未読込）。');
+  if(!multiState.files.attendance_details)
+    warnings.push('attendance_details.csv が未読込です（労務費の月別内訳は未表示）。');
+  if(!multiState.files.project_cost_details)
+    warnings.push('project_cost_details.csv が未読込です（請求書由来費用の月別内訳は未表示）。');
+  if(!multiState.files.machine_details)
+    warnings.push('machine_details.csv が未読込です（重機台帳情報は未表示）。');
+
+  // project_id が空の行（site_name 代替は今回未使用・記録のみ）
+  if(multiState.emptyProjectId.project>0)
+    warnings.push('projects_summary に project_id が空の行が'+multiState.emptyProjectId.project+'件あります。');
+  if(multiState.emptyProjectId.attendance>0)
+    warnings.push('attendance_details に project_id が空の行が'+multiState.emptyProjectId.attendance+'件あります（工事別には集計しません）。');
+  if(multiState.emptyProjectId.invoice>0)
+    warnings.push('project_cost_details に project_id が空の行が'+multiState.emptyProjectId.invoice+'件あります（工事別には集計しません）。');
+  if(multiState.dupProjectId>0)
+    warnings.push('projects_summary に project_id が重複する行が'+multiState.dupProjectId+'件あります（最後の行を採用）。');
+
+  multiState.warnings=warnings;
+  multiState.errors=errors;
+}
+
+// ===== 複数CSVモード描画 =====
+function renderMultiView(){
+  renderMultiLoadArea();
+  renderMultiStatus();
+  renderMultiProjectList();
+  renderMultiMessages();
+}
+
+// 4枠の読み込みUI
+function renderMultiLoadArea(){
+  const area=document.getElementById('multiLoadArea');clear(area);
+  MULTI_SLOTS.forEach(slot=>{
+    const box=document.createElement('div');box.className='multi-slot';
+
+    const head=document.createElement('div');head.className='multi-slot-head';
+    const title=document.createElement('span');title.className='multi-slot-title';title.textContent=slot.label;
+    const badge=document.createElement('span');
+    badge.className='req-badge '+(slot.required?'req-required':'req-optional');
+    badge.textContent=slot.required?'必須':'任意';
+    head.appendChild(title);head.appendChild(badge);
+    box.appendChild(head);
+
+    const row=document.createElement('div');row.className='multi-slot-row';
+    const input=document.createElement('input');
+    input.type='file';input.accept='.csv,text/csv';
+    input.addEventListener('change',function(e){
+      const file=e.target.files&&e.target.files[0];
+      if(!file)return;
+      const reader=new FileReader();
+      reader.onload=function(){loadMultiSlot(slot.key,file.name,String(reader.result));};
+      reader.onerror=function(){
+        multiState.files[slot.key]=null;multiState.rows[slot.key]=[];
+        multiState.slotNotes[slot.key]={type:'error',text:file.name+'：ファイルが読めません。'};
+        finalizeMulti();
+      };
+      reader.readAsText(file,'UTF-8');
+    });
+    row.appendChild(input);
+
+    const meta=multiState.files[slot.key];
+    const status=document.createElement('span');status.className='multi-slot-status';
+    if(meta)status.textContent='読み込み済み｜行数：'+meta.rowCount+'｜ファイル：'+meta.fileName;
+    else status.textContent='未読込';
+    row.appendChild(status);
+
+    const clearBtn=document.createElement('button');
+    clearBtn.type='button';clearBtn.className='back-btn';clearBtn.style.margin='0';
+    clearBtn.textContent='クリア';
+    clearBtn.addEventListener('click',()=>clearMultiSlot(slot.key));
+    row.appendChild(clearBtn);
+    box.appendChild(row);
+
+    const note=multiState.slotNotes[slot.key];
+    if(note){
+      const n=document.createElement('div');n.className='multi-slot-note '+note.type;n.textContent=note.text;
+      box.appendChild(n);
+    }
+    area.appendChild(box);
+  });
+}
+
+// 読み込み状況ダッシュボード（種別ごとの読込状況＋各種件数）
+function renderMultiStatus(){
+  const area=document.getElementById('multiStatusArea');clear(area);
+  MULTI_SLOTS.forEach(slot=>{
+    const meta=multiState.files[slot.key];
+    const val=meta?('読み込み済み / '+meta.rowCount+'行 / '+meta.fileName):'未読込';
+    addSummary(area,slot.label,val);
+  });
+  addSummary(area,'工事件数',String(multiState.rows.projects_summary.length));
+  addSummary(area,'労務明細件数',String(multiState.rows.attendance_details.length));
+  addSummary(area,'請求書明細件数',String(multiState.rows.project_cost_details.length));
+  addSummary(area,'重機台帳件数',String(multiState.rows.machine_details.length));
+  addSummary(area,'警告件数',String(multiState.warnings.length));
+  addSummary(area,'エラー件数',String(multiState.errors.length));
+
+  // 不足CSVの明示
+  const missArea=document.getElementById('multiMissingArea');clear(missArea);
+  const missing=[];
+  if(!multiState.files.projects_summary)missing.push('projects_summary 未読込 → 統合ビューの必須CSVが未読込');
+  if(!multiState.files.attendance_details)missing.push('attendance_details 未読込 → 労務費の月別内訳は未表示');
+  if(!multiState.files.project_cost_details)missing.push('project_cost_details 未読込 → 請求書由来費用の月別内訳は未表示');
+  if(!multiState.files.machine_details)missing.push('machine_details 未読込 → 重機台帳情報は未表示');
+  if(missing.length){
+    const title=document.createElement('div');title.className='card-title';title.style.marginTop='14px';title.textContent='不足CSV';
+    missArea.appendChild(title);
+    missing.forEach(m=>missArea.appendChild(noteEl(m)));
+  }
+}
+
+// 簡易工事一覧（projects_summary 読込時のみ）
+function renderMultiProjectList(){
+  const area=document.getElementById('multiProjectArea');clear(area);
+  if(!multiState.files.projects_summary){
+    area.appendChild(noteEl('projects_summary.csv が未読込のため、簡易工事一覧を表示できません（必須CSV）。'));
+    return;
+  }
+  const attLoaded=!!multiState.files.attendance_details;
+  const invLoaded=!!multiState.files.project_cost_details;
+  if(!attLoaded)area.appendChild(noteEl('attendance_details.csv が未読込のため「労務明細件数」は「—」表示です。'));
+  if(!invLoaded)area.appendChild(noteEl('project_cost_details.csv が未読込のため「請求書明細件数」は「—」表示です。'));
+  area.appendChild(noteEl('本フェーズでは件数の確認のみで、月別原価計算・工事詳細遷移は未実装です。'));
+
+  const idx=multiState.indexes;
+  const cols=[
+    {label:'工事名',key:'site_name',fmt:v=>textOr(v)},
+    {label:'project_id',key:'project_id',fmt:v=>textOr(v)},
+    {label:'発注者',key:'client_name',fmt:v=>textOr(v)},
+    {label:'工事分類',key:'category_name',fmt:v=>textOr(v)},
+    {label:'年度',key:'fiscal_year',cls:'num',fmt:v=>textOr(v)},
+    {label:'労務明細件数',cls:'num',render:(td,row)=>{
+      if(!attLoaded){td.textContent='—';return;}
+      const id=isBlankId(row['project_id'])?'':String(row['project_id']).trim();
+      const list=id?idx.attendanceByProjectId.get(id):null;
+      td.textContent=String(list?list.length:0);
+    }},
+    {label:'請求書明細件数',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const id=isBlankId(row['project_id'])?'':String(row['project_id']).trim();
+      const list=id?idx.invoicesByProjectId.get(id):null;
+      td.textContent=String(list?list.length:0);
+    }}
+  ];
+  renderSummaryTable(area,cols,multiState.rows.projects_summary);
+}
+
+// 警告・エラー欄
+function renderMultiMessages(){
+  const area=document.getElementById('multiMessagesArea');clear(area);
+  if(multiState.errors.length===0&&multiState.warnings.length===0){
+    area.appendChild(noteEl('警告・エラーはありません。'));
+    return;
+  }
+  if(multiState.errors.length>0){
+    const h=document.createElement('div');h.className='card-title';h.textContent='エラー（'+multiState.errors.length+'件）';area.appendChild(h);
+    multiState.errors.forEach(e=>addMsg(area,'msg-error',e));
+  }
+  if(multiState.warnings.length>0){
+    const h=document.createElement('div');h.className='card-title';h.style.marginTop='14px';h.textContent='警告（'+multiState.warnings.length+'件）';area.appendChild(h);
+    multiState.warnings.forEach(w=>addMsg(area,'msg-warn',w));
+  }
+}
+
+// ===== 単体 / 統合 モード切替 =====
+let currentMode='single';
+function setMode(mode){
+  currentMode=mode;
+  const single=(mode==='single');
+  document.getElementById('singleFileRow').classList.toggle('hidden',!single);
+  document.getElementById('modeSingleBtn').classList.toggle('active',single);
+  document.getElementById('modeMultiBtn').classList.toggle('active',!single);
+  if(single){
+    document.getElementById('multiBody').classList.add('hidden');
+    // 単体ビューの状態に応じて preLoad / viewerBody を復帰
+    if(state.loaded){
+      document.getElementById('preLoad').classList.add('hidden');
+      document.getElementById('viewerBody').classList.remove('hidden');
+    }else{
+      document.getElementById('preLoad').classList.remove('hidden');
+      document.getElementById('viewerBody').classList.add('hidden');
+    }
+  }else{
+    document.getElementById('preLoad').classList.add('hidden');
+    document.getElementById('viewerBody').classList.add('hidden');
+    document.getElementById('multiBody').classList.remove('hidden');
+    // 初回表示時に未読込状態の注記を出すため再描画
+    recomputeMultiMessages();
+    renderMultiView();
+  }
+}
+document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
+document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
 </script>
 </body>
 </html>

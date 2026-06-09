@@ -595,6 +595,112 @@ subcontractRows = 0
 - 複数CSV統合モードによる工事別月別原価ビュー
 - 実データ入り `project_cost_details.csv` での請求書明細ビューアー再検証
 
+#### Phase 2-4-6：machine_details.csv 用 重機台帳ビューアー初期実装（完了）
+
+- 実装コミット：`4ac86e6 Add machine details CSV viewer pages`
+- 対象ファイル：`local-viewers/csv-viewer.html`
+
+**実装内容：**
+
+- `machine_details.csv` 読込時に以下の専用ページを追加
+  - 重機一覧
+  - 重機別集計
+  - 月別集計
+  - 現場別集計
+  - 確認リスト
+- CSV列マッピング
+  - 重機ID：`machine_id`
+  - 重機名：`machine_name`
+  - 所有/リース区分：`ownership`
+  - 状態：`is_active`
+  - リース月額：`lease_monthly`
+  - 所有原価：`owned_cost`
+  - 所有会社：`owner_company`
+  - リース会社：`lease_company`
+  - リース開始：`lease_start`
+  - リース終了：`lease_end`
+- 表示の日本語化
+  - `lease` → リース
+  - `owned` → 自社保有
+  - `true` → 有効
+  - `false` → 無効
+- `machine_details.csv` は重機台帳であり、1行＝1重機として扱う
+- 以下の列は `machine_details.csv` に存在しないため、無理に算出せず `—` または注記表示にした
+  - 稼働日
+  - 工事名/現場名
+  - 稼働時間
+  - 稼働日数
+  - 機種
+  - 管理番号
+  - メモ
+- 重機費は以下の台帳値として表示
+  - リース：`lease_monthly`
+  - 自社保有：`owned_cost`
+- 月別集計は、稼働日列がないため「集計不可」と注記表示
+- 現場別集計は、工事名/現場名列がないため「集計不可」と注記表示
+- 重機別集計では、重機IDを優先し、なければ重機名でグループ化
+- 確認リストを追加
+  - 重機名なし
+  - 重機費0円または空
+  - 同一 `machine_id` / 重機名の重複疑い
+  - 現場名なし・日付なしは列がないため判定対象外
+  - 長期間稼働なしは稼働日列がないため判定不可
+- `owned_cost` はMVPでは0になり得るため、重機費0円は必ずしも異常ではない旨を注記
+- CSV値は `textContent` / DOM API で描画し、`innerHTML` に入れていない
+- Supabase接続情報・外部CDNなし
+- `file://` で動作
+
+**実ブラウザ確認内容：**
+
+- `machine_details.csv` 読込OK
+- メニュー表示OK
+- ダッシュボードOK
+- 重機一覧OK
+- 重機別集計OK
+- 月別集計OK
+- 現場別集計OK
+- 確認リストOK
+- 生データOK
+- 警告・エラーOK
+- NaN表示なし
+- Console重大エラーなし
+
+**回帰確認：**
+
+- projects_summary.csv
+  - projects_summary読込OK
+  - 工事一覧OK
+  - 工事名クリックOK
+  - 工事詳細OK
+  - 年度別集計OK
+  - Console重大エラーなし
+- project_cost_details.csv
+  - project_cost_details読込OK
+  - 請求書一覧OK
+  - 業者別集計OK
+  - 確認リストOK
+  - Console重大エラーなし
+- attendance_details.csv
+  - attendance_details読込OK
+  - 出勤簿系メニューOK
+  - 月別サマリーOK
+  - 従業員別サマリーOK
+  - 従業員名クリック遷移OK
+  - Console重大エラーなし
+
+**重要な仕様注記：**
+
+- `machine_details.csv` は重機台帳であり、稼働明細ではない
+- そのため、現場別・月別の重機稼働や重機原価は、このCSV単体では正確に算出できない
+- 現場別/月別の重機費分析には、将来的に複数CSV統合モード、または `machine_locations` 等との統合設計が必要
+- ただし `machine_locations` は移動記録であり、稼働時間・稼働日数を持たない場合、正確な稼働原価には別途設計が必要
+
+**次フェーズ候補：**
+
+- 複数CSV統合モードによる工事別月別原価ビュー
+- 実データ入り `project_cost_details.csv` での請求書明細ビューアー再検証
+- 重機費・稼働日・現場紐付けを扱うための将来データ設計検討
+
 ## 保留・改善候補
 
 - favicon.ico 追加

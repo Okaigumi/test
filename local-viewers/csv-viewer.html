@@ -291,6 +291,22 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   </div>
 </div>
 
+<!-- 複数CSV統合：工事別 労務費詳細（Phase 2-4-7-2） -->
+<div id="multiDetailBody" class="hidden">
+  <div class="app">
+    <main class="main">
+      <button type="button" id="multiDetailBack" class="back-btn no-print">← 統合ビュー（工事一覧）に戻る</button>
+      <div class="report-header">
+        <h1>工事別 労務費詳細</h1>
+        <div class="rh-meta" id="multiDetailMeta"></div>
+      </div>
+      <div class="card"><div class="card-title">工事概要</div><div id="multiDetailOverview"></div></div>
+      <div class="card"><div class="card-title">月別労務費</div><div id="multiDetailMonthly"></div></div>
+      <div class="card"><div class="card-title">労務明細</div><div id="multiDetailRows"></div></div>
+    </main>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -1648,6 +1664,10 @@ const multiState={
     invoicesByProjectId:new Map(),  // project_id -> project_cost_details 行[]
     machinesById:new Map()          // machine_id -> machine_details 行
   },
+  summaries:{                   // 派生集計（Phase 2-4-7-2：労務費）
+    laborByProjectId:new Map(),        // project_id -> {labor_cost,labor_days,rowCount,reportCount,monthCount}
+    laborMonthlyByProjectId:new Map()  // project_id -> [{month,labor_cost,labor_days,reportCount,rowCount}]（月昇順）
+  },
   slotNotes:{                   // 各枠の読込結果メモ {type:'ok'|'warn'|'error',text}|null
     projects_summary:null,
     attendance_details:null,
@@ -1726,12 +1746,14 @@ function clearMultiSlot(slotKey){
   finalizeMulti();
 }
 
-// インデックス再構築 → メッセージ再計算 → 再描画
+// インデックス再構築 → 派生集計 → メッセージ再計算 → 再描画
 function finalizeMulti(){
   rebuildMultiIndexes();
+  buildMultiLaborSummaries();
   multiState.loaded=!!multiState.files.projects_summary;
   recomputeMultiMessages();
   renderMultiView();
+  showMultiHome();   // データ変更時は詳細から一覧へ戻す
 }
 
 // project_id / machine_id を軸にした索引を作り直す
@@ -1774,6 +1796,57 @@ function rebuildMultiIndexes(){
     if(id==='')return;
     idx.machinesById.set(id,r);
   });
+}
+
+// 工事別・月別の労務費集計（attendance_details.labor_cost / labor_days をSUM）
+// - project_id が空の行は集計対象外（rebuildMultiIndexes 側で警告計上済み）
+// - 月キーは report_date の YYYY-MM
+// - normal_mins / overtime_mins はここでは生SUMしない（二重計上防止）
+// - 日報件数は report_id のユニーク数、明細件数は行数
+function buildMultiLaborSummaries(){
+  const byProject=new Map();      // id -> {labor_cost,labor_days,rowCount,reportSet,monthSet}
+  const byProjectMonth=new Map(); // id -> Map(ym -> {labor_cost,labor_days,rowCount,reportSet})
+
+  multiState.rows.attendance_details.forEach((r,i)=>{
+    const id=isBlankId(r['project_id'])?'':String(r['project_id']).trim();
+    if(id==='')return; // 現場なし日報は工事別集計に含めない
+    const dateStr=r['report_date']!==undefined?String(r['report_date']):'';
+    const ym=dateStr.length>=7?dateStr.slice(0,7):'(不明)';
+    const cost=toNumber(r['labor_cost']);
+    const days=toNumber(r['labor_days']);
+    // report_id（必須列だが空でも一意に数えられるよう行番号で代替）
+    const rid=(!isBlankId(r['report_id']))?String(r['report_id']).trim():('__row_'+i);
+
+    let p=byProject.get(id);
+    if(!p){p={labor_cost:0,labor_days:0,rowCount:0,reportSet:new Set(),monthSet:new Set()};byProject.set(id,p);}
+    p.labor_cost+=cost;p.labor_days+=days;p.rowCount+=1;p.reportSet.add(rid);p.monthSet.add(ym);
+
+    let mm=byProjectMonth.get(id);
+    if(!mm){mm=new Map();byProjectMonth.set(id,mm);}
+    let m=mm.get(ym);
+    if(!m){m={labor_cost:0,labor_days:0,rowCount:0,reportSet:new Set()};mm.set(ym,m);}
+    m.labor_cost+=cost;m.labor_days+=days;m.rowCount+=1;m.reportSet.add(rid);
+  });
+
+  const laborByProjectId=new Map();
+  byProject.forEach((v,id)=>{
+    laborByProjectId.set(id,{
+      labor_cost:v.labor_cost,labor_days:v.labor_days,rowCount:v.rowCount,
+      reportCount:v.reportSet.size,monthCount:v.monthSet.size
+    });
+  });
+
+  const laborMonthlyByProjectId=new Map();
+  byProjectMonth.forEach((mm,id)=>{
+    const arr=Array.from(mm.entries()).map(([ym,v])=>({
+      month:ym,labor_cost:v.labor_cost,labor_days:v.labor_days,rowCount:v.rowCount,reportCount:v.reportSet.size
+    }));
+    arr.sort((a,b)=>a.month<b.month?-1:(a.month>b.month?1:0));
+    laborMonthlyByProjectId.set(id,arr);
+  });
+
+  multiState.summaries.laborByProjectId=laborByProjectId;
+  multiState.summaries.laborMonthlyByProjectId=laborMonthlyByProjectId;
 }
 
 // 警告・エラー配列を再計算（枠メモ＋派生警告を集約）
@@ -1886,6 +1959,17 @@ function renderMultiStatus(){
   addSummary(area,'労務明細件数',String(multiState.rows.attendance_details.length));
   addSummary(area,'請求書明細件数',String(multiState.rows.project_cost_details.length));
   addSummary(area,'重機台帳件数',String(multiState.rows.machine_details.length));
+
+  // 労務費サマリー（attendance_details 読込時のみ実数、未読込は「—」）
+  const attLoaded=!!multiState.files.attendance_details;
+  const labor=multiState.summaries.laborByProjectId;
+  let laborTotal=0;const monthSet=new Set();
+  labor.forEach(v=>{laborTotal+=v.labor_cost;});
+  multiState.summaries.laborMonthlyByProjectId.forEach(arr=>arr.forEach(m=>monthSet.add(m.month)));
+  addSummary(area,'労務費合計',attLoaded?(formatMoney(laborTotal)+' 円'):'—');
+  addSummary(area,'労務費対象工事件数',attLoaded?String(labor.size):'—');
+  addSummary(area,'労務費対象月数',attLoaded?String(monthSet.size):'—');
+
   addSummary(area,'警告件数',String(multiState.warnings.length));
   addSummary(area,'エラー件数',String(multiState.errors.length));
 
@@ -1912,31 +1996,140 @@ function renderMultiProjectList(){
   }
   const attLoaded=!!multiState.files.attendance_details;
   const invLoaded=!!multiState.files.project_cost_details;
-  if(!attLoaded)area.appendChild(noteEl('attendance_details.csv が未読込のため「労務明細件数」は「—」表示です。'));
+  if(!attLoaded)area.appendChild(noteEl('attendance_details.csv が未読込のため、労務費関連の列は「—」表示です。'));
   if(!invLoaded)area.appendChild(noteEl('project_cost_details.csv が未読込のため「請求書明細件数」は「—」表示です。'));
-  area.appendChild(noteEl('本フェーズでは件数の確認のみで、月別原価計算・工事詳細遷移は未実装です。'));
+  area.appendChild(noteEl('本フェーズ（2-4-7-2）では labor_cost による工事別・月別の労務費集計まで実装しています。請求書費用・月別原価の総合計・差異確認は次フェーズ以降です。'));
+  if(attLoaded){
+    area.appendChild(noteEl('労務費は attendance_details.labor_cost を project_id + report_date(月) で集計しています。'));
+    area.appendChild(noteEl('normal_mins / overtime_mins は二重計上防止のため、この工事別月別集計では生SUMしていません。'));
+  }
+  area.appendChild(noteEl('月別原価ビューの総合計は、projects_summary.total_cost と完全一致しない場合があります。'));
+  area.appendChild(noteEl('工事名または「労務詳細」ボタンで、選択工事の月別労務費・労務明細を表示します。'));
 
   const idx=multiState.indexes;
+  const sum=multiState.summaries.laborByProjectId;
+  const keyOf=row=>isBlankId(row['project_id'])?'':String(row['project_id']).trim();
+  const laborOf=row=>{const id=keyOf(row);return id?(sum.get(id)||null):null;};
   const cols=[
-    {label:'工事名',key:'site_name',fmt:v=>textOr(v)},
+    {label:'工事名',render:(td,row)=>{
+      const btn=document.createElement('button');btn.className='link-btn';
+      btn.textContent=row['site_name']||'(名称なし)';
+      btn.addEventListener('click',()=>showMultiLaborDetail(keyOf(row)));
+      td.appendChild(btn);
+    }},
     {label:'project_id',key:'project_id',fmt:v=>textOr(v)},
     {label:'発注者',key:'client_name',fmt:v=>textOr(v)},
     {label:'工事分類',key:'category_name',fmt:v=>textOr(v)},
     {label:'年度',key:'fiscal_year',cls:'num',fmt:v=>textOr(v)},
+    {label:'労務費合計',cls:'num',render:(td,row)=>{
+      if(!attLoaded){td.textContent='—';return;}
+      const s=laborOf(row);td.textContent=formatMoney(s?s.labor_cost:0);
+    }},
+    {label:'労務対象月数',cls:'num',render:(td,row)=>{
+      if(!attLoaded){td.textContent='—';return;}
+      const s=laborOf(row);td.textContent=String(s?s.monthCount:0);
+    }},
+    {label:'日報件数',cls:'num',render:(td,row)=>{
+      if(!attLoaded){td.textContent='—';return;}
+      const s=laborOf(row);td.textContent=String(s?s.reportCount:0);
+    }},
     {label:'労務明細件数',cls:'num',render:(td,row)=>{
       if(!attLoaded){td.textContent='—';return;}
-      const id=isBlankId(row['project_id'])?'':String(row['project_id']).trim();
-      const list=id?idx.attendanceByProjectId.get(id):null;
-      td.textContent=String(list?list.length:0);
+      const s=laborOf(row);td.textContent=String(s?s.rowCount:0);
     }},
     {label:'請求書明細件数',cls:'num',render:(td,row)=>{
       if(!invLoaded){td.textContent='—';return;}
-      const id=isBlankId(row['project_id'])?'':String(row['project_id']).trim();
-      const list=id?idx.invoicesByProjectId.get(id):null;
+      const id=keyOf(row);const list=id?idx.invoicesByProjectId.get(id):null;
       td.textContent=String(list?list.length:0);
+    }},
+    {label:'労務詳細',cls:'no-print',render:(td,row)=>{
+      const btn=document.createElement('button');btn.className='back-btn';btn.style.margin='0';
+      btn.textContent='労務詳細';
+      btn.addEventListener('click',()=>showMultiLaborDetail(keyOf(row)));
+      td.appendChild(btn);
     }}
   ];
   renderSummaryTable(area,cols,multiState.rows.projects_summary);
+}
+
+// ===== 工事別 労務費詳細（概要 / 月別労務費 / 労務明細） =====
+function showMultiHome(){
+  document.getElementById('multiDetailBody').classList.add('hidden');
+  if(currentMode==='multi')document.getElementById('multiBody').classList.remove('hidden');
+}
+function showMultiLaborDetail(projectKey){
+  renderMultiLaborDetail(projectKey);
+  document.getElementById('multiBody').classList.add('hidden');
+  document.getElementById('multiDetailBody').classList.remove('hidden');
+  window.scrollTo(0,0);
+}
+function renderMultiLaborDetail(projectKey){
+  const id=isBlankId(projectKey)?'':String(projectKey).trim();
+  const attLoaded=!!multiState.files.attendance_details;
+  const prow=id?multiState.indexes.projectsById.get(id):null;
+  const moneyUnit=v=>{const s=moneyOr(v);return s==='—'?s:s+' 円';};
+
+  // 見出し
+  const metaEl=document.getElementById('multiDetailMeta');
+  metaEl.textContent=prow?('工事名：'+(prow['site_name']||'(名称なし)')+'　project_id：'+(prow['project_id']||'—')):'対象工事が特定できません';
+
+  // 概要
+  const ov=document.getElementById('multiDetailOverview');clear(ov);
+  if(!prow){
+    ov.appendChild(noteEl('対象工事が見つかりません（project_id が未設定の行、または該当工事がありません）。'));
+  }else{
+    const s=multiState.summaries.laborByProjectId.get(id)||{labor_cost:0,labor_days:0,rowCount:0,reportCount:0,monthCount:0};
+    const psLabor=prow['labor_cost'];
+    const dl=document.createElement('dl');dl.className='kv-list';
+    const add=(k,v)=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.appendChild(dt);dl.appendChild(dd);};
+    add('工事名',textOr(prow['site_name']));
+    add('project_id',textOr(prow['project_id']));
+    add('発注者',textOr(prow['client_name']));
+    add('工事分類',textOr(prow['category_name']));
+    add('年度',textOr(prow['fiscal_year']));
+    add('請負金額',moneyUnit(prow['contract_amount']));
+    add('projects_summary 上の労務費',moneyUnit(psLabor));
+    add('attendance_details 由来の労務費合計',attLoaded?(formatMoney(s.labor_cost)+' 円'):'—（未読込）');
+    if(attLoaded&&!isBlankId(psLabor))add('差額（参考）',formatMoney(toNumber(psLabor)-s.labor_cost)+' 円');
+    else add('差額（参考）','—');
+    ov.appendChild(dl);
+    ov.appendChild(noteEl('差額は参考表示です。差異確認の本実装は Phase 2-4-7-5 で行うため、ここでは警告扱いにしません。'));
+  }
+
+  // 月別労務費
+  const marea=document.getElementById('multiDetailMonthly');clear(marea);
+  if(!attLoaded){
+    marea.appendChild(noteEl('attendance_details.csv が未読込のため、月別労務費を表示できません。'));
+  }else{
+    marea.appendChild(noteEl('労務費は labor_cost を project_id + report_date(月) でSUM。normal_mins / overtime_mins は生SUMしていません。'));
+    const arr=id?(multiState.summaries.laborMonthlyByProjectId.get(id)||[]):[];
+    const cols=[
+      {key:'month',label:'月',fmt:v=>formatMonthLabel(v)},
+      {key:'labor_cost',label:'労務費',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'labor_days',label:'人工',cls:'num',fmt:v=>formatNumber(v,2)},
+      {key:'reportCount',label:'日報件数',cls:'num'},
+      {key:'rowCount',label:'明細件数',cls:'num'}
+    ];
+    renderSummaryTable(marea,cols,arr);
+  }
+
+  // 労務明細（report_date 昇順）
+  const rarea=document.getElementById('multiDetailRows');clear(rarea);
+  if(!attLoaded){
+    rarea.appendChild(noteEl('attendance_details.csv が未読込のため、労務明細を表示できません。'));
+  }else{
+    const list=(id?(multiState.indexes.attendanceByProjectId.get(id)||[]):[]).slice()
+      .sort((a,b)=>{const da=a['report_date']||'',db=b['report_date']||'';return da<db?-1:(da>db?1:0);});
+    const cols=[
+      {label:'日付',render:(td,r)=>{td.textContent=textOr(r['report_date']);}},
+      {label:'従業員',render:(td,r)=>{td.textContent=textOr(r['employee_name']);}},
+      {label:'人工',cls:'num',render:(td,r)=>{td.textContent=formatNumber(r['labor_days'],2);}},
+      {label:'労務費',cls:'num',render:(td,r)=>{td.textContent=formatMoney(r['labor_cost']);}},
+      {label:'日報状態',render:(td,r)=>{td.textContent=formatReportStatus(r['report_status']);}},
+      {label:'メモ',render:(td,r)=>{td.textContent=textOr(r['memo']);}}
+    ];
+    renderSummaryTable(rarea,cols,list);
+  }
 }
 
 // 警告・エラー欄
@@ -1966,6 +2159,7 @@ function setMode(mode){
   document.getElementById('modeMultiBtn').classList.toggle('active',!single);
   if(single){
     document.getElementById('multiBody').classList.add('hidden');
+    document.getElementById('multiDetailBody').classList.add('hidden');
     // 単体ビューの状態に応じて preLoad / viewerBody を復帰
     if(state.loaded){
       document.getElementById('preLoad').classList.add('hidden');
@@ -1977,6 +2171,7 @@ function setMode(mode){
   }else{
     document.getElementById('preLoad').classList.add('hidden');
     document.getElementById('viewerBody').classList.add('hidden');
+    document.getElementById('multiDetailBody').classList.add('hidden');
     document.getElementById('multiBody').classList.remove('hidden');
     // 初回表示時に未読込状態の注記を出すため再描画
     recomputeMultiMessages();
@@ -1985,6 +2180,7 @@ function setMode(mode){
 }
 document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
+document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiHome());
 </script>
 </body>
 </html>

@@ -204,6 +204,26 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <div class="card"><div class="card-title">確認リスト</div><div id="invoiceChecksArea"></div></div>
       </section>
 
+      <section id="page-machineList" class="viewer-page hidden">
+        <div class="card"><div class="card-title">重機一覧</div><div class="note no-print" style="margin-top:0;margin-bottom:10px;">machine_details.csv は重機台帳（1行＝1重機）です。稼働日・工事名・稼働時間・機種・管理番号・メモの列は持たないため、それらは「—」表示になります。</div><div id="machineListArea"></div></div>
+      </section>
+
+      <section id="page-machineSummary" class="viewer-page hidden">
+        <div class="card"><div class="card-title">重機別集計</div><div id="machineSummaryArea"></div></div>
+      </section>
+
+      <section id="page-machineMonth" class="viewer-page hidden">
+        <div class="card"><div class="card-title">月別集計</div><div id="machineMonthArea"></div></div>
+      </section>
+
+      <section id="page-machineProject" class="viewer-page hidden">
+        <div class="card"><div class="card-title">現場別集計</div><div id="machineProjectArea"></div></div>
+      </section>
+
+      <section id="page-machineChecks" class="viewer-page hidden">
+        <div class="card"><div class="card-title">確認リスト</div><div id="machineChecksArea"></div></div>
+      </section>
+
       <section id="page-raw" class="viewer-page hidden">
         <div class="card"><div class="card-title">生データ</div><div id="rawNote" class="note"></div><div id="rawArea"></div></div>
       </section>
@@ -259,6 +279,11 @@ const PAGE_DEFS=[
   {id:'invoiceMonth',label:'月別集計',types:['project_cost_details']},
   {id:'invoiceCategory',label:'費目別集計',types:['project_cost_details']},
   {id:'invoiceChecks',label:'確認リスト',types:['project_cost_details']},
+  {id:'machineList',label:'重機一覧',types:['machine_details']},
+  {id:'machineSummary',label:'重機別集計',types:['machine_details']},
+  {id:'machineMonth',label:'月別集計',types:['machine_details']},
+  {id:'machineProject',label:'現場別集計',types:['machine_details']},
+  {id:'machineChecks',label:'確認リスト',types:['machine_details']},
   {id:'raw',label:'生データ',types:['all']},
   {id:'messages',label:'警告・エラー',types:['all']}
 ];
@@ -737,6 +762,21 @@ function renderDashboard(){
     addSummary(area,'工事数',String(siteSet.size));
     addSummary(area,'費目数',String(catSet.size));
     addSummary(area,'確認件数',String(checks.reviewCount));
+  }
+  if(state.csvType==='machine_details'){
+    let sCost=0;const machineSet=new Set();
+    state.rows.forEach(r=>{
+      sCost+=toNumber(machineCostRaw(r));
+      machineSet.add(r['machine_id']?('id:'+r['machine_id']):('name:'+(r['machine_name']||'')));
+    });
+    const mChecks=computeMachineChecks(state.rows);
+    addSummary(area,'明細件数',String(state.rows.length));
+    addSummary(area,'重機数',String(machineSet.size));
+    addSummary(area,'現場数','— (列なし)');
+    addSummary(area,'稼働日数','— (列なし)');
+    addSummary(area,'稼働時間合計','— (列なし)');
+    addSummary(area,'重機費合計（リース月額等）',formatMoney(sCost)+' 円');
+    addSummary(area,'確認件数',String(mChecks.reviewCount));
   }
   addSummary(area,'警告件数',String(state.warnings.length));
   addSummary(area,'エラー件数',String(state.errors.length));
@@ -1233,6 +1273,155 @@ function renderInvoiceChecksPage(){
   }
 }
 
+// ===== machine_details（重機台帳） =====
+// 列マッピング（docs/csv-export-spec.md §8）：machine_details は台帳（1行＝1重機）。
+//   重機ID=machine_id / 重機名=machine_name / 区分=ownership(lease/owned)
+//   所有会社=owner_company / リース会社=lease_company / リース開始=lease_start / リース終了=lease_end
+//   リース月額=lease_monthly（会社全体費用） / 所有原価=owned_cost（MVPは常に0） / 状態=is_active
+// 本CSVには「稼働日・工事名/現場・稼働時間/稼働日数・機種・管理番号・メモ」列は存在しない。
+//   → 月別集計・現場別集計・稼働時間/日数集計・最終稼働日は本CSV単体では算出不可（注記表示）。
+function formatOwnership(v){
+  const map={lease:'リース',owned:'自社保有'};
+  return map[v]||(v||'');
+}
+function formatActive(v){
+  if(v===true||v==='true')return '有効';
+  if(v===false||v==='false')return '無効';
+  return textOr(v);
+}
+// 重機費（台帳ベース）：リースはリース月額、自社保有は所有原価（MVPは0）。
+function machineCostRaw(row){
+  return (row['ownership']==='lease')?row['lease_monthly']:row['owned_cost'];
+}
+
+// 重機台帳のデータ品質チェック（確認リスト・ダッシュボードで共用）
+function computeMachineChecks(rows){
+  let missingName=0,costZero=0;
+  const dupMap=new Map();
+  const reviewSet=new Set();
+  rows.forEach((r,i)=>{
+    const name=r['machine_name']||'';
+    if(name===''){missingName++;reviewSet.add(i);}
+    const cost=machineCostRaw(r);
+    if(cost===undefined||cost===null||cost===''||toNumber(cost)===0)costZero++;
+    // 日付・現場列が無いため machine_id 重複で代替判定
+    const key=(r['machine_id']||'')+'|'+name;
+    if(!dupMap.has(key))dupMap.set(key,{machine_id:r['machine_id']||'',machine_name:name,indices:[]});
+    dupMap.get(key).indices.push(i+1); // CSVデータ行番号（ヘッダ除く・1始まり）
+  });
+  const dups=Array.from(dupMap.values()).filter(d=>d.indices.length>1);
+  dups.forEach(d=>d.indices.forEach(idx=>reviewSet.add(idx-1)));
+  return{missingName,costZero,dups,reviewCount:reviewSet.size};
+}
+
+// ===== 重機一覧ページ =====
+function renderMachineListPage(){
+  const area=document.getElementById('machineListArea');clear(area);
+  if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
+  const cols=[
+    {label:'日付',render:(td)=>{td.textContent='—';}},
+    {label:'重機名',key:'machine_name',fmt:v=>textOr(v)},
+    {label:'機種',render:(td)=>{td.textContent='—';}},
+    {label:'管理番号',render:(td)=>{td.textContent='—';}},
+    {label:'工事名',render:(td)=>{td.textContent='—';}},
+    {label:'稼働時間/日数',render:(td)=>{td.textContent='—';}},
+    {label:'重機費',cls:'num',render:(td,row)=>{td.textContent=moneyOr(machineCostRaw(row));}},
+    {label:'区分',render:(td,row)=>{td.textContent=formatOwnership(row['ownership'])||'—';}},
+    {label:'状態',render:(td,row)=>{td.textContent=formatActive(row['is_active']);}},
+    {label:'メモ',render:(td)=>{td.textContent='—';}},
+    // 以下は machine_details に実在する台帳項目（補足表示）
+    {label:'所有会社',key:'owner_company',fmt:v=>textOr(v)},
+    {label:'リース会社',key:'lease_company',fmt:v=>textOr(v)},
+    {label:'リース開始',key:'lease_start',fmt:v=>textOr(v)},
+    {label:'リース終了',key:'lease_end',fmt:v=>textOr(v)}
+  ];
+  const list=state.rows.slice().sort((a,b)=>{
+    const na=a['machine_name']||'',nb=b['machine_name']||'';
+    return na<nb?-1:(na>nb?1:0);
+  });
+  renderSummaryTable(area,cols,list);
+}
+
+// ===== 重機別集計ページ =====
+function renderMachineSummaryPage(){
+  const area=document.getElementById('machineSummaryArea');clear(area);
+  if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
+  area.appendChild(noteEl('machine_details.csv には稼働日・稼働時間・工事名/現場の列がないため、稼働日数・稼働時間・主な現場・最終稼働日は「—」になります。重機費は台帳上のリース月額／所有原価です。'));
+  const map=new Map();
+  state.rows.forEach(r=>{
+    const key=r['machine_id']?('id:'+r['machine_id']):('name:'+(r['machine_name']||'(未設定)'));
+    let g=map.get(key);
+    if(!g){g={machine_name:r['machine_name']||'(未設定)',ownership:r['ownership']||'',count:0,cost:0};map.set(key,g);}
+    g.count+=1;
+    g.cost+=toNumber(machineCostRaw(r));
+  });
+  const groups=Array.from(map.values()).sort((a,b)=>b.cost-a.cost);
+  const cols=[
+    {label:'重機名',render:(td,row)=>{td.textContent=row.machine_name;}},
+    {label:'機種',render:(td)=>{td.textContent='—';}},
+    {label:'管理番号',render:(td)=>{td.textContent='—';}},
+    {label:'件数',key:'count',cls:'num'},
+    {label:'稼働日数/回数',render:(td)=>{td.textContent='—';}},
+    {label:'稼働時間',render:(td)=>{td.textContent='—';}},
+    {label:'重機費合計',key:'cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'主な現場',render:(td)=>{td.textContent='—';}},
+    {label:'最終稼働日',render:(td)=>{td.textContent='—';}}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 月別集計ページ（日付列がないため不可） =====
+function renderMachineMonthPage(){
+  const area=document.getElementById('machineMonthArea');clear(area);
+  if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
+  area.appendChild(noteEl('日付列がないため月別集計はできません。machine_details.csv は重機台帳（1行＝1重機）で、稼働日を持ちません。'));
+  area.appendChild(noteEl('リース期間（lease_start / lease_end）は台帳項目で稼働日ではないため、月別集計には使用していません。'));
+  area.appendChild(noteEl('生データページで内容を確認してください。月別の重機稼働・原価は今後の複数CSV統合モードで検討します。'));
+}
+
+// ===== 現場別集計ページ（工事名/現場列がないため不可） =====
+function renderMachineProjectPage(){
+  const area=document.getElementById('machineProjectArea');clear(area);
+  if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
+  area.appendChild(noteEl('工事名・現場の列がないため現場別集計はできません。machine_details.csv は重機台帳で、現場への紐付けを持ちません。'));
+  area.appendChild(noteEl('注記：machine_locations は移動記録で稼働時間・使用日数を持たず、現場別の重機費は本CSV単体では正確に算出できません。'));
+  area.appendChild(noteEl('生データページで内容を確認してください。現場別の重機費は今後の複数CSV統合モードで検討します。'));
+}
+
+// ===== 確認リストページ（データ品質） =====
+function renderMachineChecksPage(){
+  const area=document.getElementById('machineChecksArea');clear(area);
+  if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
+  const c=computeMachineChecks(state.rows);
+
+  const grid=document.createElement('div');grid.className='summary-grid';grid.style.marginBottom='16px';
+  addSummary(grid,'重機名なし',String(c.missingName)+' 件');
+  addSummary(grid,'現場名なし','— (列なし)');
+  addSummary(grid,'日付なし','— (列なし)');
+  addSummary(grid,'重機費0円または空',String(c.costZero)+' 件');
+  addSummary(grid,'重複疑い',String(c.dups.length)+' 組');
+  area.appendChild(grid);
+  area.appendChild(noteEl('「現場名なし」「日付なし」は machine_details.csv に該当列がないため判定対象外です。'));
+  area.appendChild(noteEl('「重機費0円または空」には、所有原価が常に0（MVP仕様）の自社保有重機が含まれます（異常ではありません）。'));
+
+  // 重複疑い（日付・現場列がないため machine_id + 重機名 で代替判定）
+  const dupTitle=document.createElement('div');dupTitle.className='card-title';dupTitle.style.marginTop='8px';dupTitle.textContent='重複疑い（同一 machine_id・重機名が複数行）';area.appendChild(dupTitle);
+  area.appendChild(noteEl('本CSVには稼働日・現場の列がないため、「同じ重機・同じ日付・同じ現場」の判定はできません。代わりに同一 machine_id（重機名）が複数行ある場合を台帳重複の疑いとして表示します。対象行は CSV データ行番号（ヘッダ除く・1始まり）です。'));
+  const dupArea=document.createElement('div');area.appendChild(dupArea);
+  const dupCols=[
+    {label:'重機名',render:(td,row)=>{td.textContent=row.machine_name||'(未設定)';}},
+    {label:'日付',render:(td)=>{td.textContent='—';}},
+    {label:'工事名',render:(td)=>{td.textContent='—';}},
+    {label:'件数',cls:'num',render:(td,row)=>{td.textContent=String(row.indices.length);}},
+    {label:'対象行',render:(td,row)=>{td.textContent=row.indices.join(', ');}}
+  ];
+  renderSummaryTable(dupArea,dupCols,c.dups);
+
+  // 長期間稼働なし（稼働日列がないため判定不可）
+  const idleTitle=document.createElement('div');idleTitle.className='card-title';idleTitle.style.marginTop='16px';idleTitle.textContent='長期間稼働なし';area.appendChild(idleTitle);
+  area.appendChild(noteEl('最終稼働日が分かる列（稼働日）が machine_details.csv にないため、長期間稼働なしの判定はできません。稼働日を含むデータ（machine_locations 等）との統合が必要です。'));
+}
+
 function renderAllPages(){
   renderViewerNav(state.csvType);
   renderReportHeader();
@@ -1253,6 +1442,11 @@ function renderAllPages(){
   renderInvoiceMonthPage();
   renderInvoiceCategoryPage();
   renderInvoiceChecksPage();
+  renderMachineListPage();
+  renderMachineSummaryPage();
+  renderMachineMonthPage();
+  renderMachineProjectPage();
+  renderMachineChecksPage();
   renderRawPage();
   renderMessagesPage();
 }

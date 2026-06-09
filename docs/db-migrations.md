@@ -1255,3 +1255,77 @@ WHERE tablename = 'cost_entries';
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/roadmap.md`（集計出力機能 Phase 1-1 完了を追記）
 - HTML / scripts / backups / `.env.backup.local` は変更なし
+
+---
+
+## 2026-06-09 集計出力機能 Phase 2-2 — CSV出力 secure RPC 作成
+
+### 目的
+
+- CSV 集計出力（projects_summary / attendance_details / project_cost_details / machine_details）の元データを生成する、管理者セッション付き SECURITY DEFINER 参照系 RPC を Supabase 本番 DB に作成する
+- 直接テーブル権限を増やさず、RPC EXECUTE のみで集計データを取得できる構造にする
+- CSV 整形（UTF-8 BOM / CRLF / RFC4180 / 日本語ファイル名）はフロント責務とし、RPC は jsonb エンベロープ `{ meta, warnings, rows }` を返す
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/csv-export-secure-rpc.sql` | helper 2関数 + CSV出力 RPC 4本（計6関数） |
+
+### 作成した関数（6本）
+
+| 関数名 | 種別 | 用途 |
+|---|---|---|
+| `csv_export_fiscal_year(d date, start_month integer)` | helper | 工事年度（4月始まり）算出。内部利用 |
+| `csv_export_effective_daily_rate(emp_id uuid, on_date date)` | helper | report_date 時点の有効日当単価取得。該当なしのみ既定22000 / is_default=true。内部利用 |
+| `export_projects_summary_secure(...)` | RPC | 工事別原価サマリ（projects_summary.csv） |
+| `export_attendance_details_secure(...)` | RPC | 出勤・労務明細（attendance_details.csv） |
+| `export_project_cost_details_secure(...)` | RPC | 請求書明細（project_cost_details.csv） |
+| `export_machine_details_secure(...)` | RPC | 重機台帳・リース情報（machine_details.csv） |
+
+- 6関数すべて `SECURITY DEFINER`, `SET search_path = public, extensions`
+- RPC のセッション検証: `encode(digest(session_token_input, 'sha256'), 'hex')` で `admin_sessions.token_hash` と照合、`expires_at > now()`、無効時 `RAISE EXCEPTION`
+
+### 設計上のポイント
+
+- **ファンアウト防止**: `reports / invoices / site_budgets` を `sites` に直接 JOIN して SUM せず、費目別に site_id 単位 CTE（labor / rep_sub / dump / guard / inv / budget）で事前集計してから `filtered_sites` へ LEFT JOIN
+- **労務費 gated**: `normal_mins > 0` のときのみ「日当 + 残業割増」を計上、`normal_mins = 0` は労務費0。中間計算は numeric 保持し、`round()` は最終出力行で1回。残業割増もどの現場か判定できないため `site_count` で均等按分
+- **現場なし日報**（`site_ids` 空配列）: projects_summary の工事別原価には含めない。attendance_details では1行出力し labor_cost は按分せず全額
+- **fiscal_year**: 各CSVの fiscal_year 列は工事年度＝4月始まり固定。引数 `fiscal_year_start_month`（4 or 9）は受取・検証・meta反映のみで列計算には使わない（将来の会社損益集計用）
+
+### 権限設計
+
+| 対象 | EXECUTE 権限 |
+|---|---|
+| helper 2関数 | `REVOKE EXECUTE FROM PUBLIC, anon, authenticated`（内部用・直接呼び出し不可） |
+| 外側 RPC 4本 | `REVOKE EXECUTE FROM PUBLIC` + `GRANT EXECUTE TO anon, authenticated` |
+
+- ローカル `docs/sql/csv-export-secure-rpc.sql` の helper 2関数 REVOKE 文は、DB 実行済み状態（`FROM PUBLIC, anon, authenticated`）に合わせて修正済み
+- テーブルへの GRANT / REVOKE は一切追加・削除していない
+
+### マスタ系テーブルの既存権限（今回触らず）
+
+- `companies / employee_rates / machines / sites / subcontractors / unit_rates` の `anon / authenticated` 直接 INSERT / UPDATE 権限が残存しているが、これは既存状態として扱い、今回の CSV 出力 RPC では変更していない
+- 将来のマスタ管理 RPC 化・REVOKE 候補として扱う（roadmap Phase 3 参照）
+
+### 確認結果（実行後）
+
+- 6関数すべて存在確認済み
+- 6関数すべて `SECURITY DEFINER`
+- 6関数すべて `search_path = public, extensions`
+- helper 2本: `anon_exec = false / auth_exec = false`
+- 外側 RPC 4本: `anon_exec = true / auth_exec = true`
+- テーブル権限は既存状態から増加なし（INSERT/UPDATE/DELETE の新規付与 0件）
+
+### 未実装（次工程）
+
+- admin-app.html から RPC を呼ぶ CSV 出力 UI
+- CSV 生成処理（UTF-8 BOM / CRLF / RFC4180 / 日本語ファイル名）
+- ローカル HTML ビューア設計・実装
+
+### ローカルファイル変更
+
+- `docs/sql/csv-export-secure-rpc.sql` 新規作成（helper 2関数の REVOKE 文は DB 実行済み状態に合わせ済み）
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/roadmap.md`（集計出力機能 Phase 2-2 完了を追記）
+- HTML / scripts / backups / `.env.backup.local` は変更なし

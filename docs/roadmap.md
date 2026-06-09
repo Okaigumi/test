@@ -272,6 +272,24 @@ Storage 設計：
 - 記録：docs/db-migrations.md「2026-06-08 集計出力機能 Phase 1-1」
 - SQL：docs/sql/phase1-schema-categories.sql
 
+#### Phase 2-2：CSV出力RPC作成・DB実行（完了）
+
+- helper 2関数（`csv_export_fiscal_year` / `csv_export_effective_daily_rate`）作成：完了
+- 外側RPC 4本（`export_projects_summary_secure` / `export_attendance_details_secure` / `export_project_cost_details_secure` / `export_machine_details_secure`）作成：完了
+- 6関数すべて SECURITY DEFINER / search_path=public,extensions：確認済み
+- helper 2関数は PUBLIC/anon/authenticated から EXECUTE REVOKE（内部用）：確認済み
+- 外側RPC 4本のみ anon/authenticated に EXECUTE GRANT：確認済み
+- テーブルへの GRANT / REVOKE 追加なし：確認済み
+- 記録：docs/db-migrations.md「2026-06-09 集計出力機能 Phase 2-2」
+- SQL：docs/sql/csv-export-secure-rpc.sql
+
+**未実装（次工程候補）：**
+
+- admin-app.html からRPCを呼ぶCSV出力UI
+- CSV生成処理（UTF-8 BOM / CRLF / RFC4180 / 日本語ファイル名）
+- ローカルHTMLビューア設計・実装
+- 必要に応じてマスタ系テーブル（companies / employee_rates / machines / sites / subcontractors / unit_rates）の直接INSERT/UPDATE権限整理（将来のマスタ管理RPC化・REVOKE候補）
+
 ## 保留・改善候補
 
 - favicon.ico 追加

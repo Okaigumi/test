@@ -83,6 +83,18 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .back-btn{border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;margin-bottom:14px;}
 .back-btn:hover{background:var(--head);}
 
+/* ===== 原価率バッジ（控えめ） ===== */
+.cr-badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;margin-left:6px;vertical-align:middle;}
+.cr-normal{color:var(--muted);border-color:var(--line);background:#f7f8fa;}
+.cr-caution{color:#7a5a00;border-color:#ecdcb3;background:#fcf6e8;}
+.cr-warn{color:#9a5b00;border-color:#f0d9b5;background:#fff8ee;}
+.cr-danger{color:#a32020;border-color:#f0c2c2;background:#fdecec;}
+
+/* ===== 基本情報の定義リスト ===== */
+.kv-list{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px;}
+.kv-list dt{color:var(--faint);}
+.kv-list dd{color:var(--ink);}
+
 /* ===== 印刷 ===== */
 @media print{
   @page{margin:12mm;}
@@ -148,6 +160,26 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <div class="card"><div class="card-title">全体出勤簿</div><div id="overallArea"></div></div>
       </section>
 
+      <section id="page-projectList" class="viewer-page hidden">
+        <div class="card"><div class="card-title">工事一覧</div><div class="note no-print" style="margin-top:0;margin-bottom:10px;">工事名をクリックすると、その工事の詳細を表示します。原価率は合計原価 ÷ 請負金額 × 100で算出した概算参考値です。重機費・税区分・外注費集計の影響により、実際の原価率と異なる場合があります。</div><div id="projectListArea"></div></div>
+      </section>
+
+      <section id="page-projectDetail" class="viewer-page hidden">
+        <div class="card"><div class="card-title">工事詳細</div><div id="projectDetailArea"></div></div>
+      </section>
+
+      <section id="page-projectYear" class="viewer-page hidden">
+        <div class="card"><div class="card-title">年度別集計</div><div id="projectYearArea"></div></div>
+      </section>
+
+      <section id="page-projectClient" class="viewer-page hidden">
+        <div class="card"><div class="card-title">発注者別集計</div><div id="projectClientArea"></div></div>
+      </section>
+
+      <section id="page-projectCategory" class="viewer-page hidden">
+        <div class="card"><div class="card-title">工事分類別集計</div><div id="projectCategoryArea"></div></div>
+      </section>
+
       <section id="page-raw" class="viewer-page hidden">
         <div class="card"><div class="card-title">生データ</div><div id="rawNote" class="note"></div><div id="rawArea"></div></div>
       </section>
@@ -192,6 +224,11 @@ const PAGE_DEFS=[
   {id:'employee',label:'従業員別サマリー',types:['attendance_details']},
   {id:'empMonthly',label:'従業員別 月別出勤簿',types:['attendance_details']},
   {id:'overall',label:'全体出勤簿',types:['attendance_details']},
+  {id:'projectList',label:'工事一覧',types:['projects_summary']},
+  {id:'projectDetail',label:'工事詳細',types:['projects_summary']},
+  {id:'projectYear',label:'年度別集計',types:['projects_summary']},
+  {id:'projectClient',label:'発注者別集計',types:['projects_summary']},
+  {id:'projectCategory',label:'工事分類別集計',types:['projects_summary']},
   {id:'raw',label:'生データ',types:['all']},
   {id:'messages',label:'警告・エラー',types:['all']}
 ];
@@ -299,6 +336,41 @@ function formatMonthLabel(ym){
 function nowStamp(){
   const d=new Date();const p=n=>String(n).padStart(2,'0');
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+// 空・未定義は「—」、それ以外はそのまま文字列表示
+function textOr(v){return(v===null||v===undefined||v==='')?'—':String(v);}
+// 空・未定義は「—」、それ以外は金額整形
+function moneyOr(v){return(v===null||v===undefined||v==='')?'—':formatMoney(v);}
+function formatPercent(v){
+  if(v===null||v===undefined||v==='')return '—';
+  const n=toNumber(v);
+  if(!Number.isFinite(n))return '—';
+  return formatNumber(n,1)+'%';
+}
+// 原価率＝合計原価÷請負金額×100。請負金額が0/空なら null（「—」表示）。
+function calcCostRate(totalCost,contractAmount){
+  if(contractAmount===null||contractAmount===undefined||contractAmount==='')return null;
+  const c=toNumber(contractAmount);
+  if(!c)return null;
+  return toNumber(totalCost)/c*100;
+}
+// 原価率の判定（控えめバッジ用）
+function costRateLevel(rate){
+  if(rate===null||rate===undefined)return{label:'',cls:''};
+  if(rate>=100)return{label:'赤字・重大',cls:'cr-danger'};
+  if(rate>=90)return{label:'要確認',cls:'cr-warn'};
+  if(rate>=80)return{label:'注意',cls:'cr-caution'};
+  return{label:'通常',cls:'cr-normal'};
+}
+// セルに原価率（％＋判定バッジ）を描画（textContentのみ）
+function renderCostRateCell(td,rate){
+  if(rate===null){td.textContent='—';return;}
+  td.appendChild(document.createTextNode(formatPercent(rate)));
+  const lvl=costRateLevel(rate);
+  if(lvl.label){
+    const b=document.createElement('span');b.className='cr-badge '+lvl.cls;b.textContent=lvl.label;
+    td.appendChild(b);
+  }
 }
 
 // ===== DOMヘルパー（textContentのみ・innerHTML不使用） =====
@@ -610,6 +682,16 @@ function renderDashboard(){
     addSummary(area,'人工合計',formatNumber(sD,2));
     addSummary(area,'労務費合計',formatMoney(sC)+' 円');
   }
+  if(state.csvType==='projects_summary'){
+    let sContract=0,sTotal=0;
+    state.rows.forEach(r=>{sContract+=toNumber(r['contract_amount']);sTotal+=toNumber(r['total_cost']);});
+    const rate=sContract>0?(sTotal/sContract*100):null;
+    addSummary(area,'工事件数',String(state.rows.length));
+    addSummary(area,'請負金額合計',formatMoney(sContract)+' 円');
+    addSummary(area,'合計原価',formatMoney(sTotal)+' 円');
+    addSummary(area,'粗利合計',sContract>0?(formatMoney(sContract-sTotal)+' 円'):'—');
+    addSummary(area,'全体原価率',formatPercent(rate));
+  }
   addSummary(area,'警告件数',String(state.warnings.length));
   addSummary(area,'エラー件数',String(state.errors.length));
 }
@@ -711,6 +793,215 @@ function renderMessagesPage(){
   }
 }
 
+// ===== projects_summary: 集計ビルダー（生行＝1工事のため単純集計） =====
+// グループ集計の共通ロジック。keyFn でグループ化し金額をSUM。
+function aggregateProjects(rows,keyFn,emptyLabel){
+  const map=new Map();
+  rows.forEach(r=>{
+    let k=keyFn(r);
+    if(k===null||k===undefined||k==='')k=emptyLabel;
+    let g=map.get(k);
+    if(!g){g={key:k,count:0,contract:0,total:0,labor:0,machine:0,material:0,subcontract:0,other:0,client_category:''};map.set(k,g);}
+    g.count+=1;
+    g.contract+=toNumber(r['contract_amount']);
+    g.total+=toNumber(r['total_cost']);
+    g.labor+=toNumber(r['labor_cost']);
+    g.machine+=toNumber(r['machine_cost']);
+    g.material+=toNumber(r['material_cost']);
+    g.subcontract+=toNumber(r['subcontract_cost_total']);
+    g.other+=toNumber(r['other_cost']);
+    if(!g.client_category&&r['client_category'])g.client_category=r['client_category'];
+  });
+  // 集計後の粗利・原価率（請負金額合計が0/空なら null）
+  return Array.from(map.values()).map(g=>{
+    const hasContract=g.contract>0;
+    return Object.assign(g,{
+      gross:hasContract?(g.contract-g.total):null,
+      rate:hasContract?(g.total/g.contract*100):null
+    });
+  });
+}
+
+// 工事キー（project_id 優先・なければ工事名）で1工事を特定
+function findProjectRow(projectKey){
+  const rows=state.rows||[];
+  if(projectKey&&projectKey.indexOf('name:')===0){
+    const name=projectKey.slice(5);
+    return rows.find(r=>(r['site_name']||'')===name)||null;
+  }
+  return rows.find(r=>(r['project_id']||'')===projectKey)||null;
+}
+function projectKeyOf(row){
+  return row['project_id']?row['project_id']:('name:'+(row['site_name']||''));
+}
+
+// ===== 工事一覧ページ =====
+function renderProjectListPage(){
+  const area=document.getElementById('projectListArea');clear(area);
+  if(state.csvType!=='projects_summary'){area.appendChild(noteEl('このページは工事別サマリーCSV（projects_summary.csv）で利用できます。'));return;}
+  const cols=[
+    {label:'工事名',render:(td,row)=>{
+      const btn=document.createElement('button');btn.className='link-btn';
+      btn.textContent=row['site_name']||'(名称なし)';
+      btn.addEventListener('click',()=>showProjectDetail(projectKeyOf(row)));
+      td.appendChild(btn);
+    }},
+    {label:'発注者',key:'client_name',fmt:v=>textOr(v)},
+    {label:'発注者区分',key:'client_category',fmt:v=>textOr(v)},
+    {label:'工事分類',key:'category_name',fmt:v=>textOr(v)},
+    {label:'年度',key:'fiscal_year',cls:'num',fmt:v=>textOr(v)},
+    {label:'請負金額',key:'contract_amount',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'合計原価',key:'total_cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'粗利',key:'gross_profit',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'原価率',cls:'num',render:(td,row)=>renderCostRateCell(td,calcCostRate(row['total_cost'],row['contract_amount']))},
+    {label:'労務費',key:'labor_cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'重機費',key:'machine_cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'材料費',key:'material_cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'外注費',key:'subcontract_cost_total',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'その他費用',key:'other_cost',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'警告',render:(td)=>{td.textContent='—';}}
+  ];
+  renderSummaryTable(area,cols,state.rows);
+}
+
+// ===== 工事詳細ページ =====
+function showProjectDetail(projectKey){
+  renderProjectDetail(projectKey);
+  showViewerPage('projectDetail');
+}
+function renderProjectDetailDefault(){
+  const area=document.getElementById('projectDetailArea');clear(area);
+  if(state.csvType!=='projects_summary'){area.appendChild(noteEl('このページは工事別サマリーCSV（projects_summary.csv）で利用できます。'));return;}
+  area.appendChild(noteEl('「工事一覧」で工事名をクリックすると、その工事の詳細を表示します。'));
+}
+function addKv(dl,label,val){
+  const dt=document.createElement('dt');dt.textContent=label;
+  const dd=document.createElement('dd');dd.textContent=val;
+  dl.appendChild(dt);dl.appendChild(dd);
+}
+function renderProjectDetail(projectKey){
+  const area=document.getElementById('projectDetailArea');clear(area);
+  const back=document.createElement('button');
+  back.className='back-btn no-print';back.textContent='← 工事一覧に戻る';
+  back.addEventListener('click',()=>showViewerPage('projectList'));
+  area.appendChild(back);
+
+  const row=findProjectRow(projectKey);
+  if(!row){area.appendChild(noteEl('対象の工事データが見つかりませんでした。'));return;}
+
+  const title=document.createElement('div');
+  title.className='emp-head';title.style.fontSize='17px';title.style.marginBottom='12px';
+  title.textContent=(row['site_name']||'(名称なし)')+' 工事詳細';
+  area.appendChild(title);
+
+  // 工事基本情報
+  const basic=document.createElement('div');basic.className='card-title';basic.textContent='工事基本情報';area.appendChild(basic);
+  const dl=document.createElement('dl');dl.className='kv-list';dl.style.marginBottom='18px';
+  addKv(dl,'工事名',textOr(row['site_name']));
+  addKv(dl,'発注者',textOr(row['client_name']));
+  addKv(dl,'発注者区分',textOr(row['client_category']));
+  addKv(dl,'工事分類',textOr(row['category_name']));
+  addKv(dl,'年度',textOr(row['fiscal_year']));
+  addKv(dl,'所在地',textOr(row['location']));
+  const period=(row['start_date']||row['end_date'])?(textOr(row['start_date'])+' 〜 '+textOr(row['end_date'])):'—';
+  addKv(dl,'工期',period);
+  area.appendChild(dl);
+
+  // 金額サマリー
+  const sumTitle=document.createElement('div');sumTitle.className='card-title';sumTitle.textContent='金額サマリー';area.appendChild(sumTitle);
+  const sumGrid=document.createElement('div');sumGrid.className='summary-grid';sumGrid.style.marginBottom='18px';
+  addSummary(sumGrid,'請負金額',moneyOr(row['contract_amount'])+' 円');
+  addSummary(sumGrid,'合計原価',moneyOr(row['total_cost'])+' 円');
+  addSummary(sumGrid,'粗利',moneyOr(row['gross_profit'])+' 円');
+  const rate=calcCostRate(row['total_cost'],row['contract_amount']);
+  const rateItem=document.createElement('div');rateItem.className='summary-item';
+  const rl=document.createElement('div');rl.className='summary-label';rl.textContent='原価率';
+  const rv=document.createElement('div');rv.className='summary-val';renderCostRateCell(rv,rate);
+  rateItem.appendChild(rl);rateItem.appendChild(rv);sumGrid.appendChild(rateItem);
+  area.appendChild(sumGrid);
+  area.appendChild(noteEl('原価率は概算参考値です。重機費・税区分・外注費集計の影響により実際と異なる場合があります。'));
+
+  // 費目別内訳（合計原価と突合できるよう ダンプ費・警備費 も表示）
+  const costTitle=document.createElement('div');costTitle.className='card-title';costTitle.textContent='費目別内訳';area.appendChild(costTitle);
+  const costGrid=document.createElement('div');costGrid.className='summary-grid';costGrid.style.marginBottom='6px';
+  addSummary(costGrid,'労務費',moneyOr(row['labor_cost'])+' 円');
+  addSummary(costGrid,'重機費',moneyOr(row['machine_cost'])+' 円');
+  addSummary(costGrid,'材料費',moneyOr(row['material_cost'])+' 円');
+  addSummary(costGrid,'外注費',moneyOr(row['subcontract_cost_total'])+' 円');
+  addSummary(costGrid,'ダンプ費',moneyOr(row['dump_cost'])+' 円');
+  addSummary(costGrid,'警備費',moneyOr(row['guard_cost'])+' 円');
+  addSummary(costGrid,'その他費用',moneyOr(row['other_cost'])+' 円');
+  area.appendChild(costGrid);
+  area.appendChild(noteEl('合計原価＝労務費＋外注費＋材料費＋重機費＋ダンプ費＋警備費＋その他費用（概算）。'));
+
+  // 警告・メモ
+  const wTitle=document.createElement('div');wTitle.className='card-title';wTitle.style.marginTop='14px';wTitle.textContent='警告・メモ';area.appendChild(wTitle);
+  area.appendChild(noteEl('projects_summary.csv には工事ごとの warnings / notes 列はありません。'));
+  area.appendChild(noteEl('月別費用ビューは、複数CSV統合モードで実装予定です。'));
+}
+
+// ===== 集計ページ共通：金額＋原価率列を描画 =====
+function renderProjectAggTable(area,headLabel,groups){
+  const cols=[
+    {label:headLabel,key:'key',fmt:v=>String(v)},
+    {label:'工事件数',key:'count',cls:'num'},
+    {label:'請負金額合計',key:'contract',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'合計原価',key:'total',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'粗利',cls:'num',render:(td,row)=>{td.textContent=row.gross===null?'—':formatMoney(row.gross);}},
+    {label:'原価率',cls:'num',render:(td,row)=>renderCostRateCell(td,row.rate)},
+    {label:'労務費',key:'labor',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'重機費',key:'machine',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'材料費',key:'material',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'外注費',key:'subcontract',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'その他費用',key:'other',cls:'num',fmt:v=>moneyOr(v)}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 年度別集計ページ =====
+function renderProjectYearPage(){
+  const area=document.getElementById('projectYearArea');clear(area);
+  if(state.csvType!=='projects_summary'){area.appendChild(noteEl('このページは工事別サマリーCSV（projects_summary.csv）で利用できます。'));return;}
+  const groups=aggregateProjects(state.rows,r=>r['fiscal_year'],'(未設定)');
+  groups.sort((a,b)=>a.key<b.key?-1:(a.key>b.key?1:0));
+  renderProjectAggTable(area,'年度',groups);
+}
+
+// ===== 発注者別集計ページ =====
+function renderProjectClientPage(){
+  const area=document.getElementById('projectClientArea');clear(area);
+  if(state.csvType!=='projects_summary'){area.appendChild(noteEl('このページは工事別サマリーCSV（projects_summary.csv）で利用できます。'));return;}
+  const groups=aggregateProjects(state.rows,r=>r['client_name'],'(未設定)');
+  groups.sort((a,b)=>b.contract-a.contract);
+  const cols=[
+    {label:'発注者',key:'key',fmt:v=>String(v)},
+    {label:'発注者区分',key:'client_category',fmt:v=>textOr(v)},
+    {label:'工事件数',key:'count',cls:'num'},
+    {label:'請負金額合計',key:'contract',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'合計原価',key:'total',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'粗利',cls:'num',render:(td,row)=>{td.textContent=row.gross===null?'—':formatMoney(row.gross);}},
+    {label:'原価率',cls:'num',render:(td,row)=>renderCostRateCell(td,row.rate)}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
+// ===== 工事分類別集計ページ =====
+function renderProjectCategoryPage(){
+  const area=document.getElementById('projectCategoryArea');clear(area);
+  if(state.csvType!=='projects_summary'){area.appendChild(noteEl('このページは工事別サマリーCSV（projects_summary.csv）で利用できます。'));return;}
+  const groups=aggregateProjects(state.rows,r=>r['category_name'],'(未設定)');
+  groups.sort((a,b)=>b.contract-a.contract);
+  const cols=[
+    {label:'工事分類',key:'key',fmt:v=>String(v)},
+    {label:'工事件数',key:'count',cls:'num'},
+    {label:'請負金額合計',key:'contract',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'合計原価',key:'total',cls:'num',fmt:v=>moneyOr(v)},
+    {label:'粗利',cls:'num',render:(td,row)=>{td.textContent=row.gross===null?'—':formatMoney(row.gross);}},
+    {label:'原価率',cls:'num',render:(td,row)=>renderCostRateCell(td,row.rate)}
+  ];
+  renderSummaryTable(area,cols,groups);
+}
+
 function renderAllPages(){
   renderViewerNav(state.csvType);
   renderReportHeader();
@@ -720,6 +1011,11 @@ function renderAllPages(){
   renderEmployeePage();
   renderEmpMonthlyDefault();
   renderOverallPage();
+  renderProjectListPage();
+  renderProjectDetailDefault();
+  renderProjectYearPage();
+  renderProjectClientPage();
+  renderProjectCategoryPage();
   renderRawPage();
   renderMessagesPage();
 }

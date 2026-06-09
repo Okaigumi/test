@@ -1329,3 +1329,57 @@ WHERE tablename = 'cost_entries';
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/roadmap.md`（集計出力機能 Phase 2-2 完了を追記）
 - HTML / scripts / backups / `.env.backup.local` は変更なし
+
+---
+
+## 2026-06-09 集計出力機能 Phase 2-3 — admin-app.html CSV出力UI追加
+
+### DB変更
+
+**なし。SQL実行なし。**
+
+### フロント変更
+
+| ファイル | 内容 |
+|---|---|
+| `admin-app.html` | 「集計出力」メニュー・CSV出力ページ・CSV生成関数を追加 |
+
+### 使用RPC
+
+| RPC名 | 用途 |
+|---|---|
+| `export_projects_summary_secure` | 工事別サマリー CSV |
+| `export_attendance_details_secure` | 出勤・労務明細 CSV |
+| `export_project_cost_details_secure` | 請求書明細 CSV |
+| `export_machine_details_secure` | 重機台帳 CSV |
+
+- CSV生成はフロント側責務（RPC はjsonbエンベロープ `{ meta, warnings, rows }` を返す）
+- セッション検証は既存 `currentUser?.session_token` 方式を踏襲
+
+### 実装内容
+
+- サイドバーに「集計出力」セクション・「📊 CSV出力」メニュー（`nav-csv`）を追加
+- `pageCsv()` で4種類のCSV出力カードを表示
+- `CSV_COLUMNS` 固定列順定義（仕様書の列順に固定・`Object.keys()` 不使用）
+- `downloadCsv()` 共通関数：UTF-8 BOM（`﻿`）・CRLF・RFC4180エスケープ・Blob download
+- `buildCsvFilename()` ：`meta.generated_at` 優先・`YYYYMMDD-HHmmss` の生成日時付き日本語ファイル名
+- warnings件数通知（alert）・0件時ヘッダのみCSV出力
+
+### 確認結果
+
+- 本番 `https://system.okaigumi.co.jp/admin` で確認済み
+- CSV出力メニュー表示OK
+- 4種類CSVダウンロードOK（工事別サマリー / 出勤労務明細 / 請求書明細 / 重機台帳）
+- Excel文字化けなし（UTF-8 BOM有効）
+- Console重大エラーなし
+
+### 関連コミット
+
+- `0c5af6a` Add CSV export UI to admin app
+
+### ローカルファイル変更
+
+- `admin-app.html`（CSV出力UI追加）
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/roadmap.md`（集計出力機能 Phase 2-3 完了を追記）
+- docs/sql / scripts / backups / `.env.backup.local` は変更なし

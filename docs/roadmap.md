@@ -290,6 +290,36 @@ Storage 設計：
 - ローカルHTMLビューア設計・実装
 - 必要に応じてマスタ系テーブル（companies / employee_rates / machines / sites / subcontractors / unit_rates）の直接INSERT/UPDATE権限整理（将来のマスタ管理RPC化・REVOKE候補）
 
+#### Phase 2-3：admin-app.html CSV出力UI追加（完了）
+
+- `admin-app.html` に「集計出力」セクション・CSV出力ページを追加：完了
+- コミット：`0c5af6a Add CSV export UI to admin app`
+- 本番確認済み（`https://system.okaigumi.co.jp/admin`）
+
+**実装内容：**
+
+- サイドバーに「集計出力」セクションと「📊 CSV出力」メニュー（`nav-csv`）を追加
+- `pageCsv()` で4種類のCSV出力カードを表示
+- `CSV_COLUMNS` 固定列順定義（仕様書の列順に固定・`Object.keys()` 不使用）
+- `downloadCsv()` 共通関数：UTF-8 BOM（`﻿`）・CRLF・RFC4180エスケープ・Blob download
+- warnings件数通知（alert）
+- 0件時ヘッダのみCSV出力
+- 生成日時付き日本語ファイル名（`meta.generated_at` 優先・`YYYYMMDD-HHmmss`）
+
+**本番確認内容：**
+
+- CSV出力メニュー表示OK
+- 4種類CSVダウンロードOK（工事別サマリー / 出勤労務明細 / 請求書明細 / 重機台帳）
+- Excel文字化けなし
+- Console重大エラーなし
+
+**次工程候補：**
+
+- ローカルHTMLビューア設計・実装
+- CSV出力の絞り込みUI拡張（現場別・会社別フィルタ）
+- warnings詳細表示
+- 必要に応じてマスタ系テーブル直接権限整理
+
 ## 保留・改善候補
 
 - favicon.ico 追加

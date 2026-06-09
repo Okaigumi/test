@@ -71,6 +71,16 @@ tr:hover td{background:var(--surface2);}
     <div id="summaryArea" class="summary-grid"></div>
   </div>
 
+  <div id="attMonthlyCard" class="card hidden">
+    <div class="card-title">月別サマリー（出勤・労務）</div>
+    <div id="attMonthlyArea"></div>
+  </div>
+
+  <div id="attEmployeeCard" class="card hidden">
+    <div class="card-title">従業員別サマリー（出勤・労務）</div>
+    <div id="attEmployeeArea"></div>
+  </div>
+
   <div id="tableCard" class="card hidden">
     <div class="card-title">データ（生テーブル）</div>
     <div id="tableNote" class="note"></div>
@@ -179,12 +189,14 @@ function addSummary(area,label,val){
 
 // ===== 画面リセット =====
 function resetView(){
-  for(const id of ['errorCard','warnCard','summaryCard','tableCard']){
+  for(const id of ['errorCard','warnCard','summaryCard','attMonthlyCard','attEmployeeCard','tableCard']){
     document.getElementById(id).classList.add('hidden');
   }
   clear(document.getElementById('errorArea'));
   clear(document.getElementById('warnArea'));
   clear(document.getElementById('summaryArea'));
+  clear(document.getElementById('attMonthlyArea'));
+  clear(document.getElementById('attEmployeeArea'));
   clear(document.getElementById('dataTable').querySelector('thead'));
   clear(document.getElementById('dataTable').querySelector('tbody'));
   document.getElementById('tableNote').textContent='';
@@ -277,6 +289,14 @@ function handleText(fileName,text){
     warnings.push('データ行の列数がヘッダ列数と一致しない行が'+colCountMismatch+'件あります。不足列は空文字として扱います。'+(hasExtra?'超過列は __extra_N として保持しています。':''));
   }
 
+  // attendance_details：report_id ピボット（警告件数に反映するためサマリー描画より前に実行）
+  let attReports=null;
+  if(csvType==='attendance_details'){
+    const built=buildAttendanceReports(rows);
+    attReports=built.reports;
+    built.warnings.forEach(w=>warnings.push(w));
+  }
+
   // サマリー
   const summaryArea=document.getElementById('summaryArea');
   document.getElementById('summaryCard').classList.remove('hidden');
@@ -300,6 +320,11 @@ function handleText(fileName,text){
     addSummary(summaryArea,'最大 report_date',maxDate||'（なし）');
     addSummary(summaryArea,'report_id ユニーク数',String(reportIds.size));
     addSummary(summaryArea,'employee_id ユニーク数',String(empIds.size));
+  }
+
+  // 出勤簿サマリー（attendance_details のみ。他CSVはサマリーカード非表示のまま）
+  if(csvType==='attendance_details'&&attReports){
+    renderAttendanceSummaries(attReports);
   }
 
   // 警告・エラー表示
@@ -345,6 +370,202 @@ function renderTable(headers,rows){
     });
     tbody.appendChild(tr);
   }
+}
+
+// ===== 数値・表示ヘルパー =====
+function toNumber(v){
+  if(v===null||v===undefined||v==='')return 0;
+  const n=Number(v);
+  return Number.isFinite(n)?n:0;
+}
+function formatMinutes(mins){
+  const m=Math.round(toNumber(mins));
+  const sign=m<0?'-':'';
+  const a=Math.abs(m);
+  return sign+Math.floor(a/60)+':'+String(a%60).padStart(2,'0');
+}
+function formatMoney(v){
+  return Math.round(toNumber(v)).toLocaleString('ja-JP');
+}
+function formatNumber(v,digits){
+  const d=(digits===undefined)?2:digits;
+  const fixed=toNumber(v).toFixed(d);
+  // 小数部だけ末尾0を除去（整数部は触らない：10.00→10, 1.50→1.5, 0.30→0.3）
+  if(!fixed.includes('.'))return fixed;
+  const parts=fixed.split('.');
+  const frac=parts[1].replace(/0+$/,'');
+  return frac?parts[0]+'.'+frac:parts[0];
+}
+
+// ===== attendance_details: report_id ピボット（Layer 2 reports 生成） =====
+// normal_mins / overtime_mins は日報全体値のため1行目を採用しSUMしない。
+// labor_days / labor_cost は按分後値のため report_id 内でSUMする。
+function buildAttendanceReports(rows){
+  const warnings=[];
+  const map=new Map();
+  const sharedNum=['normal_mins','overtime_mins'];
+  const sharedStr=['report_date','employee_id','employee_name','start_time','end_time','work_type','report_status'];
+  const mismatchSeen=new Set();
+  rows.forEach(r=>{
+    const rid=(r['report_id']!==undefined)?r['report_id']:'';
+    let rep=map.get(rid);
+    if(!rep){
+      rep={
+        report_id:rid,
+        report_date:r['report_date']||'',
+        employee_id:r['employee_id']||'',
+        employee_name:r['employee_name']||'',
+        work_type:r['work_type']||'',
+        start_time:r['start_time']||'',
+        end_time:r['end_time']||'',
+        normal_mins:toNumber(r['normal_mins']),
+        overtime_mins:toNumber(r['overtime_mins']),
+        report_status:r['report_status']||'',
+        memo:r['memo']||'',
+        site_names:[],
+        row_count:0,
+        labor_days_total:0,
+        labor_cost_total:0
+      };
+      map.set(rid,rep);
+    }else{
+      // 共有属性の不一致検知（1行目の値を採用・処理は止めない）
+      sharedStr.forEach(f=>{
+        const cur=(r[f]!==undefined)?r[f]:'';
+        if(String(rep[f])!==String(cur)){
+          const key=rid+'|'+f;
+          if(!mismatchSeen.has(key)){
+            mismatchSeen.add(key);
+            warnings.push('report_id='+rid+' の '+f+' が行によって異なります。1行目の値を採用します。');
+          }
+        }
+      });
+      sharedNum.forEach(f=>{
+        if(rep[f]!==toNumber(r[f])){
+          const key=rid+'|'+f;
+          if(!mismatchSeen.has(key)){
+            mismatchSeen.add(key);
+            warnings.push('report_id='+rid+' の '+f+' が行によって異なります。1行目の値を採用します。');
+          }
+        }
+      });
+    }
+    // site_name 集約（空は「(現場なし)」）
+    let sn=r['site_name'];
+    if(sn===undefined||sn==='')sn='(現場なし)';
+    if(rep.site_names.indexOf(sn)===-1)rep.site_names.push(sn);
+    // 按分後値はSUM
+    rep.row_count+=1;
+    rep.labor_days_total+=toNumber(r['labor_days']);
+    rep.labor_cost_total+=toNumber(r['labor_cost']);
+  });
+  return{reports:Array.from(map.values()),warnings};
+}
+
+// ===== 月別サマリー（reports から集計） =====
+function buildMonthlyAttendanceSummary(reports){
+  const map=new Map();
+  reports.forEach(rep=>{
+    const ym=(rep.report_date&&rep.report_date.length>=7)?rep.report_date.slice(0,7):'(不明)';
+    let a=map.get(ym);
+    if(!a){a={month:ym,empSet:new Set(),daySet:new Set(),reportSet:new Set(),normal_mins:0,overtime_mins:0,labor_days:0,labor_cost:0};map.set(ym,a);}
+    if(rep.employee_id)a.empSet.add(rep.employee_id);
+    a.daySet.add(rep.employee_id+'|'+rep.report_date);
+    a.reportSet.add(rep.report_id);
+    a.normal_mins+=rep.normal_mins;
+    a.overtime_mins+=rep.overtime_mins;
+    a.labor_days+=rep.labor_days_total;
+    a.labor_cost+=rep.labor_cost_total;
+  });
+  const arr=Array.from(map.values()).map(a=>({
+    month:a.month,employees:a.empSet.size,work_days:a.daySet.size,report_count:a.reportSet.size,
+    normal_mins:a.normal_mins,overtime_mins:a.overtime_mins,labor_days:a.labor_days,labor_cost:a.labor_cost
+  }));
+  arr.sort((x,y)=>x.month<y.month?-1:(x.month>y.month?1:0));
+  return arr;
+}
+
+// ===== 従業員別サマリー（reports から集計） =====
+function buildEmployeeAttendanceSummary(reports){
+  const map=new Map();
+  reports.forEach(rep=>{
+    const key=rep.employee_id||('name:'+rep.employee_name);
+    let a=map.get(key);
+    if(!a){a={employee_name:rep.employee_name,daySet:new Set(),reportSet:new Set(),normal_mins:0,overtime_mins:0,labor_days:0,labor_cost:0};map.set(key,a);}
+    a.daySet.add(rep.report_date);
+    a.reportSet.add(rep.report_id);
+    a.normal_mins+=rep.normal_mins;
+    a.overtime_mins+=rep.overtime_mins;
+    a.labor_days+=rep.labor_days_total;
+    a.labor_cost+=rep.labor_cost_total;
+  });
+  const arr=Array.from(map.values()).map(a=>({
+    employee_name:a.employee_name,work_days:a.daySet.size,report_count:a.reportSet.size,
+    normal_mins:a.normal_mins,overtime_mins:a.overtime_mins,labor_days:a.labor_days,labor_cost:a.labor_cost
+  }));
+  arr.sort((x,y)=>x.employee_name<y.employee_name?-1:(x.employee_name>y.employee_name?1:0));
+  return arr;
+}
+
+// ===== サマリーテーブル描画（textContentで安全に） =====
+function renderSummaryTable(container,columns,dataArr){
+  clear(container);
+  const scroll=document.createElement('div');
+  scroll.className='table-scroll';
+  const table=document.createElement('table');
+  const thead=document.createElement('thead');
+  const trh=document.createElement('tr');
+  columns.forEach(c=>{const th=document.createElement('th');th.textContent=c.label;trh.appendChild(th);});
+  thead.appendChild(trh);
+  table.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  if(dataArr.length===0){
+    const tr=document.createElement('tr');
+    const td=document.createElement('td');
+    td.colSpan=columns.length;td.textContent='データ0件です。';
+    tr.appendChild(td);tbody.appendChild(tr);
+  }else{
+    dataArr.forEach(row=>{
+      const tr=document.createElement('tr');
+      columns.forEach(c=>{
+        const td=document.createElement('td');
+        td.textContent=c.fmt?c.fmt(row[c.key],row):String(row[c.key]);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  container.appendChild(scroll);
+}
+
+function renderAttendanceSummaries(reports){
+  const monthly=buildMonthlyAttendanceSummary(reports);
+  const byEmp=buildEmployeeAttendanceSummary(reports);
+  const monthlyCols=[
+    {key:'month',label:'月'},
+    {key:'employees',label:'従業員数'},
+    {key:'work_days',label:'出勤日数'},
+    {key:'report_count',label:'稼働件数'},
+    {key:'normal_mins',label:'通常時間',fmt:v=>formatMinutes(v)},
+    {key:'overtime_mins',label:'残業時間',fmt:v=>formatMinutes(v)},
+    {key:'labor_days',label:'人工合計',fmt:v=>formatNumber(v,2)},
+    {key:'labor_cost',label:'労務費合計',fmt:v=>formatMoney(v)}
+  ];
+  const empCols=[
+    {key:'employee_name',label:'従業員'},
+    {key:'work_days',label:'出勤日数'},
+    {key:'report_count',label:'稼働件数'},
+    {key:'normal_mins',label:'通常時間',fmt:v=>formatMinutes(v)},
+    {key:'overtime_mins',label:'残業時間',fmt:v=>formatMinutes(v)},
+    {key:'labor_days',label:'人工合計',fmt:v=>formatNumber(v,2)},
+    {key:'labor_cost',label:'労務費合計',fmt:v=>formatMoney(v)}
+  ];
+  document.getElementById('attMonthlyCard').classList.remove('hidden');
+  document.getElementById('attEmployeeCard').classList.remove('hidden');
+  renderSummaryTable(document.getElementById('attMonthlyArea'),monthlyCols,monthly);
+  renderSummaryTable(document.getElementById('attEmployeeArea'),empCols,byEmp);
 }
 
 // ===== ファイル選択 =====

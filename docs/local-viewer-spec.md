@@ -473,3 +473,171 @@ CSVそのままの行。
 - 集計突合で合計原価が一致（全体・年度別・発注者別・工事分類別がすべて 770000）
 - project_id 欠落なし
 - contract_amount 未入力または0が10件あり、請負金額・粗利・原価率が `—` になるのは正常
+
+## 17. project_cost_details.csv 専用ビュー仕様（Phase 2-4-5時点）
+
+コミット：`f4eace0 Add project cost details CSV viewer pages`
+
+### 専用ページ
+
+`project_cost_details.csv` 読込時は左メニューに以下を表示する。
+
+```text
+ダッシュボード
+請求書一覧
+業者別集計
+工事別集計
+月別集計
+費目別集計
+確認リスト
+生データ
+警告・エラー
+```
+
+### 列マッピング
+
+```text
+amount         金額
+invoice_date   請求日・月別集計キー
+vendor_name    業者名
+site_name      工事名
+cost_category  費目
+description    摘要
+status         状態
+memo           メモ
+```
+
+費目表示の日本語化：`subcontract`→外注費 / `material`→材料費 / `machine_lease`→重機リース / `other`→その他。
+状態表示の日本語化：`confirmed`→確認済み / `posted`→計上済み。
+
+### 請求書一覧
+
+表示列：
+
+```text
+請求日
+業者名
+工事名
+費目
+摘要
+金額
+状態
+メモ
+```
+
+仕様：
+
+- `invoice_date` 昇順、`vendor_name` 昇順で表示
+- 金額は右寄せ・カンマ付き
+- 空値は `—` 表示
+- CSV値は `textContent` / DOM API で描画
+
+### 業者別集計
+
+表示列：
+
+```text
+業者名
+件数
+金額合計
+主な費目
+主な工事
+```
+
+仕様：
+
+- `vendor_name` でグループ化
+- 空は `(未設定)`
+- `amount` をSUM
+- 主な費目・主な工事はユニーク値を最大数件表示
+
+### 工事別集計
+
+表示列：
+
+```text
+工事名
+件数
+金額合計
+主な業者
+主な費目
+```
+
+仕様：
+
+- `site_name` でグループ化
+- 空は `(現場なし)`
+- `amount` をSUM
+
+### 月別集計
+
+表示列：
+
+```text
+月
+件数
+金額合計
+主な業者
+主な費目
+```
+
+仕様：
+
+- `invoice_date` の `YYYY-MM` でグループ化
+- 日付なしは `(日付なし)`
+- `amount` をSUM
+
+### 費目別集計
+
+表示列：
+
+```text
+費目
+件数
+金額合計
+主な業者
+主な工事
+```
+
+仕様：
+
+- `cost_category` でグループ化
+- 空は `(未設定)`
+- `amount` をSUM
+- 表示は日本語化する
+
+### 確認リスト
+
+確認項目：
+
+```text
+現場名なし
+業者名なし
+費目なし
+金額0円または空
+日付なし
+同じ業者・同じ日付・同じ金額の重複疑い
+外注費の二重計上注意
+```
+
+仕様：
+
+- 重複疑いは `vendor_name + invoice_date + amount` の組み合わせで検出
+- 対象行はCSVデータ行番号で表示
+- 外注費の二重計上注意は、`cost_category = subcontract` の行がある場合に表示
+- 外注費注意はエラーではなく確認注意
+
+### 検証済み事項
+
+- `project_cost_details.csv` 読込OK
+- 専用メニュー表示OK
+- 請求書一覧OK
+- 業者別/工事別/月別/費目別集計OK
+- 確認リストOK
+- 生データOK
+- 警告・エラーOK
+- NaN表示なし
+- Console重大エラーなし
+- 確認時点のCSVはデータ行数0
+- allAmount / vendor / project / month / category の各合計はすべて0で一致
+- 実データ入りCSVでの再検証は今後必要

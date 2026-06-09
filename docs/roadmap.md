@@ -480,6 +480,121 @@ Storage 設計：
 - machine_details.csv 用 重機台帳ビューアー検討
 - 複数CSV統合モードによる工事別月別原価ビュー
 
+#### Phase 2-4-5：project_cost_details.csv 用 請求書明細ビューアー初期実装（完了）
+
+- 実装コミット：`f4eace0 Add project cost details CSV viewer pages`
+- 対象ファイル：`local-viewers/csv-viewer.html`
+
+**実装内容：**
+
+- `project_cost_details.csv` 読込時に以下の専用ページを追加
+  - 請求書一覧
+  - 業者別集計
+  - 工事別集計
+  - 月別集計
+  - 費目別集計
+  - 確認リスト
+- CSV列マッピング
+  - 金額：`amount`
+  - 日付：`invoice_date`
+  - 業者名：`vendor_name`
+  - 工事名：`site_name`
+  - 費目：`cost_category`
+  - 摘要：`description`
+  - 状態：`status`
+  - メモ：`memo`
+- 費目表示の日本語化
+  - `subcontract` → 外注費
+  - `material` → 材料費
+  - `machine_lease` → 重機リース
+  - `other` → その他
+- 状態表示の日本語化
+  - `confirmed` → 確認済み
+  - `posted` → 計上済み
+- 業者別・工事別・月別・費目別に `amount` をSUMして集計
+- 月別集計は `invoice_date` の `YYYY-MM` をキーにする
+- 確認リストを追加
+  - 現場名なし
+  - 業者名なし
+  - 費目なし
+  - 金額0円または空
+  - 日付なし
+  - 同じ業者・同じ日付・同じ金額の重複疑い
+  - 外注費の二重計上注意
+- 外注費の二重計上注意はエラーではなく確認注意として表示
+- ダッシュボードに以下を追加
+  - 明細件数
+  - 金額合計
+  - 業者数
+  - 工事数
+  - 費目数
+  - 確認件数
+- CSV値は `textContent` / DOM API で描画し、`innerHTML` に入れていない
+- Supabase接続情報・外部CDNなし
+- `file://` で動作
+
+**実ブラウザ確認内容：**
+
+- `project_cost_details.csv` 読込OK
+- メニュー表示OK
+- ダッシュボードOK
+- 請求書一覧OK
+- 業者別集計OK
+- 工事別集計OK
+- 月別集計OK
+- 費目別集計OK
+- 確認リストOK
+- 生データOK
+- 警告・エラーOK
+- NaN表示なし
+- Console重大エラーなし
+
+**集計突合結果（確認時点の CSV はデータ行数0）：**
+
+```text
+allAmount = 0
+vendorGroupedAmount = 0
+projectGroupedAmount = 0
+monthGroupedAmount = 0
+categoryGroupedAmount = 0
+vendorMatches = true
+projectMatches = true
+monthMatches = true
+categoryMatches = true
+missingSite = 0
+missingVendor = 0
+missingCategory = 0
+zeroAmount = 0
+missingDate = 0
+subcontractRows = 0
+```
+
+- データ行数0のため、実データ入り請求書明細での金額表示・業者別集計・重複疑い表示は今後確認が必要
+- ただし空CSV状態での表示崩れ・NaN表示・Console重大エラーはなし
+
+**回帰確認：**
+
+- projects_summary.csv
+  - projects_summary読込OK
+  - 工事一覧OK
+  - 工事名クリックOK
+  - 工事詳細OK
+  - 年度別集計OK
+  - Console重大エラーなし
+- attendance_details.csv
+  - attendance_details読込OK
+  - 出勤簿系メニューOK
+  - 月別サマリーOK
+  - 従業員別サマリーOK
+  - 従業員名クリック遷移OK
+  - Console重大エラーなし
+
+**次フェーズ候補：**
+
+- `machine_details.csv` 用 重機台帳ビューアー検討
+- 複数CSV統合モードによる工事別月別原価ビュー
+- 実データ入り `project_cost_details.csv` での請求書明細ビューアー再検証
+
 ## 保留・改善候補
 
 - favicon.ico 追加

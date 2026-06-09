@@ -402,6 +402,84 @@ Storage 設計：
 - 複数CSV統合モード
 - 現場別費用の月別ビュー
 
+#### Phase 2-4-4：projects_summary.csv 用 工事別サマリービューアー初期実装（完了）
+
+- 実装コミット：`27b18b3 Add projects summary CSV viewer pages`
+- 対象ファイル：`local-viewers/csv-viewer.html`
+
+**実装内容：**
+
+- `projects_summary.csv` 読込時に以下の専用ページを追加
+  - 工事一覧
+  - 工事詳細
+  - 年度別集計
+  - 発注者別集計
+  - 工事分類別集計
+- 工事名クリックで工事詳細へ遷移（`project_id` を優先、なければ工事名で代替）
+- 原価率は `total_cost / contract_amount * 100` で自前計算
+- CSVの `profit_rate` は利益率であり、原価率表示には使っていない
+- 原価率判定バッジを追加
+  - 80%未満：通常
+  - 80%以上90%未満：注意
+  - 90%以上100%未満：要確認
+  - 100%以上：赤字・重大
+- 原価率は概算参考値である注記を追加（重機費・税区分・外注費集計の影響で実際と異なる場合がある）
+- `warnings / notes` 列は `projects_summary.csv` に存在しないため、工事一覧では `—`、工事詳細では注記表示
+- 費目別内訳には、合計原価との突合のため以下を表示
+  - 労務費
+  - 重機費
+  - 材料費
+  - 外注費
+  - ダンプ費
+  - 警備費
+  - その他費用
+- 年度別・発注者別・工事分類別集計はグループごとに金額を合計してから原価率を算出
+
+**実ブラウザ確認内容：**
+
+- projects_summary読込OK
+- メニュー表示OK
+- 工事一覧OK
+- 原価率注記OK
+- 工事名クリックOK
+- 工事詳細OK
+- 年度別集計OK
+- 発注者別集計OK
+- 工事分類別集計OK
+- 生データOK
+- 警告・エラーOK
+- NaN表示なし
+- Console重大エラーなし
+
+**集計突合結果：**
+
+- allTotalCost = 770000
+- yearGroupedTotalCost = 770000
+- clientGroupedTotalCost = 770000
+- categoryGroupedTotalCost = 770000
+- yearMatches = true
+- clientMatches = true
+- categoryMatches = true
+- projectIdMissing = 0
+- contractAmountMissingOrZero = 10
+- `contractAmountMissingOrZero = 10` は、現在のCSVでは請負金額が未入力または0の工事が10件あるという意味で、ビューアーの不具合ではない
+
+**attendance_details 既存機能の確認（回帰なし）：**
+
+- 出勤簿系メニューOK
+- 月別サマリーOK
+- 従業員別サマリーOK
+- 従業員名クリック遷移OK
+- 全体出勤簿OK
+- 生データOK
+- Console重大エラーなし
+
+**次フェーズ候補：**
+
+- project_cost_details.csv 用 請求書明細ビューアー検討
+- machine_details.csv 用 重機台帳ビューアー検討
+- 複数CSV統合モードによる工事別月別原価ビュー
+
 ## 保留・改善候補
 
 - favicon.ico 追加

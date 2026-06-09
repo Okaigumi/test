@@ -319,3 +319,41 @@ CSVそのままの行。
 - CSV列の増減には、必須列集合で可能な範囲で対応
 - 大量データ時の仮想スクロールはMVPでは未対応
 - フロント専用作業のため `docs/db-migrations.md` には記録しない
+
+## 15. 現在の実装仕様（Phase 2-4-3時点）
+
+コミット：`c8dcb0c Add paged print-friendly CSV viewer`
+
+### 構成
+
+- 単一HTML構成：`local-viewers/csv-viewer.html`
+- Vercel公開対象外：`.vercelignore` で `local-viewers/` を除外
+- Supabase接続なし、外部CDNなし、APIキーなし、`file://` で動く
+
+### UI
+
+- 白ベース帳票UI
+- 印刷対応（印刷CSS）
+- ページ切替型UI
+
+### attendance_details のページ構成
+
+- ダッシュボード
+- 月別サマリー
+- 従業員別サマリー
+- 従業員別 月別出勤簿
+- 全体出勤簿
+- 生データ
+- 警告・エラー
+
+### 遷移・集計
+
+- 従業員別サマリーの従業員名クリックで、対象従業員の月別出勤簿へ遷移
+- `normal_mins` / `overtime_mins` は report_id 単位ピボットで二重計上を防止
+- `labor_days` / `labor_cost` は按分後値のSUM
+
+### 他CSVの扱い
+
+- 他CSV（projects_summary / project_cost_details / machine_details）は現時点では生データ確認中心
+- 今後、CSV種別ごとに不要ボタンを非表示にする予定
+- 今後、projects_summary / project_cost_details / machine_details の専用ビューアを整備予定

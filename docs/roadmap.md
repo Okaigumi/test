@@ -356,6 +356,52 @@ Storage 設計：
 - Phase 2-4 は `docs/roadmap.md` と `docs/local-viewer-spec.md` に記録する
 - DB変更・SQL実行・Supabase権限変更がないため `docs/db-migrations.md` には記録しない
 
+#### Phase 2-4-3：ページ切替型CSVビューア再構成（完了）
+
+- コミット：`c8dcb0c Add paged print-friendly CSV viewer`
+- 実装・実ブラウザ確認・commit/push 完了済み
+
+**実装内容：**
+
+- `local-viewers/csv-viewer.html` をページ切替型に再構成
+- 白ベースの業務帳票デザインへ変更
+- 印刷CSSを追加
+- attendance_details CSV向けに以下ページを整備
+  - ダッシュボード
+  - 月別サマリー
+  - 従業員別サマリー
+  - 従業員別 月別出勤簿
+  - 全体出勤簿
+  - 生データ
+  - 警告・エラー
+- 従業員別サマリーの従業員名クリックで、対象従業員の月別出勤簿へ遷移
+- `normal_mins` / `overtime_mins` の二重計上防止を維持
+- `labor_days` / `labor_cost` は按分後値のSUMを維持
+- CSV値は `textContent` / DOM API で描画し、`innerHTML` に直接入れない
+- Supabase接続なし、外部CDNなし、APIキーなし、`file://` で動く
+
+**実ブラウザ確認内容：**
+
+- 白ベース表示
+- CSV読込
+- ページ切替
+- 月別/従業員別の数字突合
+- 従業員名クリック遷移
+- 全体出勤簿
+- 生データ
+- 他CSV読込
+- 印刷プレビュー
+- Console重大エラーなし
+
+**次フェーズ候補：**
+
+- CSV種別ごとの不要ボタン非表示
+- 工事別サマリービューアー調整
+- 請求書明細ビューアー検討
+- 重機台帳ビューアー検討
+- 複数CSV統合モード
+- 現場別費用の月別ビュー
+
 ## 保留・改善候補
 
 - favicon.ico 追加

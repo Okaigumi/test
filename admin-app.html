@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -215,6 +215,8 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
       <button class="nav-item" onclick="showPage('invoices')" id="nav-invoices"><span class="nav-icon">📄</span>請求書</button>
       <button class="nav-item" onclick="showPage('rates')" id="nav-rates"><span class="nav-icon">💴</span>単価設定</button>
       <button class="nav-item" onclick="showPage('budgets')" id="nav-budgets"><span class="nav-icon">📋</span>実行予算</button>
+      <div class="nav-section">集計出力</div>
+      <button class="nav-item" onclick="showPage('csv')" id="nav-csv"><span class="nav-icon">📊</span>CSV出力</button>
       <div class="nav-section">人員</div>
       <button class="nav-item" onclick="showPage('employees')" id="nav-employees"><span class="nav-icon">👷</span>従業員</button>
       <button class="nav-item" onclick="showPage('admins')" id="nav-admins"><span class="nav-icon">🔐</span>管理者</button>
@@ -342,11 +344,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理'};
+  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理',csv:'CSV出力'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices};
+  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices,csv:pageCsv};
   if(pages[name]) await pages[name]();
 }
 
@@ -1585,6 +1587,208 @@ async function deleteNoticeAttachment(id){
 }
 
 window.addEventListener('DOMContentLoaded',init);
+
+// ===== CSV出力 =====
+
+const CSV_COLUMNS={
+  projects_summary:[
+    'project_id','site_name','fiscal_year','category_name','client_name','client_category',
+    'location','start_date','end_date','contract_amount','budget',
+    'labor_cost','report_subcontract_cost','invoice_subcontract_cost','subcontract_cost_total',
+    'material_cost','machine_cost','dump_cost','guard_cost','other_cost',
+    'total_cost','gross_profit','profit_rate'
+  ],
+  attendance_details:[
+    'report_id','report_date','fiscal_year','employee_id','employee_name',
+    'project_id','site_name','site_count','allocation_ratio',
+    'work_type','start_time','end_time','normal_mins','overtime_mins',
+    'labor_days','daily_rate','rate_is_default','labor_cost','report_status','memo'
+  ],
+  project_cost_details:[
+    'invoice_id','invoice_date','fiscal_year','project_id','site_name','client_name',
+    'cost_category','vendor_name','amount','tax_included','status','description','memo'
+  ],
+  machine_details:[
+    'machine_id','machine_name','ownership','owner_company',
+    'lease_company','lease_start','lease_end','lease_monthly','owned_cost','is_active'
+  ]
+};
+
+// baseName: 'csv' が null のときは期間パートを付けない（重機台帳等）
+// dateFrom/dateTo が両方 null かつ hasPeriod=true のとき「全期間」を付ける
+function buildCsvFilename(baseName,dateFrom,dateTo,generatedAt,hasPeriod){
+  const pad=n=>String(n).padStart(2,'0');
+  const d=generatedAt?new Date(generatedAt):new Date();
+  const ts=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  let periodPart='';
+  if(hasPeriod){
+    if(dateFrom&&dateTo)periodPart=`_${dateFrom}_${dateTo}`;
+    else if(dateFrom)periodPart=`_${dateFrom}_`;
+    else if(dateTo)periodPart=`__${dateTo}`;
+    else periodPart='_全期間';
+  }
+  return`${baseName}${periodPart}_${ts}.csv`;
+}
+
+function escCsvValue(v){
+  if(v===null||v===undefined)return'';
+  const s=String(v);
+  if(/[",\r\n]/.test(s))return'"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+
+function downloadCsv(rpcResult,filenameBase,columns){
+  const warnings=rpcResult?.warnings||[];
+  const rows=rpcResult?.rows||[];
+  if(warnings.length>0){
+    alert(`警告が${warnings.length}件あります。CSVは出力します。必要に応じて内容を確認してください。`);
+  }
+  if(rows.length===0){
+    alert('出力データは0件です。ヘッダ行のみのCSVを出力します。');
+  }
+  const header=columns.map(escCsvValue).join(',');
+  const body=rows.map(r=>columns.map(k=>escCsvValue(r[k])).join(',')).join('\r\n');
+  const csv=rows.length===0?(header+'\r\n'):(header+'\r\n'+body+'\r\n');
+  const bom='\uFEFF';
+  const blob=new Blob([bom+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filenameBase;a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+async function downloadProjectsSummaryCsv(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const dateFrom=document.getElementById('csv-ps-from').value||null;
+  const dateTo=document.getElementById('csv-ps-to').value||null;
+  if(dateFrom&&dateTo&&dateFrom>dateTo){alert('開始日は終了日以前の日付を指定してください。');return;}
+  const{data,error}=await sb.rpc('export_projects_summary_secure',{
+    session_token_input:token,
+    date_from_input:dateFrom,
+    date_to_input:dateTo
+  });
+  if(error){alert('CSV取得エラー：'+error.message);return;}
+  const filename=buildCsvFilename('工事別サマリー',dateFrom,dateTo,data?.meta?.generated_at,true);
+  downloadCsv(data,filename,CSV_COLUMNS.projects_summary);
+}
+
+async function downloadAttendanceDetailsCsv(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const dateFrom=document.getElementById('csv-ad-from').value||null;
+  const dateTo=document.getElementById('csv-ad-to').value||null;
+  if(dateFrom&&dateTo&&dateFrom>dateTo){alert('開始日は終了日以前の日付を指定してください。');return;}
+  const{data,error}=await sb.rpc('export_attendance_details_secure',{
+    session_token_input:token,
+    date_from_input:dateFrom,
+    date_to_input:dateTo
+  });
+  if(error){alert('CSV取得エラー：'+error.message);return;}
+  const filename=buildCsvFilename('出勤労務明細',dateFrom,dateTo,data?.meta?.generated_at,true);
+  downloadCsv(data,filename,CSV_COLUMNS.attendance_details);
+}
+
+async function downloadProjectCostDetailsCsv(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const dateFrom=document.getElementById('csv-cd-from').value||null;
+  const dateTo=document.getElementById('csv-cd-to').value||null;
+  if(dateFrom&&dateTo&&dateFrom>dateTo){alert('開始日は終了日以前の日付を指定してください。');return;}
+  const{data,error}=await sb.rpc('export_project_cost_details_secure',{
+    session_token_input:token,
+    date_from_input:dateFrom,
+    date_to_input:dateTo
+  });
+  if(error){alert('CSV取得エラー：'+error.message);return;}
+  const filename=buildCsvFilename('請求書明細',dateFrom,dateTo,data?.meta?.generated_at,true);
+  downloadCsv(data,filename,CSV_COLUMNS.project_cost_details);
+}
+
+async function downloadMachineDetailsCsv(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data,error}=await sb.rpc('export_machine_details_secure',{
+    session_token_input:token
+  });
+  if(error){alert('CSV取得エラー：'+error.message);return;}
+  const filename=buildCsvFilename('重機台帳',null,null,data?.meta?.generated_at,false);
+  downloadCsv(data,filename,CSV_COLUMNS.machine_details);
+}
+
+async function pageCsv(){
+  document.getElementById('pageContent').innerHTML=`
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">📊 工事別サマリー（projects_summary.csv）</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">開始日</label>
+            <input type="date" id="csv-ps-from" class="form-input" style="width:150px;">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">終了日</label>
+            <input type="date" id="csv-ps-to" class="form-input" style="width:150px;">
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-primary" onclick="downloadProjectsSummaryCsv()">⬇ CSVダウンロード</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">工事ごとの累計原価・粗利サマリーです。期間未指定で全期間を出力します。</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">📅 出勤・労務明細（attendance_details.csv）</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">開始日</label>
+            <input type="date" id="csv-ad-from" class="form-input" style="width:150px;">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">終了日</label>
+            <input type="date" id="csv-ad-to" class="form-input" style="width:150px;">
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-primary" onclick="downloadAttendanceDetailsCsv()">⬇ CSVダウンロード</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">日報ごとの労務費明細です。複数現場は按分行分割して出力します。</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">🧾 請求書明細（project_cost_details.csv）</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">開始日</label>
+            <input type="date" id="csv-cd-from" class="form-input" style="width:150px;">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">終了日</label>
+            <input type="date" id="csv-cd-to" class="form-input" style="width:150px;">
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-primary" onclick="downloadProjectCostDetailsCsv()">⬇ CSVダウンロード</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">confirmed/posted 請求書の明細です。金額は税込/税抜混在の生値です。</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">🚜 重機台帳（machine_details.csv）</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <div style="margin-top:0;">
+            <button class="btn btn-primary" onclick="downloadMachineDetailsCsv()">⬇ CSVダウンロード</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">重機の台帳・リース情報です。期間指定はありません。</div>
+      </div>
+    </div>
+  `;
+}
 </script>
 </body>
 </html>

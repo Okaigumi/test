@@ -878,6 +878,14 @@ ZIP由来単体ビュー接続方針：
 - 4帳票カードは「個別帳票を確認」、月次チェック・差異確認は「横断チェック」として分けて表示する。
 - jsdom自動回帰で全32項目PASS。接続ロジック・集計は無変更。
 
+### 個別CSV読込エリアの折りたたみ 実装済み（Phase 2-4-9-3-b）
+
+実装コミット：`d9a87f6 Collapse individual CSV load area in ZIP viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §23。
+
+- 個別CSV読込エリアを折りたたみ式に変更した。
+- `#multiLoadArea` は削除せず `#multiIndividualBody` 内へ移動し、既存の個別CSV読込機能を維持したまま、通常運用時には目立たせすぎない構成にした。
+- jsdom自動回帰で全35項目PASS。handleText 経路・集計は無変更。
+
 ---
 
 ## 12. MVP範囲

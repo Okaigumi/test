@@ -2084,6 +2084,38 @@ Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整
 Phase 2-4-9-5：印刷・PDF保存導線の整備
 ```
 
+#### Phase 2-4-9-3-b：個別CSV読込エリアの折りたたみ（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §23。
+
+**記録内容：**
+
+- 実装コミット：`d9a87f6 Collapse individual CSV load area in ZIP viewer`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- 個別CSV読込エリアを「詳細・トラブル対応用」として初期折りたたみ表示に変更。
+- 見出し「詳細・トラブル対応用：個別CSV読込」を表示。
+- 補足文「通常は上のZIP読込を使ってください。個別CSVを確認したい場合だけ開きます。」を追加。
+- 開閉ボタン `#multiIndividualToggle` を追加。
+- 折りたたみ本文 `#multiIndividualBody` を追加。
+- 既存の `#multiLoadArea` を `#multiIndividualBody` 内へ移動。
+- ボタン文言は、閉じている時「個別CSV読込を開く」、開いている時「個別CSV読込を閉じる」。
+- `aria-expanded` で開閉状態を表現。
+- 未使用 `class="collapsible"` は除去済み。
+- 既存の個別CSV読込機能は維持。
+- `handleText` 経路は維持。
+- `setMode('single')` の意味は変更なし。
+- ZIP読込・帳票選択メニュー・4カード接続・月次チェック・集計ロジックは無変更。
+- jsdom自動回帰で全35項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整
+Phase 2-4-9-5：印刷・PDF保存導線の整備
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

@@ -23,6 +23,8 @@
 > **Phase 2-4-9-3（設計）**：4帳票接続完了後の実運用UXを整理する。通常運用はZIP読込を主導線とし、個別CSV読込は詳細・トラブル対応用として扱う。PDF保存ボタンは後続フェーズで整備予定。設計は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §21 を参照。
 >
 > **Phase 2-4-9-3-a（実装済み）**：ZIP読込後の帳票選択メニューを「個別帳票を確認」と「横断チェック」の2セクション構造に整理した。4帳票は個別確認、月次チェック・差異確認は横断確認として位置づける（コミット `cca89af`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §22 を参照。
+>
+> **Phase 2-4-9-3-b（実装済み）**：個別CSV読込エリアを「詳細・トラブル対応用」として初期折りたたみ表示に変更した。通常運用ではZIP読込を主導線とし、個別CSV読込は検証・トラブル対応・一部CSVのみ確認したい場合の補助導線として残す（コミット `d9a87f6`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §23 を参照。
 
 ## 1. 目的
 

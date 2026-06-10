@@ -1757,3 +1757,70 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全32項目PASS。
 ```text
 Phase 2-4-9-3-b：個別CSV読込エリアの折りたたみ
 ```
+
+## 23. Phase 2-4-9-3-b：個別CSV読込エリアの折りたたみ 実装結果
+
+### 23.1 実装コミット
+
+```text
+d9a87f6 Collapse individual CSV load area in ZIP viewer
+```
+
+### 23.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 23.3 実装目的
+
+```text
+通常運用ではZIP読込を主導線にするため、個別CSV読込エリアを「詳細・トラブル対応用」として折りたたみ表示に変更した。
+```
+
+### 23.4 画面構成
+
+```text
+詳細・トラブル対応用：個別CSV読込
+├ 補足説明
+├ 開閉ボタン
+└ 折りたたみ本文
+   ├ 詳細注記
+   └ 既存の個別CSV読込UI
+```
+
+### 23.5 実装内容
+
+```text
+- #multiIndividualToggle を追加
+- #multiIndividualBody を追加
+- #multiIndividualBody は初期 hidden
+- #multiLoadArea を #multiIndividualBody 内へ移動
+- aria-expanded を false / true で切り替える
+- aria-controls="multiIndividualBody" を設定
+- 既存の .hidden クラスを利用
+- 新規CSSなし
+- inline onclick なし
+- 未使用 class="collapsible" は除去済み
+```
+
+### 23.6 変更しなかったもの
+
+```text
+- ZIP読込エリア
+- 帳票選択メニュー
+- 4帳票カード接続
+- 月次チェック・差異確認
+- handleText 経路
+- setMode('single') の意味
+- CSV解析処理
+- 集計ロジック
+- PDF保存ボタン
+```
+
+### 23.7 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全35項目PASS。
+初期折りたたみ、開閉、aria-expanded、個別4種CSV読込、ZIPメニュー、4カード、月次チェック、NaNなし、Console重大エラーなしを確認。
+```

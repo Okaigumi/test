@@ -249,3 +249,7 @@ machines.company_id   → companies.name            （重機所属会社）
 - **ローカルCSVビューアーにZIP読込を実装済み**（Phase 2-4-8-6・`local-viewers/csv-viewer.html`。コミット `c867027`）。管理コンソールで出力したZIPを、ローカルCSVビューアーのZIP読込で読み込める実装になった。**ZIP内CSVの列仕様は個別CSVと同一。**
 - **管理コンソール出力ZIPとローカルビューアーZIP読込の実ZIP結合確認を実施済み**（Phase 2-4-8-8）。2026-06単月の実ZIP（`okaigumi-csv-export_202606-202606_20260610-1446.zip`）で、4CSV + manifest・manifest rows と実CSV行数の一致・ビューアー読込・複数CSV統合ビュー反映・工事詳細・印刷/PDFまで確認済み（2026-06は project_cost_details 0行のため請求書費用は0件ケースとして確認）。
 - ZIP化・パッケージ化を行っても **CSV列仕様（§5〜§8）は変更しない。**
+- CSV出力ZIPの月次運用手順は [`docs/csv-export-operation-guide.md`](csv-export-operation-guide.md) を参照。
+- 個別CSV出力は詳細・予備として残す。通常運用ではZIP出力を推奨。
+- 現時点の保管は pCloud + 外付けHDD暫定バックアップ。
+- UGREEN NASync 導入後はNASバックアップ運用を追加する（現時点では未導入・後日購入予定）。

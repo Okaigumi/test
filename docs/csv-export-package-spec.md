@@ -924,3 +924,14 @@ manifest.json はCSV種別判定とパッケージ情報表示に使うが、man
 - 一時ファイル（展開CSV・manifest・PDF・一時サーバースクリプト）はリポジトリ外で扱い、確認後に削除済み。リポジトリ混入なし。
 - 2026-06は project_cost_details が0行のため、請求書費用統合は0件ケースとして確認済み（0行CSVはエラーではなく警告・確認事項として扱う動作を実確認）。
 - 請求書明細あり期間（例：2026-04〜2026-06）での追加確認は今後の候補。
+
+---
+
+## 19. 運用手順・保管方針（Phase 2-4-8-9）
+
+- 運用手順は [`docs/csv-export-operation-guide.md`](csv-export-operation-guide.md) に整理済み。
+- ZIP原本は編集禁止。
+- 現時点では pCloud を日常保管、外付けHDDを暫定バックアップとして扱う。
+- UGREEN NASync は後日購入予定（現時点では未導入）。
+- UGREEN NASync導入後の保存運用は operation guide を参照。
+- ビューアー配布時は `local-viewers/` と `vendor/jszip/` の相対位置を維持する。

@@ -245,4 +245,5 @@ machines.company_id   → companies.name            （重機所属会社）
 - 管理コンソールCSV出力では、将来的に**年月指定によるCSV一式ZIP出力をメイン導線**にする（UI設計は `docs/csv-export-package-spec.md` §14）。**個別CSV出力は予備として残す。**
 - **管理コンソールにCSV一式ZIP出力を実装済み**（Phase 2-4-8-4・`admin-app.html`。コミット `11b01aa`）。期間指定UIは**年月のみ**。ZIP化してもCSV列定義は変更しない。個別CSV出力は詳細・予備として残す。
 - ZIP出力の既存RPC呼び出しでは、**開始年月を月初日（例 2026-04 → 2026-04-01）、終了年月を月末日（例 2026-06 → 2026-06-30）に変換**して渡す（既存RPCの `date_to_input` を inclusive 比較で扱う想定に合わせるため）。
+- 管理コンソールで出力したZIPは、ローカルCSVビューアーのZIP読込UI（設計：`docs/csv-export-package-spec.md` §16・Phase 2-4-8-5）で読み込む想定。**ZIP内CSVの列仕様は個別CSVと同一。**
 - ZIP化・パッケージ化を行っても **CSV列仕様（§5〜§8）は変更しない。**

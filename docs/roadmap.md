@@ -1353,7 +1353,33 @@ manifest.json とZIPファイル名には年月粒度の from_month / to_month �
 - Phase 2-4-8-6：ローカルCSVビューアー ZIP読込実装
 - Phase 2-4-8-7：manifest.json 検証・表示対応
 
-**実装状況：Phase 2-4-8 は 2-4-8-4（管理コンソール ZIP出力実装）まで完了。2-4-8-5 以降は未着手。ローカルCSVビューアー側のZIP読込は未実装。**
+#### Phase 2-4-8-5：ローカルCSVビューアー ZIP読込UI設計（完了）
+
+- 状態：設計完了 / 実装：未着手
+- 設計ドキュメント：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md) §16
+- 対象：複数CSV統合モード、ZIP読込導線、manifest表示、個別CSV読込の予備化
+
+**設計内容：**
+
+- ZIP読込をメイン導線にする（「CSV出力パッケージZIPを読み込む（推奨）」カードを統合モード上部に追加）。
+- 個別CSV読込は削除せず、詳細・予備として残す。
+- CSV種別判定は `manifest.json` の `files[].type` を最優先。manifestがない場合は警告し、ファイル名 → CSVヘッダー（既存 `detectCsvType`）にフォールバックする。
+- ZIP読込後は既存の複数CSV統合処理（`multiState`・各集計関数・各描画関数・工事別詳細・印刷/PDF）を再利用する。集計ロジック・CSV列仕様は変更しない。
+- パッケージ情報表示：ファイル名 / 出力日時 exported_at / 対象期間 period.label / format_version / system / manifest読込状態 ／ ZIP内ファイル一覧（type / name / rows / 読込状態）。
+- UI状態：未選択 / 選択済み / 読込中 / 読込成功 / 警告あり / エラー / クリア済み。
+- エラー・警告方針：
+  - エラー＝ZIPが読めない／JSZip未読込／projects_summaryなし／必須CSVが解析不可／manifest破損でフォールバックも不可。
+  - 警告＝manifestなし／format_version未対応／任意CSVなし／unknown CSV／type重複／manifest rowsと実行数の不一致／0行CSV。
+  - 0行CSVはエラーではなく行数0扱い。
+- JSZip参照パス案：`../vendor/jszip/jszip.min.js`（`csv-viewer.html` は `local-viewers/` 配下、JSZip は `vendor/jszip/` 配下）。外部CDN不使用・`file://` 維持。
+- 印刷：ZIP読込後の統合ビュー・パッケージ情報は印刷対象。ZIPファイル選択・読込ボタンは印刷対象外。既存の印刷レイアウトを維持。
+- **今回は設計のみ。** `local-viewers/csv-viewer.html` の変更なし。ZIP読込実装なし。HTMLへの `<script>` 追加なし。
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-6：ローカルCSVビューアー ZIP読込実装
+
+**実装状況：Phase 2-4-8 は 2-4-8-5（ローカルCSVビューアー ZIP読込UI設計）まで完了。2-4-8-6 以降は未着手。ローカルCSVビューアー側のZIP読込は未実装。**
 
 ## 保留・改善候補
 

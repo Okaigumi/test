@@ -726,6 +726,19 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - 管理コンソールのZIP出力UI（`docs/csv-export-package-spec.md` §14）は、ローカルCSVビューアーのZIP読込を前提としたパッケージ（4CSV＋manifest.json）を生成する。ビューアー側は `manifest.json` の `files[].type` をCSV種別判定に使う。
 - **管理コンソール側のZIP出力は実装済み**（Phase 2-4-8-4・`admin-app.html`）。**ローカルCSVビューアー側のZIP読込は未実装。** 次フェーズ以降（2-4-8-5/2-4-8-6）で、管理コンソールのZIPを読み込むUIと処理を追加する。
 
+#### ZIP読込UI設計（Phase 2-4-8-5・設計のみ）
+
+設計：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md) §16。
+
+- ZIP読込UIをメイン導線として複数CSV統合モード上部に追加する設計。
+- 個別CSV読込は削除せず、詳細・予備として残す。
+- ZIP内の `manifest.json` を読み、`files[].type` でCSV種別を判定する。
+- manifestがない場合はファイル名 → CSVヘッダー（既存 `detectCsvType`）でフォールバックする。
+- ZIP読込後は既存の `multiState` と各種集計関数・描画関数を再利用する（集計ロジック・CSV列仕様は変更しない）。
+- パッケージ情報（ファイル名・出力日時・対象期間・format_version・system・ファイル一覧/行数）を統合ビューに表示する。
+- ZIP読込ボタン・ファイル選択は印刷対象外、パッケージ情報は印刷対象にする。
+- 実装は次フェーズ以降（2-4-8-6〜）。本フェーズでは設計のみ。
+
 ---
 
 ## 12. MVP範囲

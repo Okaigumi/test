@@ -670,3 +670,204 @@ CSV出力パッケージの利用者向け期間指定は年月粒度で統一�
 
 manifest.json とZIPファイル名には年月情報のみを保持し、日付粒度の操作を利用者に見せない。
 ```
+
+---
+
+## 16. ローカルCSVビューアー ZIP読込UI設計（Phase 2-4-8-5）
+
+- 状態：設計完了 / 実装：未着手
+- 対象：ローカルCSVビューアー（`local-viewers/csv-viewer.html`）の複数CSV統合モード、ZIP読込導線、manifest表示、個別CSV読込の予備化
+- 本フェーズは設計のみ。`local-viewers/csv-viewer.html` は変更しない。ZIP読込は実装しない。HTMLへの `<script>` 追加もしない。
+
+### 16.1 基本方針
+
+複数CSV統合モードは、将来的に以下の構成にする。
+
+```text
+複数CSV統合
+├ CSV出力パッケージZIPを読み込む（推奨）
+│  ├ ZIPファイル選択
+│  ├ パッケージ情報
+│  ├ ZIP内ファイル一覧
+│  ├ 読み込み結果
+│  └ 読み込み実行・クリア
+└ 個別CSV読込（詳細・予備）
+   ├ projects_summary
+   ├ attendance_details
+   ├ project_cost_details
+   └ machine_details
+```
+
+- 通常運用では **ZIP読込をメイン導線** にする。
+- 個別CSV読込は削除せず、詳細・予備・トラブル対応用として残す。
+
+### 16.2 ZIP読込カード
+
+複数CSV統合モードの上部に「CSV出力パッケージZIPを読み込む（推奨）」カードを追加する。
+
+UI案：ZIPファイル選択 / 選択中ファイル名 / パッケージ情報 / 読み込み結果 / ZIPを読み込む・クリア
+
+説明文：
+
+```text
+管理コンソールで出力したCSV一式ZIPを選択してください。
+4つのCSVとmanifest.jsonを自動で読み込み、複数CSV統合ビューに反映します。
+```
+
+### 16.3 個別CSV読込の扱い
+
+既存の個別CSV読込UIは残す（見出し案：`個別CSV読込（詳細・予備）`）。
+
+注記案：
+
+```text
+個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。通常運用ではZIP読込を推奨します。
+```
+
+- 既存の4CSV個別読込は削除しない。
+- 既存の複数CSV統合処理は壊さない。
+- ZIP読込後も個別CSVで再読込・差し替えできるかは実装時に検討する。
+- 少なくともトラブル時に個別CSV読込へ戻れる設計にする。
+
+### 16.4 ZIP読込後の表示情報
+
+パッケージ情報：
+
+```text
+ファイル名 / 出力日時 exported_at / 対象期間 period.label / format_version / system / manifest 読込状態
+```
+
+ZIP内ファイル一覧（type / name / rows / 読込状態）。表示例：
+
+```text
+projects_summary：projects_summary.csv / 12行 / OK
+attendance_details：attendance_details.csv / 340行 / OK
+project_cost_details：project_cost_details.csv / 86行 / OK
+machine_details：machine_details.csv / 18行 / OK
+manifest.json：OK
+```
+
+### 16.5 CSV種別判定方針
+
+優先順位：
+
+```text
+1. manifest.json の files[].type
+2. ファイル名
+3. CSVヘッダー（既存 detectCsvType）
+```
+
+- manifest.json がある場合は files[].type を最優先にする。
+- manifest.json がない場合は警告を出し、ファイル名・ヘッダー判定へフォールバックする。
+- unknown CSV がある場合は警告する。
+- 同一 type が重複する場合は警告する。
+- projects_summary がない場合はエラー。
+- 任意CSVがない場合は未読込扱いまたは警告。
+- 0行CSVはエラーではなく、行数0として扱う。
+
+### 16.6 既存処理の再利用
+
+ZIP読込後は、既存の複数CSV統合処理を再利用する。
+
+```text
+multiState / 各CSV読込処理 /
+buildMultiLaborSummaries / buildMultiInvoiceSummaries / buildMultiMonthlyCostSummaries /
+buildMultiReconciliation / buildMultiCrossChecks /
+renderMultiStatus / renderMultiProjectList / renderMultiCrossChecks /
+工事別詳細表示 / 印刷・PDF保存
+```
+
+- ZIP読込は「4CSVを自動で各枠に流し込む入口」として扱う。
+- 集計ロジックは変更しない。CSV列仕様は変更しない。
+- ZIP対応後も個別CSV読込と同じ結果になることを目標にする。
+
+### 16.7 UI状態
+
+```text
+未選択 / 選択済み / 読込中 / 読込成功 / 警告あり / エラー / クリア済み
+```
+
+状態ごとの表示例：
+
+```text
+未選択：ZIPファイルを選択してください
+選択済み：ファイル名を表示
+読込中：ZIP読込中...
+読込成功：CSV一式を読み込みました
+警告あり：一部CSVに警告があります
+エラー：projects_summary.csv が見つかりません
+```
+
+### 16.8 エラー・警告方針
+
+エラー扱い：
+
+```text
+ZIPファイルが読めない
+JSZipが読み込めない
+projects_summary が見つからない
+CSVとして解析できない必須ファイル
+manifest.json が壊れていて、フォールバック判定もできない
+```
+
+警告扱い：
+
+```text
+manifest.json がない
+format_version が未対応
+任意CSVがない
+unknown CSV が含まれる
+同一CSV type が重複
+manifest の rows と実CSV行数が合わない
+0行CSV
+```
+
+0行CSVは原則エラーではなく、行数0として扱う。
+
+### 16.9 JSZip参照パス
+
+`local-viewers/csv-viewer.html` からJSZipを参照する場合の相対パス：
+
+```html
+<script src="../vendor/jszip/jszip.min.js"></script>
+```
+
+理由：`csv-viewer.html` は `local-viewers/` 配下、JSZip は `vendor/jszip/` 配下のため、相対パスは `../vendor/jszip/jszip.min.js`。
+
+- 外部CDNは使わない。
+- `file://` 動作を維持する。
+- pCloud等で配布する場合は、`local-viewers/csv-viewer.html` と `vendor/jszip/jszip.min.js` の相対位置を保つ必要がある。
+
+### 16.10 セキュリティ方針
+
+- ZIP読込はローカルブラウザ内で完結する。
+- CSV内容を外部送信しない。
+- 外部CDNは使わない。
+- ZIP内ファイルをHTMLとして実行しない。
+- ZIP内のCSV由来値は引き続き `textContent` / DOM API で描画する（`innerHTML` にCSV由来値を入れない）。
+- 原価情報・従業員情報・請求書情報を含むため、ZIPの取り扱いはCSV原本と同等以上に注意する。
+
+### 16.11 印刷/PDFとの関係
+
+- ZIP読込後の統合ビューも印刷対象。
+- パッケージ情報は印刷対象に含める。
+- ZIPファイル選択や読込ボタンは印刷対象外。
+- 確認リスト・差異確認・月別原価の印刷レイアウトは既存を維持する。
+
+### 16.12 実装ステップ案
+
+```text
+2-4-8-6：ローカルCSVビューアー ZIP読込実装
+2-4-8-7：manifest.json 検証・表示対応
+2-4-8-8：管理コンソールZIPとビューアーZIP読込の結合確認
+2-4-8-9：docs・運用手順整理
+```
+
+実装を細かく分けるなら：
+
+```text
+2-4-8-6：ビューアーJSZip読込導線追加
+2-4-8-7：ZIP展開・CSV自動割当
+2-4-8-8：manifest検証・パッケージ情報表示
+2-4-8-9：実ZIP結合確認・docs整理
+```

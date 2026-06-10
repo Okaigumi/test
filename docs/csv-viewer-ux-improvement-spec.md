@@ -1043,3 +1043,154 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全47項目PASS。
 ```text
 Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
 ```
+
+## 18. Phase 2-4-9-2-e：project_cost_details ZIP由来単体ビュー接続 実装結果
+
+### 18.1 実装コミット
+
+```text
+34d5d73 Connect ZIP project cost details to single CSV viewer
+```
+
+### 18.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 18.3 実装内容
+
+```text
+- 帳票選択メニューの「請求書費用」カードを実接続
+- ZIP内 project_cost_details.csv を、既存の単体CSVビューと同じ構成で表示
+- openMultiReport(key,title) の分岐条件に project_cost_details を追加
+- openZipSingleReport(type) は既存汎用処理を利用
+- buildSingleStateAndRender({ source:'zip', ... }) を利用
+- state はZIP由来 project_cost_details で上書き
+- multiState は保持
+- renderDashboard() に project_cost_details 0件時の安心文言を条件付き追加
+- 帳票選択メニューに戻る導線は既存仕組みを利用
+```
+
+### 18.4 追加・変更した主な関数
+
+```text
+openMultiReport(key,title)
+- projects_summary / attendance_details に加え、project_cost_details も openZipSingleReport へ分岐
+- machine_details は準備中表示のまま
+
+renderDashboard()
+- project_cost_details かつ rows=0 の場合のみ、0件が正常である旨の安心文言を表示
+
+openZipSingleReport(type)
+- 既存の汎用処理をそのまま利用
+- multiState.rows[type] / multiState.files[type] を buildSingleStateAndRender へ渡す
+
+buildSingleStateAndRender(args)
+- 既存処理を変更せず利用
+
+aggregateInvoices(rows, keyFn, emptyLabel)
+- 変更なし
+
+computeInvoiceChecks(rows)
+- 変更なし
+```
+
+### 18.5 0件CSVの正常表示
+
+```text
+project_cost_details は実ZIP 2026年6月分で0件だった。
+これはエラーではなく、対象期間に請求書登録がない正常ケースとして扱う。
+今回、ZIP由来 project_cost_details 単体ビューでも、0件CSVを errors空・正常表示として扱えることを確認した。
+```
+
+確認結果：
+
+```text
+- 0件でも errors空
+- 初期ページ dashboard が正常表示
+- 明細件数0
+- 金額合計0円
+- NaNなし
+- 請求書一覧は既存の「データ0件です。」表示
+- 確認リストも異常扱いになりすぎない
+- 「この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。」を条件付き表示
+```
+
+### 18.6 invoice_date 期間推定
+
+```text
+データあり project_cost_details CSVでは invoice_date から state.minDate / state.maxDate を推定する既存処理を確認した。
+0件CSVでは minDate / maxDate が空でもエラーにしない。
+ZIP由来単体ビュー上部の対象期間表示は manifest の periodLabel を使うため、0件でも「2026年6月分」と表示できる。
+```
+
+確認結果：
+
+```text
+データありCSVで以下を確認した。
+- minDate=2026-06-10
+- maxDate=2026-06-25
+- 請求書一覧表示OK
+- 業者別表示OK
+- 工事別表示OK
+- 月別表示OK
+- 費目別表示OK
+- 確認リスト表示OK
+- NaNなし
+```
+
+### 18.7 戻る導線
+
+```text
+ZIP由来 project_cost_details 単体ビューでも、既存の #zipSingleBack を使用。
+「← 帳票選択メニューに戻る」からメニューへ復帰する。
+読込元「ZIP内 project_cost_details.csv」と対象期間を表示する。
+単体ビュー内の請求書各ページ・確認リストのページ切替とは別導線として扱う。
+```
+
+### 18.8 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全41項目PASS。
+
+確認内容：
+- ZIP読込状態を loadMultiSlotFromText + finalizeMulti で再現
+- 請求書費用カード「開く」からZIP由来 project_cost_details 単体ビュー表示OK
+- 読込元「ZIP内 project_cost_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 0件CSVでも errors空OK
+- 0件CSVでも dashboard 正常表示OK
+- 0件時の安心文言表示OK
+- 請求書一覧OK
+- 業者別集計OK
+- 工事別集計OK
+- 月別集計OK
+- 費目別集計OK
+- 確認リストOK
+- データありCSVでは invoice_date から minDate / maxDate 推定OK
+- 帳票選択メニューに戻るOK
+- 戻った後もZIP読込状態保持OK
+- projects_summary / attendance_details の接続済み状態も維持
+- machine_details は準備中表示のままOK
+- 個別CSV読込回帰OK
+- ZIP由来単体表示と個別CSV読込が混同しないことOK
+- NaNなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 18.9 未実装
+
+```text
+- machine_details のZIP由来単体ビュー接続
+- ZIP由来単体ビューのPDF保存ボタン
+- 月次チェック・差異確認の内部名称整理
+- 個別CSV読込の折りたたみ化
+```
+
+次フェーズ：
+
+```text
+Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
+```

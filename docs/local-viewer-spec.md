@@ -13,6 +13,8 @@
 > **Phase 2-4-9-2-c（実装済み）**：ZIP読込後の帳票選択メニューから `projects_summary` を既存単体CSVビュー形式で表示できるようにした（コミット `f2b1b1c`）。`multiState` は保持し、`state` のみZIP由来 `projects_summary` で上書きする。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §16 を参照。
 >
 > **Phase 2-4-9-2-d（実装済み）**：ZIP読込後の帳票選択メニューから `attendance_details` を既存単体CSVビュー形式で表示できるようにした（コミット `c7b1cc4`）。`buildAttendanceReports` は変更せず、report_id ピボット・二重計上防止の既存ロジックを維持する。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §17 を参照。
+>
+> **Phase 2-4-9-2-e（実装済み）**：ZIP読込後の帳票選択メニューから `project_cost_details` を既存単体CSVビュー形式で表示できるようにした（コミット `34d5d73`）。0件CSVでも正常表示し、請求書登録がない期間である旨の安心文言を条件付き表示する。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §18 を参照。
 
 ## 1. 目的
 

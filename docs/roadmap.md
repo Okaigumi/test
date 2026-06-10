@@ -1928,6 +1928,39 @@ Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
 Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
 ```
 
+#### Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示（完了）
+
+- 実装コミット：`34d5d73 Connect ZIP project cost details to single CSV viewer`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §18。
+
+**記録内容：**
+
+- `local-viewers/csv-viewer.html` のみ変更。
+- `openMultiReport(key,title)` の分岐条件に `project_cost_details` を追加。
+- ZIP読込後の帳票選択メニューから「請求書費用」カードを実接続。
+- ZIP内 `project_cost_details.csv` を単体CSVビュー形式で表示できるようにした。
+- `openZipSingleReport(type)` は既存の汎用処理をそのまま利用。
+- `buildSingleStateAndRender({ source:'zip', ... })` を使い、既存 project_cost_details 単体CSVビューを再利用。
+- `aggregateInvoices` / `computeInvoiceChecks` は無変更。
+- 0件CSVでも errors空・dashboard正常表示・NaNなしを確認。
+- 0件時に「この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。」の安心文言を条件付き表示。
+- データありCSVでは invoice_date による minDate / maxDate 推定を確認。
+- 請求書一覧、業者別、工事別、月別、費目別、確認リストを確認。
+- ZIP由来単体ビュー上部の戻る導線、読込元、対象期間表示は既存仕組みを踏襲。
+- 帳票選択メニューへ戻った後もZIP読込状態を保持。
+- projects_summary / attendance_details は引き続き接続済み。
+- `machine_details` は準備中表示のまま。
+- jsdom自動回帰で全41項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット（実装コミットとは分離）。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

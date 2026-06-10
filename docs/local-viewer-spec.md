@@ -9,6 +9,8 @@
 > **Phase 2-4-9-2-a（設計のみ）**：ZIP由来単体ビュー接続時は、handleTextをパース部とstate構築＋描画部に分離し、単体file読込とZIP由来単体表示で共通処理を使う。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14 を参照。
 >
 > **Phase 2-4-9-2-b（実装済み）**：handleText を `parseSingleCsvText` と `buildSingleStateAndRender` に分離した（コミット `64c699b`）。単体file読込は従来どおり handleText を入口とし、次フェーズ以降でZIP由来rowsから buildSingleStateAndRender を呼ぶ。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §15 を参照。
+>
+> **Phase 2-4-9-2-c（実装済み）**：ZIP読込後の帳票選択メニューから `projects_summary` を既存単体CSVビュー形式で表示できるようにした（コミット `f2b1b1c`）。`multiState` は保持し、`state` のみZIP由来 `projects_summary` で上書きする。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §16 を参照。
 
 ## 1. 目的
 

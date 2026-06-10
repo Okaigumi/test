@@ -807,3 +807,119 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全53項目PASS。
 ```text
 Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
 ```
+
+## 16. Phase 2-4-9-2-c：projects_summary ZIP由来単体ビュー接続 実装結果
+
+### 16.1 実装コミット
+
+```text
+f2b1b1c Connect ZIP projects summary to single CSV viewer
+```
+
+### 16.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 16.3 実装内容
+
+```text
+- 帳票選択メニューの「工事一覧・原価概要」カードを実接続
+- ZIP内 projects_summary.csv を、既存の単体CSVビューと同じ構成で表示
+- buildSingleStateAndRender({ source:'zip', ... }) を利用
+- state はZIP由来 projects_summary で上書き
+- multiState は保持
+- 帳票選択メニューに戻る導線を追加
+```
+
+### 16.4 追加・変更した主な関数・UI
+
+```text
+openZipSingleReport(type)
+- ZIP由来の1CSVを単体ビューで表示する
+- 現時点では projects_summary のみ実接続
+- multiState.rows[type] / multiState.files[type] を利用
+- buildSingleStateAndRender({ source:'zip', ... }) を呼ぶ
+
+backFromZipSingleToMenu()
+- ZIP由来単体ビューから帳票選択メニューへ戻る
+- viewerBody と戻る導線を隠す
+- showMultiMenu() で帳票選択メニューへ復帰
+- multiState は保持
+
+openMultiReport(key,title)
+- projects_summary かつ読込済みの場合のみ openZipSingleReport へ分岐
+- 他3種別は準備中表示のまま
+
+loadMultiSlotFromText()
+- multiState.files[slotKey].headers を追加保持
+- ZIP由来単体ビュー表示時に buildSingleStateAndRender へ渡す
+
+#zipSingleBack
+- ZIP由来単体ビュー用の戻る導線
+- 「← 帳票選択メニューに戻る」
+- 読込元と対象期間を表示
+```
+
+### 16.5 headers の扱い
+
+```text
+ZIP読込時に loadMultiSlotFromText が算出していた headers を、multiState.files[slotKey].headers として保持するようにした。
+これにより、raw CSV text がなくても ZIP由来 rows と headers から単体CSVビューを再構築できる。
+0行CSVでも headers は取得できるため、今後 project_cost_details 0件表示にも有効。
+CSV列仕様そのものは変更していない。
+```
+
+### 16.6 戻る導線
+
+```text
+ZIP由来単体ビュー上部に「← 帳票選択メニューに戻る」を表示。
+押下すると viewerBody を隠し、帳票選択メニューへ戻る。
+multiState は消さないため、戻った後も月次チェック・差異確認や他カードを開ける。
+既存の工事詳細→工事一覧の戻り導線は変更していない。
+```
+
+### 16.7 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全42項目PASS。
+
+確認内容：
+- ZIP読込状態を loadMultiSlotFromText + finalizeMulti で再現
+- 工事一覧・原価概要カード「開く」からZIP由来 projects_summary 単体ビュー表示OK
+- 読込元「ZIP内 projects_summary.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 工事一覧表示OK
+- 年度別集計表示OK
+- 発注者別集計表示OK
+- 工事分類別集計表示OK
+- 工事詳細表示OK
+- 工事詳細→一覧戻りOK
+- 帳票選択メニューに戻るOK
+- 戻った後もZIP読込状態保持OK
+- 月次チェック・差異確認を開けるOK
+- 他3カードは準備中表示のままOK
+- 個別CSV読込回帰OK
+- ZIP由来単体表示と個別CSV読込が混同しないことOK
+- NaNなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 16.8 未実装
+
+```text
+- attendance_details のZIP由来単体ビュー接続
+- project_cost_details のZIP由来単体ビュー接続
+- machine_details のZIP由来単体ビュー接続
+- ZIP由来単体ビューのPDF保存ボタン
+- 月次チェック・差異確認の内部名称整理
+- 個別CSV読込の折りたたみ化
+```
+
+次フェーズ：
+
+```text
+Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
+```

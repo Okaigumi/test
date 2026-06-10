@@ -959,3 +959,4 @@ manifest.json はCSV種別判定とパッケージ情報表示に使うが、man
 - 各単体CSV帳票カードから単体CSVビューへの接続は次フェーズ（2-4-9-2）で実施予定。
 - ZIP読込後の帳票カードは、次フェーズでZIP由来rowsを単体CSVビュー形式で表示する方針（Phase 2-4-9-2-a 設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14）。`project_cost_details` 0件は正常な空表示として扱う。
 - Phase 2-4-9-2-b（コミット `64c699b`）で、ZIP内CSVを単体CSVビューへ接続するための前提として handleText 分離を実装済み。帳票カード接続は次フェーズ予定。
+- Phase 2-4-9-2-c（コミット `f2b1b1c`）で、ZIP読込後の「工事一覧・原価概要」カードから ZIP内 `projects_summary.csv` を単体CSVビュー形式で表示できるようになった。他帳票は次フェーズ以降で接続予定。

@@ -826,6 +826,13 @@ ZIP由来単体ビュー接続方針：
 - 現時点では帳票カード接続は未実装で、4帳票カードは準備中表示のまま。
 - 次フェーズ（2-4-9-2-c）で projects_summary から接続する。
 
+### projects_summary ZIP由来単体ビュー接続 実装済み（Phase 2-4-9-2-c）
+
+実装コミット：`f2b1b1c Connect ZIP projects summary to single CSV viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §16。
+
+- 「工事一覧・原価概要」カードから ZIP内 `projects_summary.csv` を単体CSVビュー形式で表示できるようにした。
+- `attendance_details` / `project_cost_details` / `machine_details` は引き続き準備中表示。
+
 ---
 
 ## 12. MVP範囲

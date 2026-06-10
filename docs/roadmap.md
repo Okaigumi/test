@@ -1862,6 +1862,40 @@ Phase 2-4-9-2-b：handleText を parse部 と state構築＋描画部 に分離
 Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
 ```
 
+#### Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示（完了）
+
+- 実装コミット：`f2b1b1c Connect ZIP projects summary to single CSV viewer`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §16。
+
+**記録内容：**
+
+- `local-viewers/csv-viewer.html` のみ変更。
+- 帳票選択メニューの「工事一覧・原価概要」カードから、ZIP内 `projects_summary.csv` を単体CSVビュー形式で表示できるようにした。
+- `openZipSingleReport(type)` を追加。
+- `backFromZipSingleToMenu()` を追加。
+- `openMultiReport(key,title)` は `projects_summary` のみ `openZipSingleReport` へ分岐。
+- `loadMultiSlotFromText()` で headers を `multiState.files[slotKey].headers` に保持。
+- `buildSingleStateAndRender({ source:'zip', ... })` を使い、既存単体CSVビューを再利用。
+- `multiState` は保持したまま、`state` のみZIP由来 `projects_summary` で上書き。
+- ZIP由来単体ビュー上部に「帳票選択メニューに戻る」導線を追加。
+- 読込元「ZIP内 projects_summary.csv」と対象期間を表示。
+- 工事一覧、年度別、発注者別、工事分類別、工事詳細を確認可能。
+- 既存の工事詳細→一覧の戻り導線は維持。
+- 帳票選択メニューへ戻った後もZIP読込状態を保持。
+- 月次チェック・差異確認も引き続き開ける。
+- `attendance_details` / `project_cost_details` / `machine_details` は準備中表示のまま。
+- PDF保存ボタンは未実装。本格整備は Phase 2-4-9-5 予定。
+- jsdom自動回帰で全42項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット（実装コミットとは分離）。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

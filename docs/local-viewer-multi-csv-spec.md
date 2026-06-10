@@ -508,14 +508,50 @@ projects_summary.total_cost には、ダンプ費・警備費・日報由来外�
 ## 11. 実装ステップ案
 
 ```text
-Phase 2-4-7-0：複数CSV統合モード設計（今回・完了）
-Phase 2-4-7-1：複数CSV読み込みUIと multiState
-Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）
+Phase 2-4-7-0：複数CSV統合モード設計（完了）
+Phase 2-4-7-1：複数CSV読み込みUIと multiState（完了）
+Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）（完了）
 Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）
 Phase 2-4-7-4：工事別月別原価ビュー
 Phase 2-4-7-5：差異確認・確認リスト
 Phase 2-4-7-6：印刷・UI調整
 Phase 2-4-7-7：machine_details / machine_locations の将来設計
+```
+
+### 実装済み機能：Phase 2-4-7-2（projects_summary + attendance_details 統合）
+
+実装コミット：`04d1c07 Add multi CSV labor integration`（対象：`local-viewers/csv-viewer.html`）
+
+- `projects_summary.csv` と `attendance_details.csv` は `project_id` で結合する
+- `attendance_details.labor_cost` を工事別・月別に集計する
+- 月キーは `report_date` の `YYYY-MM`
+- `labor_days` も同じ月キーで集計する
+- 日報件数は `report_id` ユニーク数
+- 明細件数は行数
+- `normal_mins` / `overtime_mins` は工事別月別で生SUMしない
+- `labor_cost` は既に按分後の値として扱う
+- `project_id` 空行は集計対象外
+- 追加された集計データ：
+  - `multiState.summaries.laborByProjectId`
+  - `multiState.summaries.laborMonthlyByProjectId`
+- 表示内容：
+  - ダッシュボードの労務費合計
+  - 労務費対象工事件数
+  - 労務費対象月数
+  - 簡易工事一覧の労務費列
+  - 工事別労務費詳細
+  - 月別労務費
+  - 労務明細
+- 差額は参考表示であり、本格的な差異確認は Phase 2-4-7-5 で扱う
+- `project_cost_details` 統合は未実装
+- 月別原価総合計は未実装
+
+#### 設計上の注意（Phase 2-4-7-2 時点）
+
+```text
+Phase 2-4-7-2 時点では、統合ビューで表示される月別金額は労務費のみである。
+月別原価ビューの総合計ではない。
+請求書費用、ダンプ費、警備費、日報由来外注費、重機費などはまだ含まれない。
 ```
 
 ---

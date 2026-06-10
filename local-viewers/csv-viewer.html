@@ -939,6 +939,8 @@ function renderDashboard(){
     addSummary(area,'工事数',String(siteSet.size));
     addSummary(area,'費目数',String(catSet.size));
     addSummary(area,'確認件数',String(checks.reviewCount));
+    // 0件は異常ではない（対象期間に請求書登録がないケース）。安心できる文言を補足。
+    if(state.rows.length===0){area.appendChild(noteEl('この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。'));}
   }
   if(state.csvType==='machine_details'){
     let sCost=0;const machineSet=new Set();
@@ -2862,10 +2864,10 @@ function renderMultiMenu(){
   grid.appendChild(mc);
   area.appendChild(grid);
 }
-// 帳票カードの「開く」。projects_summary（2-4-9-2-c）/ attendance_details（2-4-9-2-d）はZIP由来単体ビューへ実接続済み。
-// 他種別（project_cost_details / machine_details）は次フェーズで対応予定のため準備中表示のまま。
+// 帳票カードの「開く」。projects_summary（2-4-9-2-c）/ attendance_details（2-4-9-2-d）/ project_cost_details（2-4-9-2-e）はZIP由来単体ビューへ実接続済み。
+// 他種別（machine_details）は次フェーズで対応予定のため準備中表示のまま。
 function openMultiReport(key,title){
-  if((key==='projects_summary'||key==='attendance_details')&&multiState.files[key]){
+  if((key==='projects_summary'||key==='attendance_details'||key==='project_cost_details')&&multiState.files[key]){
     openZipSingleReport(key);
     return;
   }

@@ -3,6 +3,8 @@
 > **関連設計**：複数CSVを同時に読み込み、工事単位で月別原価・労務費・請求書明細・重機情報を横断表示する「複数CSV統合モード」の設計は [`docs/local-viewer-multi-csv-spec.md`](local-viewer-multi-csv-spec.md)（Phase 2-4-7-0・設計のみ・実装未着手）を参照。
 >
 > **UX改善方針（Phase 2-4-9-0・設計のみ）**：CSVビューアーの新しい基本導線は、ZIP読込 → 帳票選択 → 帳票画面 → 必要時のみ月次チェック・差異確認、とする。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) を参照。
+>
+> **Phase 2-4-9-1（実装済み）**：ZIP読込後の帳票選択メニューを実装（コミット `08be5ac`）。単体CSV帳票カードへの接続は次フェーズ（2-4-9-2）予定。
 
 ## 1. 目的
 

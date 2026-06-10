@@ -413,3 +413,49 @@ Phase 2-4-9-3：月次チェック・差異確認へ名称変更
 Phase 2-4-9-4：個別CSV読込を折りたたみ化
 Phase 2-4-9-5：PDFボタン・画面文言整理
 ```
+
+## 13. 実装結果：Phase 2-4-9-1（ZIP読込後メニュー実装）
+
+- 実装コミット：`08be5ac Add CSV ZIP report selection menu`
+- 対象ファイル：`local-viewers/csv-viewer.html`
+
+### 現時点の仕様
+
+- ZIP読込後、帳票選択メニューを表示する。
+- 4つの単体CSV帳票カード（工事一覧・原価概要／日報・労務費／請求書費用／重機台帳）は準備中表示。
+- 月次チェック・差異確認カードは既存統合ビューへ接続済み。
+- 個別CSV読込は残置（見出し「詳細・トラブル対応用：個別CSV読込」）。
+
+### 追加UI
+
+- `#multiMenuCard`
+- `#multiMenuArea`
+- `#multiIntegratedSection`
+- `#multiMenuMsg`
+
+### 追加・変更した主な関数
+
+- `renderMultiMenu()`
+- `openMultiReport()`
+- `showMultiMenu()`
+- `showMultiIntegrated()`
+- `MULTI_MENU_CARDS`（定数）
+- `showMultiHome()` の表示先変更（データ変更時のホームを帳票選択メニューに）
+- `setMode('multi')` の表示制御追加（メニュー描画＋メニュー/統合セクションの表示切替）
+
+### 確認結果
+
+- 実ZIP 2026年6月分で表示確認
+- 行数 10 / 41 / 0 / 22 表示OK
+- 請求書明細0件の正常案内OK
+- 月次チェック・差異確認導線OK
+- 工事詳細・戻る導線OK
+- NaNなし
+- Console重大エラーなし（favicon 404 のみ・無害）
+- JS構文チェックOK
+- print emulation確認OK
+
+### 未実装（次フェーズ）
+
+- 各単体CSV帳票カードから既存単体CSVビューへの接続。
+- これは Phase 2-4-9-2 で実施予定。

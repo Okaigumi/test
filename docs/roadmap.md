@@ -840,7 +840,89 @@ subcontractRows = 0
   - `invoicesByProjectId` を利用
   - 月別原価ビューに向けて、労務費＋請求書費用を統合できる土台を作る
 
-**実装状況：2-4-7-2（projects_summary + attendance_details 統合／労務費）まで実装済み。2-4-7-3 以降は未着手。**
+#### Phase 2-4-7-3：projects_summary + project_cost_details 統合（完了）
+
+- 実装コミット：`30aef20 Add multi CSV invoice integration`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+
+**実装内容：**
+
+- 複数CSV統合ビューに、`projects_summary.csv` と `project_cost_details.csv` の請求書費用統合を追加
+- `projects_summary.csv` を工事一覧の軸にする
+- `project_cost_details.csv` は `project_id` で `projects_summary.csv` と結合（`site_name` 結合は同名工事リスクのため既定で不使用）
+- `project_cost_details.amount` を `project_id + invoice_date(YYYY-MM)` で集計
+- `cost_category` 別に集計：
+  - `material`：材料費
+  - `subcontract`：外注費
+  - `machine_lease`：重機リース等
+  - `other`：その他費用
+- 未知の `cost_category` は請求書費用合計には含めるが、上記4費目には混ぜず `unknown` に退避し、警告扱いにする
+- 請求書件数は `invoice_id` ユニーク数、明細件数は行数、業者数は `vendor_name` ユニーク数
+- `project_id` 空行は集計対象外とし、警告に回す
+- 進行中工事も表示対象に含める
+
+**追加した集計データ：**
+
+- `multiState.summaries.invoiceByProjectId`（project_id → 請求書費用合計・費目別金額・明細件数・請求書件数・業者数・対象月数）
+- `multiState.summaries.invoiceMonthlyByProjectId`（project_id → 月別請求書費用の配列・月昇順）
+- `multiState.unknownCostCategories`（未知 cost_category 値の配列）
+
+**追加したUI：**
+
+- 読み込み状況ダッシュボードの請求書費用合計 / 請求書費用対象工事件数 / 請求書費用対象月数 / 業者数 / 材料費合計 / 外注費合計 / 重機リース等合計 / その他費用合計
+- 簡易工事一覧の請求書費用列（請求書費用合計・請求書対象月数・請求書明細件数・材料費・外注費・重機リース等・その他）
+- 工事別 原価詳細（月別請求書費用 / 請求書明細を追加）
+- 選択工事の詳細表示への追加：project_cost_details 由来の請求書費用合計・材料費・外注費・重機リース等・その他費用・請求書明細件数・業者数・月別請求書費用・請求書明細
+
+**安全性：**
+
+- 既存の労務費統合・月別労務費・労務明細は維持
+- CSV由来値は `textContent` / DOM API で描画
+- inline `onclick` は追加なし（event listener で実装）
+- Supabase接続情報・外部CDNなし、`file://` 動作維持
+
+**実ブラウザ確認（OK）：**
+
+- 複数CSV統合モード表示OK
+- projects_summary 読込OK / project_cost_details 読込OK
+- 請求書費用合計表示OK / 請求書費用対象工事件数表示OK / 請求書費用対象月数表示OK / 業者数表示OK
+- 材料費表示OK / 外注費表示OK / 重機リース等表示OK / その他費用表示OK
+- 簡易工事一覧の請求書費用合計OK
+- 工事選択OK / 選択工事の月別請求書費用OK / 選択工事の請求書明細OK
+- 空 `project_id` 行は集計除外＋警告表示OK
+- 未知 `cost_category` は警告表示OK
+- NaN表示なし / Console重大エラーなし
+
+**回帰確認（OK）：**
+
+- 労務費統合回帰OK / 労務費合計表示OK / 簡易工事一覧の労務費合計OK
+- 選択工事の月別労務費OK / 選択工事の労務明細OK
+- 4CSV読み込み枠OK / 誤種別CSV警告OK / クリア処理OK
+- machine_details が工事別に結合されていないことOK
+- 単体CSV読み込みOK
+- attendance_details 既存ページOK / projects_summary 既存ページOK / project_cost_details 既存ページOK / machine_details 既存ページOK
+- JS構文チェックOK
+- CSV由来値は `textContent` / DOM API 描画 / inline `onclick` 不使用 / Supabase接続情報・外部CDNなし
+
+**未実装（次フェーズ以降・未着手）：**
+
+- 労務費＋請求書費用の月別原価総合計
+- `projects_summary.total_cost` との差異確認
+- 横断確認リスト
+- `machine_details` / `machine_locations` 統合
+- 印刷調整
+
+**次フェーズ候補：**
+
+- Phase 2-4-7-4：工事別月別原価ビュー
+  - 労務費（`attendance_details`）＋請求書費用（`project_cost_details`）を月キー `YYYY-MM` で統合
+  - 費目カバレッジ表に沿って月別原価を表示
+  - 月合計は算出可能費目のみ（労務費／材料費／外注費（請求書由来）／重機リース等（請求書由来）／その他費用（請求書由来））
+  - ダンプ費・警備費・日報由来外注費・machine_details 由来の台帳費はMVPでは含めない
+  - 月合計・累計列を用意する
+  - `projects_summary.total_cost` との差異確認は Phase 2-4-7-5 で扱う
+
+**実装状況：2-4-7-3（projects_summary + project_cost_details 統合／請求書費用）まで実装済み。2-4-7-4 以降は未着手。**
 
 ## 保留・改善候補
 

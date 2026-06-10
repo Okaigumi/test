@@ -511,7 +511,7 @@ projects_summary.total_cost には、ダンプ費・警備費・日報由来外�
 Phase 2-4-7-0：複数CSV統合モード設計（完了）
 Phase 2-4-7-1：複数CSV読み込みUIと multiState（完了）
 Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）（完了）
-Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）
+Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）（完了）
 Phase 2-4-7-4：工事別月別原価ビュー
 Phase 2-4-7-5：差異確認・確認リスト
 Phase 2-4-7-6：印刷・UI調整
@@ -552,6 +552,51 @@ Phase 2-4-7-7：machine_details / machine_locations の将来設計
 Phase 2-4-7-2 時点では、統合ビューで表示される月別金額は労務費のみである。
 月別原価ビューの総合計ではない。
 請求書費用、ダンプ費、警備費、日報由来外注費、重機費などはまだ含まれない。
+```
+
+### 実装済み機能：Phase 2-4-7-3（projects_summary + project_cost_details 統合）
+
+実装コミット：`30aef20 Add multi CSV invoice integration`（対象：`local-viewers/csv-viewer.html`）
+
+- `projects_summary.csv` と `project_cost_details.csv` は `project_id` で結合する
+- `project_cost_details.amount` を工事別・月別に集計する
+- 月キーは `invoice_date` の `YYYY-MM`
+- `cost_category` 別に以下を集計する：
+  - `material`
+  - `subcontract`
+  - `machine_lease`
+  - `other`
+- 未知の `cost_category` は請求書費用合計には含めるが、4費目には混ぜず `unknown` として扱う
+- 請求書件数は `invoice_id` ユニーク数
+- 明細件数は行数
+- 業者数は `vendor_name` ユニーク数
+- `project_id` 空行は集計対象外
+- 追加された集計データ：
+  - `multiState.summaries.invoiceByProjectId`
+  - `multiState.summaries.invoiceMonthlyByProjectId`
+  - `multiState.unknownCostCategories`
+- 表示内容：
+  - ダッシュボードの請求書費用合計
+  - 請求書費用対象工事件数
+  - 請求書費用対象月数
+  - 業者数
+  - 費目別合計
+  - 簡易工事一覧の請求書費用列
+  - 工事別原価詳細
+  - 月別請求書費用
+  - 請求書明細
+- 労務費統合は既存どおり維持
+- 月別原価総合計は未実装
+- 差異確認は Phase 2-4-7-5 で扱う
+
+#### 設計上の注意（Phase 2-4-7-3 時点）
+
+```text
+Phase 2-4-7-3 時点では、統合ビューで表示される金額は「労務費」と「請求書費用」を個別に確認できる段階である。
+
+労務費＋請求書費用を合算した工事別月別原価ビューは、Phase 2-4-7-4 で実装する。
+
+月別合計は、費目カバレッジ表に従い、算出可能な費目のみを対象にする。
 ```
 
 ---

@@ -156,6 +156,8 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   .summary-item{border:1px solid #bbb;}
 }
 </style>
+<!-- ZIP読込用ライブラリ（ローカル同梱・外部CDNは使わない）。Phase 2-4-8-2 で vendor/jszip に同梱済み -->
+<script src="../vendor/jszip/jszip.min.js"></script>
 </head>
 <body>
 
@@ -299,9 +301,22 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <button type="button" id="multiPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
       </div>
 
+      <div class="card">
+        <div class="card-title">CSV出力パッケージZIPを読み込む（推奨）</div>
+        <div class="note no-print" style="margin-top:0;margin-bottom:10px;">管理コンソールで出力したCSV一式ZIPを選択してください。4つのCSVとmanifest.jsonを自動で読み込み、複数CSV統合ビューに反映します。</div>
+        <div class="multi-slot-row no-print" style="margin-bottom:8px;">
+          <input type="file" id="multiZipInput" accept=".zip,application/zip">
+          <span id="multiZipFileName" class="multi-slot-status">ZIPファイルを選択してください</span>
+          <button type="button" id="multiZipLoadBtn" class="back-btn" style="margin:0;">ZIPを読み込む</button>
+          <button type="button" id="multiZipClearBtn" class="back-btn" style="margin:0;">クリア</button>
+        </div>
+        <div id="multiZipStatus" class="multi-slot-note"></div>
+        <div id="multiPackageArea"></div>
+      </div>
+
       <div class="card no-print">
-        <div class="card-title">CSV読み込み</div>
-        <div class="note" style="margin-top:0;margin-bottom:10px;">projects_summary.csv は必須です。他3つは任意です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
+        <div class="card-title">個別CSV読込（詳細・予備）</div>
+        <div class="note" style="margin-top:0;margin-bottom:10px;">個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。通常運用ではZIP読込を推奨します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
         <div id="multiLoadArea"></div>
       </div>
 
@@ -1743,6 +1758,8 @@ const multiState={
   // インデックス構築時の派生集計（メッセージ生成に使用）
   emptyProjectId:{attendance:0,invoice:0,project:0},
   dupProjectId:0,
+  // Phase 2-4-8-6：CSV出力パッケージZIPのメタ情報
+  package:{fileName:'',manifest:null,manifestStatus:'not_loaded',exportedAt:'',periodLabel:'',formatVersion:'',system:'',files:[],warnings:[],errors:[]},
   warnings:[],
   errors:[]
 };
@@ -1759,8 +1776,9 @@ function matrixToRows(headers,dataMatrix){
 // 値が空かどうか（trim後）
 function isBlankId(v){return v===null||v===undefined||String(v).trim()==='';}
 
-// 1枠ぶんのCSV読み込み（既存パーサ・既存種別判定を流用）
-function loadMultiSlot(slotKey,fileName,text){
+// 1枠ぶんのCSVをパースしてスロットへ格納（既存パーサ・既存種別判定を流用）。finalize はしない。
+// ZIP読込でも個別読込でも同じ判定・格納ロジックを使う。
+function loadMultiSlotFromText(slotKey,fileName,text){
   // 当該枠を一旦リセット
   multiState.files[slotKey]=null;
   multiState.rows[slotKey]=[];
@@ -1776,11 +1794,11 @@ function loadMultiSlot(slotKey,fileName,text){
   }catch(err){
     const reason=(err.code==='UNCLOSED_QUOTE')?'クォートが閉じていません。':('CSV解析に失敗しました：'+err.message);
     multiState.slotNotes[slotKey]={type:'error',text:fileName+'：'+reason};
-    finalizeMulti();return;
+    return;
   }
   if(matrix.length===0){
     multiState.slotNotes[slotKey]={type:'error',text:fileName+'：CSVが空です。ヘッダ行がありません。'};
-    finalizeMulti();return;
+    return;
   }
 
   // ヘッダ・種別判定
@@ -1788,12 +1806,12 @@ function loadMultiSlot(slotKey,fileName,text){
   const detected=detectCsvType(headers);
   if(detected.key===null){
     multiState.slotNotes[slotKey]={type:'error',text:fileName+'：未知のCSV形式です。'};
-    finalizeMulti();return;
+    return;
   }
   if(detected.key!==slotKey){
     multiState.slotNotes[slotKey]={type:'warn',
       text:'指定枠（'+slotLabel+'）と異なるCSV種別（'+detected.label+'）が選択されました。読み込みません。'};
-    finalizeMulti();return;
+    return;
   }
 
   // データ行 → オブジェクト配列
@@ -1801,6 +1819,11 @@ function loadMultiSlot(slotKey,fileName,text){
   multiState.rows[slotKey]=rows;
   multiState.files[slotKey]={fileName:fileName,csvType:detected.key,csvLabel:detected.label,rowCount:rows.length};
   multiState.slotNotes[slotKey]={type:'ok',text:fileName+'：読み込み済み（'+rows.length+'行）'};
+}
+
+// 1枠ぶんのCSV読み込み（個別読込：格納後に再集計・再描画）
+function loadMultiSlot(slotKey,fileName,text){
+  loadMultiSlotFromText(slotKey,fileName,text);
   finalizeMulti();
 }
 
@@ -1810,6 +1833,237 @@ function clearMultiSlot(slotKey){
   multiState.rows[slotKey]=[];
   multiState.slotNotes[slotKey]=null;
   finalizeMulti();
+}
+
+// ===== CSV出力パッケージZIP読込（Phase 2-4-8-6） =====
+// 管理コンソールで出力した 4CSV + manifest.json のZIPを1つ読み込み、既存の各スロットへ流し込む。
+// 種別判定の優先順位：manifest.json の files[].type → ファイル名 → CSVヘッダー（detectCsvType）。
+const ZIP_FILENAME_TYPE={
+  'projects_summary.csv':'projects_summary',
+  'attendance_details.csv':'attendance_details',
+  'project_cost_details.csv':'project_cost_details',
+  'machine_details.csv':'machine_details'
+};
+const SUPPORTED_MANIFEST_VERSIONS=['1.0'];
+
+function emptyMultiPackage(){
+  return{fileName:'',manifest:null,manifestStatus:'not_loaded',exportedAt:'',periodLabel:'',formatVersion:'',system:'',files:[],warnings:[],errors:[]};
+}
+function zipBaseName(path){
+  const p=String(path||'').replace(/\\/g,'/');
+  const i=p.lastIndexOf('/');
+  return i>=0?p.slice(i+1):p;
+}
+function isIgnoredZipEntry(path){
+  const b=zipBaseName(path);
+  if(b==='')return true;                       // フォルダ
+  if(path.indexOf('__MACOSX/')!==-1)return true;// macOS メタ
+  if(b.charAt(0)==='.')return true;            // 隠しファイル（._ 等）
+  return false;
+}
+function parseZipManifest(text){
+  try{return{manifest:JSON.parse(text),error:null};}
+  catch(e){return{manifest:null,error:'manifest.json の解析に失敗しました：'+e.message};}
+}
+function buildZipManifestTypeMap(manifest){
+  const map={};
+  if(manifest&&Array.isArray(manifest.files)){
+    manifest.files.forEach(f=>{if(f&&f.name&&f.type)map[zipBaseName(f.name)]=f.type;});
+  }
+  return map;
+}
+// manifest type → ファイル名 → ヘッダー の順で種別を判定
+function detectZipEntryCsvType(fileBase,manifestTypeMap,headerType){
+  if(manifestTypeMap&&manifestTypeMap[fileBase])return{type:manifestTypeMap[fileBase],by:'manifest'};
+  if(ZIP_FILENAME_TYPE[fileBase])return{type:ZIP_FILENAME_TYPE[fileBase],by:'filename'};
+  if(headerType)return{type:headerType,by:'header'};
+  return{type:null,by:null};
+}
+// ZIP用：CSVテキストからヘッダー種別を推定（失敗時 null）
+function headerCsvTypeOf(text){
+  try{
+    const mtx=parseCsvToMatrix(text);
+    if(mtx.length){return detectCsvType(mtx[0].map(h=>h.trim())).key;}
+  }catch(_){/* ignore */}
+  return null;
+}
+
+// ZIP読込状態メッセージ
+function setMultiZipStatus(state,text){
+  const el=document.getElementById('multiZipStatus');
+  if(!el)return;
+  const cls=(state==='error')?'error':(state==='warn'?'warn':(state==='ok'?'ok':''));
+  el.className='multi-slot-note'+(cls?(' '+cls):'');
+  el.textContent=text||'';
+}
+
+// ファイル選択時：ファイル名表示と状態更新（読込自体は「ZIPを読み込む」ボタンで実行）
+function handleMultiZipFileChange(){
+  const inp=document.getElementById('multiZipInput');
+  const file=inp&&inp.files&&inp.files[0];
+  const nameEl=document.getElementById('multiZipFileName');
+  if(nameEl)nameEl.textContent=file?file.name:'ZIPファイルを選択してください';
+  setMultiZipStatus(file?'':'',file?('選択済み：'+file.name):'');
+}
+
+// ZIP読込本体
+async function loadMultiZipPackage(){
+  const inp=document.getElementById('multiZipInput');
+  const file=inp&&inp.files&&inp.files[0];
+  if(!file){setMultiZipStatus('error','ZIPファイルを選択してください。');return;}
+  if(typeof JSZip==='undefined'){setMultiZipStatus('error','ZIPライブラリ(JSZip)が読み込めていません。お手数ですが個別CSV読込をご利用ください。');return;}
+
+  const btn=document.getElementById('multiZipLoadBtn');
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='ZIP読込中...';}
+  setMultiZipStatus('','ZIP読込中...');
+
+  const pkg=emptyMultiPackage();
+  pkg.fileName=file.name;
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const entries=[];
+    zip.forEach((path,entry)=>{if(!entry.dir&&!isIgnoredZipEntry(path))entries.push({path:path,base:zipBaseName(path),entry:entry});});
+
+    // manifest.json
+    let manifestTypeMap=null;const manifestRows={};
+    const manifestEntry=entries.find(e=>e.base==='manifest.json');
+    if(manifestEntry){
+      const mtext=await manifestEntry.entry.async('string');
+      const pr=parseZipManifest(mtext);
+      if(pr.error){
+        pkg.manifestStatus='error';
+        pkg.warnings.push(pr.error+' ファイル名・CSVヘッダー判定にフォールバックします。');
+      }else{
+        pkg.manifest=pr.manifest;pkg.manifestStatus='ok';
+        pkg.exportedAt=pr.manifest.exported_at||'';
+        pkg.system=pr.manifest.system||'';
+        pkg.formatVersion=pr.manifest.format_version||'';
+        pkg.periodLabel=(pr.manifest.period&&pr.manifest.period.label)||'';
+        manifestTypeMap=buildZipManifestTypeMap(pr.manifest);
+        if(Array.isArray(pr.manifest.files))pr.manifest.files.forEach(f=>{if(f&&f.name)manifestRows[zipBaseName(f.name)]=f.rows;});
+        if(pkg.formatVersion&&SUPPORTED_MANIFEST_VERSIONS.indexOf(pkg.formatVersion)===-1)
+          pkg.warnings.push('manifest.json の format_version ('+pkg.formatVersion+') は未対応の可能性があります。読込は続行します。');
+      }
+    }else{
+      pkg.manifestStatus='missing';
+      pkg.warnings.push('manifest.json が見つかりません。ファイル名・CSVヘッダーで判定しました。');
+    }
+
+    const csvEntries=entries.filter(e=>e.base!=='manifest.json'&&/\.csv$/i.test(e.base));
+    entries.filter(e=>e.base!=='manifest.json'&&!/\.csv$/i.test(e.base))
+      .forEach(e=>pkg.warnings.push('unknown ファイルが含まれます（無視）：'+e.base));
+
+    // 置換：全スロットを一旦クリア
+    MULTI_SLOTS.forEach(s=>{multiState.files[s.key]=null;multiState.rows[s.key]=[];multiState.slotNotes[s.key]=null;});
+
+    const assigned={};
+    for(const ce of csvEntries){
+      const text=await ce.entry.async('string');
+      const headerType=headerCsvTypeOf(text);
+      const det=detectZipEntryCsvType(ce.base,manifestTypeMap,headerType);
+      if(!det.type){
+        pkg.warnings.push('CSV種別を判定できませんでした（unknown）：'+ce.base);
+        pkg.files.push({type:'unknown',name:ce.base,manifestRows:manifestRows[ce.base],actualRows:null,status:'unknown'});
+        continue;
+      }
+      if(assigned[det.type]){
+        pkg.warnings.push('CSV種別「'+det.type+'」が重複しています。'+assigned[det.type]+' を採用し、'+ce.base+' は読み込みません。');
+        pkg.files.push({type:det.type,name:ce.base,manifestRows:manifestRows[ce.base],actualRows:null,status:'duplicate'});
+        continue;
+      }
+      assigned[det.type]=ce.base;
+      loadMultiSlotFromText(det.type,ce.base,text);
+      const meta=multiState.files[det.type];
+      const note=multiState.slotNotes[det.type];
+      const status=meta?'ok':((note&&note.type==='warn')?'warn':'error');
+      pkg.files.push({type:det.type,name:ce.base,manifestRows:manifestRows[ce.base],actualRows:meta?meta.rowCount:null,status:status,by:det.by});
+      if(meta&&note)note.text=note.text+'（種別判定：'+(det.by==='manifest'?'manifest':(det.by==='filename'?'ファイル名':'ヘッダー'))+'）';
+      if(meta&&manifestRows[ce.base]!==undefined&&Number(manifestRows[ce.base])!==meta.rowCount)
+        pkg.warnings.push(ce.base+'：manifest の行数('+manifestRows[ce.base]+')と実CSV行数('+meta.rowCount+')が一致しません。');
+      if(meta&&meta.rowCount===0)
+        pkg.warnings.push(ce.base+'：0行CSVです（行数0として扱います）。');
+    }
+
+    if(!multiState.files.projects_summary)
+      pkg.errors.push('projects_summary.csv が見つかりません（または必須CSVとして読み込めませんでした）。');
+
+    multiState.package=pkg;
+    finalizeMulti();
+    renderMultiPackageInfo();
+
+    if(pkg.errors.length)setMultiZipStatus('error',pkg.errors[0]);
+    else if(pkg.warnings.length)setMultiZipStatus('warn','一部CSVに警告があります（パッケージ情報を確認してください）。');
+    else setMultiZipStatus('ok','CSV一式を読み込みました。');
+  }catch(err){
+    pkg.errors.push('ZIPファイルが読めません：'+(err&&err.message?err.message:String(err)));
+    multiState.package=pkg;
+    renderMultiPackageInfo();
+    setMultiZipStatus('error','ZIPファイルが読めません：'+(err&&err.message?err.message:String(err)));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=orig||'ZIPを読み込む';}
+  }
+}
+
+// ZIPパッケージと読込内容をクリア（個別CSV読込導線は残る）
+function clearMultiZipPackage(){
+  const inp=document.getElementById('multiZipInput');if(inp)inp.value='';
+  const nameEl=document.getElementById('multiZipFileName');if(nameEl)nameEl.textContent='ZIPファイルを選択してください';
+  multiState.package=emptyMultiPackage();
+  MULTI_SLOTS.forEach(s=>{multiState.files[s.key]=null;multiState.rows[s.key]=[];multiState.slotNotes[s.key]=null;});
+  finalizeMulti();
+  renderMultiPackageInfo();
+  setMultiZipStatus('','クリアしました。ZIPファイルを選択してください。');
+}
+
+// パッケージ情報・ZIP内ファイル一覧・警告/エラーの描画（CSV由来値は textContent）
+function renderMultiPackageInfo(){
+  const area=document.getElementById('multiPackageArea');
+  if(!area)return;
+  clear(area);
+  const pkg=multiState.package;
+  if(!pkg||(!pkg.fileName&&pkg.manifestStatus==='not_loaded')){
+    return; // 未読込時は何も表示しない
+  }
+
+  // パッケージ情報（kv-list）
+  const dl=document.createElement('dl');dl.className='kv-list';
+  const add=(k,v)=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.appendChild(dt);dl.appendChild(dd);};
+  const mStat=(pkg.manifestStatus==='ok')?'OK':(pkg.manifestStatus==='missing'?'なし（フォールバック判定）':(pkg.manifestStatus==='error'?'解析エラー（フォールバック判定）':'—'));
+  add('ファイル名',textOr(pkg.fileName));
+  add('出力日時 exported_at',textOr(pkg.exportedAt));
+  add('対象期間 period.label',textOr(pkg.periodLabel));
+  add('format_version',textOr(pkg.formatVersion));
+  add('system',textOr(pkg.system));
+  add('manifest 読込状態',mStat);
+  area.appendChild(dl);
+
+  // ZIP内ファイル一覧
+  const TYPE_LABEL={projects_summary:'projects_summary',attendance_details:'attendance_details',project_cost_details:'project_cost_details',machine_details:'machine_details',unknown:'unknown'};
+  const STATUS_LABEL={ok:'OK',warn:'警告',error:'エラー',unknown:'unknown',duplicate:'重複(未読込)'};
+  if(pkg.files&&pkg.files.length){
+    const title=document.createElement('div');title.className='card-title';title.style.marginTop='12px';title.textContent='ZIP内ファイル一覧';
+    area.appendChild(title);
+    const cols=[
+      {label:'type',render:(td,r)=>{td.textContent=TYPE_LABEL[r.type]||textOr(r.type);}},
+      {label:'name',render:(td,r)=>{td.textContent=textOr(r.name);}},
+      {label:'manifest rows',cls:'num',render:(td,r)=>{td.textContent=(r.manifestRows===undefined||r.manifestRows===null)?'—':String(r.manifestRows);}},
+      {label:'実CSV rows',cls:'num',render:(td,r)=>{td.textContent=(r.actualRows===undefined||r.actualRows===null)?'—':String(r.actualRows);}},
+      {label:'読込状態',render:(td,r)=>{td.textContent=STATUS_LABEL[r.status]||textOr(r.status);}}
+    ];
+    appendSummaryTable(area,cols,pkg.files);
+  }
+  if(pkg.manifestStatus==='ok'){area.appendChild(noteEl('manifest.json：OK'));}
+
+  // 警告・エラー
+  if(pkg.errors&&pkg.errors.length){
+    const h=document.createElement('div');h.className='card-title';h.style.marginTop='12px';h.textContent='パッケージ エラー（'+pkg.errors.length+'件）';area.appendChild(h);
+    pkg.errors.forEach(e=>addMsg(area,'msg-error',e));
+  }
+  if(pkg.warnings&&pkg.warnings.length){
+    const h=document.createElement('div');h.className='card-title';h.style.marginTop='12px';h.textContent='パッケージ 警告（'+pkg.warnings.length+'件）';area.appendChild(h);
+    pkg.warnings.forEach(w=>addMsg(area,'msg-warn',w));
+  }
 }
 
 // インデックス再構築 → 派生集計 → メッセージ再計算 → 再描画
@@ -2702,11 +2956,17 @@ function setMode(mode){
     // 初回表示時に未読込状態の注記を出すため再描画
     recomputeMultiMessages();
     renderMultiView();
+    renderMultiPackageInfo();
   }
 }
 document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
 document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiHome());
+
+// ===== CSV出力パッケージZIP読込の配線（inline onclick は使わない） =====
+document.getElementById('multiZipInput').addEventListener('change',handleMultiZipFileChange);
+document.getElementById('multiZipLoadBtn').addEventListener('click',()=>loadMultiZipPackage());
+document.getElementById('multiZipClearBtn').addEventListener('click',()=>clearMultiZipPackage());
 
 // ===== 印刷（複数CSV統合ビュー） =====
 // 印刷ボタンは window.print() を呼ぶのみ。表示中の内容（home または detail）が印刷対象。

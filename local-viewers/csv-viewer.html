@@ -113,6 +113,9 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .multi-slot-note.warn{color:#9a5b00;}
 .multi-slot-note.error{color:#a32020;}
 
+/* 印刷専用要素は画面では非表示 */
+.print-only{display:none;}
+
 /* ===== 印刷 ===== */
 @media print{
   @page{margin:12mm;}
@@ -128,6 +131,29 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   .table-scroll{overflow:visible;border:none;}
   th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   tr.total-row td{background:#f0f0f0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+
+  /* 印刷専用の帳票ヘッダ */
+  .print-only{display:block!important;}
+  .print-head{margin-bottom:12px;border-bottom:1.5px solid #000;padding-bottom:6px;}
+  .print-title{font-size:15px;font-weight:700;}
+  .print-sub{font-size:13px;font-weight:600;margin-top:2px;}
+  .print-stamp{font-size:11px;color:#000;margin-top:2px;}
+
+  /* カード見出しは紙でも分かるよう下罫線を残す */
+  .card-title{border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:8px;}
+
+  /* 統合ビューの横幅の広い表対策：小さめフォント・100%幅・折り返し */
+  #multiBody table,#multiDetailBody table{font-size:10px;width:100%;table-layout:auto;}
+  #multiBody th,#multiBody td,#multiDetailBody th,#multiDetailBody td{padding:4px 5px;word-break:break-word;overflow-wrap:anywhere;}
+  #multiBody td.num,#multiDetailBody td.num{white-space:nowrap;}
+
+  /* 行・要素が改ページで不自然に分断されないように */
+  tr{break-inside:avoid;}
+  .summary-item,.kv-list,.multi-slot-note,.note,.msg{break-inside:avoid;}
+
+  /* バッジは背景グラフィック印刷オフでも読めるよう罫線＋黒文字で表現 */
+  .cr-badge{border:1px solid #000!important;color:#000!important;background:#fff!important;}
+  .summary-item{border:1px solid #bbb;}
 }
 </style>
 </head>
@@ -261,9 +287,16 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 <div id="multiBody" class="hidden">
   <div class="app">
     <main class="main">
+      <!-- 印刷時のみ表示する帳票ヘッダ -->
+      <div class="print-head print-only">
+        <div class="print-title">社内業務システム ローカルCSVビューアー</div>
+        <div class="print-sub">複数CSV統合ビュー</div>
+        <div class="print-stamp" id="multiPrintStamp"></div>
+      </div>
       <div class="report-header">
         <h1>複数CSV統合ビュー</h1>
         <div class="rh-meta">projects_summary / attendance_details / project_cost_details / machine_details を同時に読み込み、project_id で横断確認します（Supabaseには接続しません）。</div>
+        <button type="button" id="multiPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
       </div>
 
       <div class="card no-print">
@@ -301,9 +334,16 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   <div class="app">
     <main class="main">
       <button type="button" id="multiDetailBack" class="back-btn no-print">← 統合ビュー（工事一覧）に戻る</button>
+      <!-- 印刷時のみ表示する帳票ヘッダ -->
+      <div class="print-head print-only">
+        <div class="print-title">社内業務システム ローカルCSVビューアー</div>
+        <div class="print-sub">複数CSV統合ビュー｜工事別 原価詳細</div>
+        <div class="print-stamp" id="multiDetailPrintStamp"></div>
+      </div>
       <div class="report-header">
         <h1>工事別 原価詳細</h1>
         <div class="rh-meta" id="multiDetailMeta"></div>
+        <button type="button" id="multiDetailPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
       </div>
       <div class="card"><div class="card-title">工事概要</div><div id="multiDetailOverview"></div></div>
       <div class="card"><div class="card-title">工事別月別原価</div><div id="multiDetailCostMonthly"></div></div>
@@ -708,6 +748,14 @@ function renderSummaryTable(container,columns,dataArr){
     });
   }
   table.appendChild(tbody);scroll.appendChild(table);container.appendChild(scroll);
+}
+
+// 注記などを残したまま表を描画する（renderSummaryTable は container を clear するため、
+// 先に追加した注記が消える。子ホルダに描画して注記を保持する）。
+function appendSummaryTable(container,columns,dataArr){
+  const holder=document.createElement('div');
+  container.appendChild(holder);
+  renderSummaryTable(holder,columns,dataArr);
 }
 
 // ===== ナビ描画（CSV種別に応じて動的生成・textContent） =====
@@ -2170,7 +2218,7 @@ function renderMultiCrossChecks(){
     {label:'重要度',render:(td,r)=>{td.appendChild(reconBadge(r.severity));}},
     {label:'対応方針',render:(td,r)=>{td.textContent=r.action;}}
   ];
-  renderSummaryTable(area,cols,checks);
+  appendSummaryTable(area,cols,checks);
 }
 
 // 4枠の読み込みUI
@@ -2419,7 +2467,7 @@ function renderMultiProjectList(){
       td.appendChild(btn);
     }}
   ];
-  renderSummaryTable(area,cols,multiState.rows.projects_summary);
+  appendSummaryTable(area,cols,multiState.rows.projects_summary);
 }
 
 // ===== 工事別 労務費詳細（概要 / 月別労務費 / 労務明細） =====
@@ -2509,7 +2557,7 @@ function renderMultiLaborDetail(projectKey){
         {key:'monthTotal',label:'月合計',cls:'num',fmt:v=>formatMoney(v)},
         {key:'cumulative',label:'累計',cls:'num',fmt:v=>formatMoney(v)}
       ];
-      renderSummaryTable(carea,cols,arr);
+      appendSummaryTable(carea,cols,arr);
     }
   }
 
@@ -2530,7 +2578,7 @@ function renderMultiLaborDetail(projectKey){
       {label:'差異',cls:'num',render:(td,it)=>{td.textContent=(it.diff===null)?'—':formatMoney(it.diff);}},
       {label:'判定',render:(td,it)=>{td.appendChild(reconBadge(it.judge));}}
     ];
-    renderSummaryTable(rcarea,cols,recon.items);
+    appendSummaryTable(rcarea,cols,recon.items);
     rcarea.appendChild(noteEl('該当しそうな理由：'+recon.reasons.join('、')));
     rcarea.appendChild(noteEl('外注費は projects_summary.invoice_subcontract_cost（請求書由来）と比較しています。subcontract_cost_total は日報由来外注費を含むため、請求書明細のみの再集計とは一致しません。'));
   }
@@ -2549,7 +2597,7 @@ function renderMultiLaborDetail(projectKey){
       {key:'reportCount',label:'日報件数',cls:'num'},
       {key:'rowCount',label:'明細件数',cls:'num'}
     ];
-    renderSummaryTable(marea,cols,arr);
+    appendSummaryTable(marea,cols,arr);
   }
 
   // 労務明細（report_date 昇順）
@@ -2587,7 +2635,7 @@ function renderMultiLaborDetail(projectKey){
       {key:'rowCount',label:'明細件数',cls:'num'},
       {key:'vendorCount',label:'業者数',cls:'num'}
     ];
-    renderSummaryTable(imarea,cols,arr);
+    appendSummaryTable(imarea,cols,arr);
   }
 
   // 請求書明細（invoice_date 昇順）
@@ -2659,6 +2707,17 @@ function setMode(mode){
 document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
 document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiHome());
+
+// ===== 印刷（複数CSV統合ビュー） =====
+// 印刷ボタンは window.print() を呼ぶのみ。表示中の内容（home または detail）が印刷対象。
+document.getElementById('multiPrintBtn').addEventListener('click',()=>window.print());
+document.getElementById('multiDetailPrintBtn').addEventListener('click',()=>window.print());
+// 印刷直前に印刷専用ヘッダへ印刷日時を入れる
+window.addEventListener('beforeprint',function(){
+  const stamp='印刷日時：'+nowStamp();
+  const a=document.getElementById('multiPrintStamp');if(a)a.textContent=stamp;
+  const b=document.getElementById('multiDetailPrintStamp');if(b)b.textContent=stamp;
+});
 </script>
 </body>
 </html>

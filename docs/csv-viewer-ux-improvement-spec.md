@@ -459,3 +459,259 @@ Phase 2-4-9-5：PDFボタン・画面文言整理
 
 - 各単体CSV帳票カードから既存単体CSVビューへの接続。
 - これは Phase 2-4-9-2 で実施予定。
+
+## 14. Phase 2-4-9-2-a：単体CSVビュー接続方針決定
+
+> 本章は Phase 2-4-9-2「ZIP内CSVを単体CSVビューで表示」の**実装前の接続方針（docs設計のみ）**。`local-viewers/csv-viewer.html` の実装は変更しない。
+
+### 採用方針
+
+```text
+- ZIP内CSVを単体CSVビューで表示する実装方針は、案Cを採用する
+- handleText(fileName, text) を以下の2段階に分離する
+  1. CSVテキストをパースして headers / rows / csvType / warnings / errors を作る処理
+  2. headers / rows / csvType / warnings / errors から state を構築して renderAllPages() する処理
+- 単体file読込とZIP由来単体表示の両方で、同じ state構築＋描画処理を使う
+```
+
+仮の関数名（実装時に確定）：`parseSingleCsvText(text)` / `buildSingleStateAndRender(args)`。
+
+### 案Cを採用する理由
+
+```text
+- 単体CSVビューは state をグローバル参照して描画する構造である
+- ZIP読込後は multiState.rows に rows 配列が残っている
+- ZIP内CSVの raw text は保持されていない
+- raw text を新たに保持して handleText に再投入する案Aは、再パース・二重保持になる
+- rows から直接 state を構築する案Bは、handleText 後半処理のロジック複製が起きやすい
+- 案Cなら、既存の単体CSV描画を再利用でき、ロジック複製を避けられる
+- Phase 2-4-8-6 の loadMultiSlot / loadMultiSlotFromText 分離と同じ設計思想で一貫性がある
+```
+
+### warnings/errors の引き継ぎ方
+
+重要事項：
+
+```text
+parseSingleCsvText 相当の関数は、headers / rows / csvType だけでなく warnings / errors も返す。
+
+buildSingleStateAndRender 相当の関数は、warnings / errors を必ず受け取り、state.warnings / state.errors に反映する。
+```
+
+理由：
+
+```text
+handleText には、文字化け検知、空CSV、ヘッダなし、列数不一致、複数種別一致などの警告・エラー生成が含まれる。
+これらを分離時に取りこぼすと、単体file読込とZIP由来単体表示で警告・エラー表示が食い違う。
+```
+
+設計：
+
+```text
+単体file読込：
+text
+→ parseSingleCsvText(text)
+→ { headers, rows, csvType, warnings, errors }
+→ buildSingleStateAndRender({ fileName, source:'file', csvType, headers, rows, warnings, errors })
+
+ZIP由来単体表示：
+multiState.rows[type]
+multiState.files[type]
+multiState の警告情報
+→ buildSingleStateAndRender({ fileName, source:'zip', csvType, headers, rows, warnings, errors })
+```
+
+補足：
+
+```text
+ZIP由来では raw text がないため、文字化け検知など raw text 依存の警告はZIP読込時点で生成済みのものを引き継ぐか、ZIP読込時の検証結果として扱う。
+重複して警告を生成しない。
+```
+
+### 状態遷移と戻り先
+
+3状態を定義する。
+
+```text
+A. 単体fileビュー
+B. ZIP帳票選択メニュー / 月次チェック・差異確認
+C. ZIP由来単体ビュー
+```
+
+状態ごとの役割：
+
+```text
+A. 単体fileビュー
+- ユーザーが個別CSVを読み込んだ状態
+- state は file由来CSVを保持
+- 戻り先は通常の単体CSV画面内
+
+B. ZIP帳票選択メニュー / 月次チェック・差異確認
+- ZIPを読み込んだ状態
+- multiState が4CSVを保持
+- 帳票選択メニュー、月次チェック・差異確認、工事詳細を行き来する
+
+C. ZIP由来単体ビュー
+- 帳票選択メニューから、ZIP内CSVの1つを単体ビュー形式で開いた状態
+- state はZIP由来CSVで上書きされる
+- multiState は保持したまま
+- 戻るボタンは「帳票選択メニューに戻る」
+```
+
+状態遷移図：
+
+```text
+起動
+ ↓
+ZIP読込
+ ↓
+帳票選択メニュー
+ ├ 工事一覧・原価概要
+ │   ↓
+ │  ZIP由来 projects_summary 単体ビュー
+ │   ↓
+ │  帳票選択メニューに戻る
+ │
+ ├ 日報・労務費
+ │   ↓
+ │  ZIP由来 attendance_details 単体ビュー
+ │   ↓
+ │  帳票選択メニューに戻る
+ │
+ ├ 請求書費用
+ │   ↓
+ │  ZIP由来 project_cost_details 単体ビュー
+ │   ↓
+ │  帳票選択メニューに戻る
+ │
+ ├ 重機台帳
+ │   ↓
+ │  ZIP由来 machine_details 単体ビュー
+ │   ↓
+ │  帳票選択メニューに戻る
+ │
+ └ 月次チェック・差異確認
+     ↓
+    月次チェック・差異確認
+     ↓
+    帳票選択メニューに戻る
+```
+
+注意事項：
+
+```text
+- ZIP由来単体ビューで state を上書きしても、multiState は維持する
+- 帳票選択メニューへ戻ったときにZIP読込状態が消えないこと
+- その後、別の帳票カードを開けること
+- 個別CSV読込を行った場合は、通常の単体fileビューとして扱う
+- 個別CSV読込とZIP由来単体ビューの戻り先を混同しない
+```
+
+### 印刷/PDF導線
+
+現状：
+
+```text
+- 単体CSVビューには専用の印刷/PDFボタンがない
+- 複数CSV側には印刷/PDF系の導線がある
+```
+
+方針：
+
+```text
+Phase 2-4-9-2 では、ZIP由来単体ビューへの接続を優先する。
+ただし、ZIP由来単体ビューの上部には将来的に「この帳票をPDF保存」ボタンを置ける設計にする。
+```
+
+暫定対応：
+
+```text
+- 2-4-9-2 では既存のブラウザ印刷挙動を壊さない
+- PDFボタンの本格整備は Phase 2-4-9-5 で扱う
+- ただし、2-4-9-2-c で projects_summary を接続した時点で、ボタン配置場所だけは崩れないよう考慮する
+```
+
+### project_cost_details 0件の扱い
+
+```text
+project_cost_details は実ZIP 2026年6月分では0件だった。
+これは接続検証には不向きというだけでなく、0件CSVを正常表示できるか確認する境界ケースとして重要である。
+```
+
+方針：
+
+```text
+2-4-9-2-e では、project_cost_details 0件時にエラーではなく正常な空表示になることを確認する。
+表示文言は「この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。」に寄せる。
+```
+
+### 回帰確認の合格条件
+
+handleText分離後、単体file読込の挙動は分離前と完全一致させる。
+
+確認対象：
+
+```text
+- CSV種別判定
+- warnings
+- errors
+- rows件数
+- headers
+- state.csvType
+- state.csvLabel
+- state.reports
+- minDate / maxDate
+- renderAllPages の描画結果
+- 初期表示ページ
+- 詳細画面
+- 戻り導線
+- NaNなし
+- Console重大エラーなし
+```
+
+CSV別確認：
+
+```text
+projects_summary.csv：
+- 工事一覧
+- 工事詳細
+- 年度別集計
+- 発注者別集計
+- 工事分類別集計
+
+attendance_details.csv：
+- buildAttendanceReports
+- report_id ピボット
+- 二重計上防止
+- 月別サマリー
+- 従業員別サマリー
+- 従業員別月別表示
+
+project_cost_details.csv：
+- invoice_date 期間推定
+- 請求書一覧
+- 業者別集計
+- 工事別集計
+- 月別集計
+- 費目別集計
+- 確認リスト
+- 0件時の正常表示
+
+machine_details.csv：
+- 重機一覧
+- 所有・リース別集計
+- 月額表示
+- 確認リスト
+```
+
+### 実装ステップ（Phase 2-4-9-2）
+
+```text
+2-4-9-2-a：単体CSVビュー接続方針決定（docs）
+2-4-9-2-b：handleText を parse部 と state構築＋描画部 に分離
+2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
+2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
+2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
+2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
+2-4-9-2-g：全帳票回帰確認
+```

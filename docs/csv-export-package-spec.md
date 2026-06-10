@@ -957,3 +957,4 @@ manifest.json はCSV種別判定とパッケージ情報表示に使うが、man
 - `project_cost_details.csv` が0件の場合も正常案内を表示する。
 - 統合ビューは「月次チェック・差異確認」としてメニューから開く。
 - 各単体CSV帳票カードから単体CSVビューへの接続は次フェーズ（2-4-9-2）で実施予定。
+- ZIP読込後の帳票カードは、次フェーズでZIP由来rowsを単体CSVビュー形式で表示する方針（Phase 2-4-9-2-a 設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14）。`project_cost_details` 0件は正常な空表示として扱う。

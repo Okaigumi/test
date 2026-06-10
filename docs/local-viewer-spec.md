@@ -5,6 +5,8 @@
 > **UX改善方針（Phase 2-4-9-0・設計のみ）**：CSVビューアーの新しい基本導線は、ZIP読込 → 帳票選択 → 帳票画面 → 必要時のみ月次チェック・差異確認、とする。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) を参照。
 >
 > **Phase 2-4-9-1（実装済み）**：ZIP読込後の帳票選択メニューを実装（コミット `08be5ac`）。単体CSV帳票カードへの接続は次フェーズ（2-4-9-2）予定。
+>
+> **Phase 2-4-9-2-a（設計のみ）**：ZIP由来単体ビュー接続時は、handleTextをパース部とstate構築＋描画部に分離し、単体file読込とZIP由来単体表示で共通処理を使う。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14 を参照。
 
 ## 1. 目的
 

@@ -255,3 +255,4 @@ machines.company_id   → companies.name            （重機所属会社）
 - UGREEN NASync 導入後はNASバックアップ運用を追加する（現時点では未導入・後日購入予定）。
 - CSV ZIPは、ビューアーで読み込んだ後、帳票選択メニューから各CSV帳票を確認する方針にする（UX改善方針：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md)・Phase 2-4-9-0 設計）。
 - Phase 2-4-9-1（コミット `08be5ac`）で、ZIP読込後の帳票選択メニューを実装済み。単体CSV帳票への接続は次フェーズ（2-4-9-2）予定。
+- ZIP読込後の帳票カードは、次フェーズでZIP由来rowsを単体CSVビュー形式で表示する方針（Phase 2-4-9-2-a 設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14）。`project_cost_details` 0件は正常な空表示として扱う。

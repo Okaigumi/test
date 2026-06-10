@@ -803,6 +803,21 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - 月次チェック・差異確認は既存の確認リスト・差異確認・工事詳細を利用する。
 - 次フェーズ（2-4-9-2）でZIP内CSVを単体CSVビューへ接続する。
 
+### ZIP由来単体ビュー接続方針（Phase 2-4-9-2-a・設計のみ）
+
+設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14。
+
+```text
+ZIP由来単体ビュー接続方針：
+- ZIP読込後の multiState.rows を利用して、既存単体CSVビューに接続する
+- handleText を分離し、単体file読込とZIP由来単体表示で共通のstate構築＋描画処理を使う
+- multiState は保持したまま、ZIP由来単体ビュー表示時のみ state を該当CSVで上書きする
+- ZIP由来単体ビューの戻り先は帳票選択メニュー
+- warnings/errors の引き継ぎを明確にし、単体file読込とZIP由来表示の警告差分を最小化する
+```
+
+本方針は Phase 2-4-9-2-a の docs 設計のみ。集計ロジック・CSV列仕様は変更しない。実装は次フェーズ（2-4-9-2-b〜）。
+
 ---
 
 ## 12. MVP範囲

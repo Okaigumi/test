@@ -1810,6 +1810,29 @@ Phase 2-4-9-1：ZIP読込後メニュー実装
 Phase 2-4-9-2：ZIP内CSVを単体CSVビューで表示
 ```
 
+#### Phase 2-4-9-2-a：単体CSVビュー接続方針決定（完了）
+
+- 対象ファイル：`docs/csv-viewer-ux-improvement-spec.md`（§14）ほか docs のみ。
+- 設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §14。
+
+**記録内容：**
+
+- ZIP内CSVを単体CSVビューで表示する前に、接続方針をdocsで確定。
+- 案C：handleTextをパース部とstate構築＋描画部に分離する方針を採用。
+- warnings/errors を分離時に取りこぼさない方針を明記。
+- 単体fileビュー / ZIP帳票選択メニュー / ZIP由来単体ビュー の3状態を定義。
+- ZIP由来単体ビューから帳票選択メニューへ戻る導線を定義。
+- 単体ビューの印刷/PDF導線は2-4-9-5で本格整備予定。ただし配置場所は2-4-9-2中に考慮。
+- project_cost_details 0件は境界ケースとして正常表示を確認する。
+- handleText分離後の回帰確認条件を定義。
+- 今回はdocs設計のみ。実装コード変更なし。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-b：handleText を parse部 と state構築＋描画部 に分離
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

@@ -923,3 +923,123 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全42項目PASS。
 ```text
 Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
 ```
+
+## 17. Phase 2-4-9-2-d：attendance_details ZIP由来単体ビュー接続 実装結果
+
+### 17.1 実装コミット
+
+```text
+c7b1cc4 Connect ZIP attendance details to single CSV viewer
+```
+
+### 17.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 17.3 実装内容
+
+```text
+- 帳票選択メニューの「日報・労務費」カードを実接続
+- ZIP内 attendance_details.csv を、既存の単体CSVビューと同じ構成で表示
+- openMultiReport(key,title) の分岐条件に attendance_details を追加
+- openZipSingleReport(type) は既存汎用処理を利用
+- buildSingleStateAndRender({ source:'zip', ... }) を利用
+- state はZIP由来 attendance_details で上書き
+- multiState は保持
+- 帳票選択メニューに戻る導線は projects_summary と同じものを利用
+```
+
+### 17.4 追加・変更した主な関数
+
+```text
+openMultiReport(key,title)
+- projects_summary に加え、attendance_details も openZipSingleReport へ分岐
+- project_cost_details / machine_details は準備中表示のまま
+
+openZipSingleReport(type)
+- 既存の汎用処理をそのまま利用
+- multiState.rows[type] / multiState.files[type] を buildSingleStateAndRender へ渡す
+
+buildSingleStateAndRender(args)
+- 既存処理を変更せず利用
+- csvType が attendance_details の場合、buildAttendanceReports(rows) を呼ぶ
+
+buildAttendanceReports(rows)
+- 変更なし
+```
+
+### 17.5 report_id ピボット・二重計上防止
+
+```text
+attendance_details は report_id 単位で日報を集約する。
+同一 report_id が複数現場に分かれている場合でも、normal_mins / overtime_mins / night_mins / holiday_mins を二重計上しない。
+一方、labor_cost は現場別按分SUMとして扱う。
+今回の実装では buildAttendanceReports を変更せず、ZIP由来rowsでも既存ロジックをそのまま通す方針とした。
+```
+
+確認結果：
+
+```text
+テストCSVで以下を確認した。
+- reports=2件
+- R1 normal_mins=480
+- R1 overtime_mins=60
+- R1 labor_cost_total=60000
+- minDate=2026-06-01
+- maxDate=2026-06-20
+- NaNなし
+```
+
+### 17.6 戻る導線
+
+```text
+ZIP由来 attendance_details 単体ビューでも、既存の #zipSingleBack を使用。
+「← 帳票選択メニューに戻る」からメニューへ復帰する。
+読込元「ZIP内 attendance_details.csv」と対象期間を表示する。
+社員別月別詳細から従業員別一覧へ戻る既存導線は変更していない。
+```
+
+### 17.7 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全47項目PASS。
+
+確認内容：
+- ZIP読込状態を loadMultiSlotFromText + finalizeMulti で再現
+- 日報・労務費カード「開く」からZIP由来 attendance_details 単体ビュー表示OK
+- 読込元「ZIP内 attendance_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 月別サマリー表示OK
+- 従業員別サマリー表示OK
+- 全体サマリー表示OK
+- 社員別月別詳細表示OK
+- 社員別月別詳細→従業員別一覧戻りOK
+- 帳票選択メニューに戻るOK
+- 戻った後もZIP読込状態保持OK
+- 月次チェック・差異確認を開けるOK
+- projects_summary の接続済み状態も維持
+- project_cost_details / machine_details は準備中表示のままOK
+- 個別CSV読込回帰OK
+- ZIP由来単体表示と個別CSV読込が混同しないことOK
+- NaNなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 17.8 未実装
+
+```text
+- project_cost_details のZIP由来単体ビュー接続
+- machine_details のZIP由来単体ビュー接続
+- ZIP由来単体ビューのPDF保存ボタン
+- 月次チェック・差異確認の内部名称整理
+- 個別CSV読込の折りたたみ化
+```
+
+次フェーズ：
+
+```text
+Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
+```

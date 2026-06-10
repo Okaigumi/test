@@ -1896,6 +1896,38 @@ Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
 Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示
 ```
 
+#### Phase 2-4-9-2-d：attendance_details をZIP由来で単体ビュー表示（完了）
+
+- 実装コミット：`c7b1cc4 Connect ZIP attendance details to single CSV viewer`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §17。
+
+**記録内容：**
+
+- `local-viewers/csv-viewer.html` のみ変更。
+- `openMultiReport(key,title)` の分岐条件に `attendance_details` を追加。
+- ZIP読込後の帳票選択メニューから「日報・労務費」カードを実接続。
+- ZIP内 `attendance_details.csv` を単体CSVビュー形式で表示できるようにした。
+- `openZipSingleReport(type)` は既存の汎用処理をそのまま利用。
+- `buildSingleStateAndRender({ source:'zip', ... })` を使い、既存 attendance_details 単体CSVビューを再利用。
+- `buildAttendanceReports` は無変更。
+- report_id ピボット・二重計上防止の維持を確認。
+- report_date による minDate / maxDate 推定を確認。
+- 月別サマリー、従業員別サマリー、全体サマリー、社員別月別詳細を確認。
+- ZIP由来単体ビュー上部の戻る導線、読込元、対象期間表示は projects_summary と同じ仕組みを踏襲。
+- 帳票選択メニューへ戻った後もZIP読込状態を保持。
+- projects_summary は引き続き接続済み。
+- `project_cost_details` / `machine_details` は準備中表示のまま。
+- jsdom自動回帰で全47項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット（実装コミットとは分離）。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

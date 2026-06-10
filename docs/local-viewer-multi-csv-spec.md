@@ -833,6 +833,13 @@ ZIP由来単体ビュー接続方針：
 - 「工事一覧・原価概要」カードから ZIP内 `projects_summary.csv` を単体CSVビュー形式で表示できるようにした。
 - `attendance_details` / `project_cost_details` / `machine_details` は引き続き準備中表示。
 
+### attendance_details ZIP由来単体ビュー接続 実装済み（Phase 2-4-9-2-d）
+
+実装コミット：`c7b1cc4 Connect ZIP attendance details to single CSV viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §17。
+
+- 「日報・労務費」カードから ZIP内 `attendance_details.csv` を単体CSVビュー形式で表示できるようにした。
+- `projects_summary` と `attendance_details` は接続済み。`project_cost_details` / `machine_details` は引き続き準備中表示。
+
 ---
 
 ## 12. MVP範囲

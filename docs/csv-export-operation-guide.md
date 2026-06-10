@@ -87,6 +87,7 @@ okaigumi-csv-export_202606-202606_20260610-1446.zip
 - 次フェーズでは、ZIP読込後の帳票カードからZIP由来rowsを単体CSVビュー形式で表示する方針（Phase 2-4-9-2-a 設計）。`project_cost_details` 0件は正常な空表示として扱う。
 - Phase 2-4-9-2-b（コミット `64c699b`）で、ZIP内CSVを単体CSVビューへ接続するための前提として handleText 分離を実装済み。帳票カード接続は次フェーズ予定。
 - Phase 2-4-9-2-c（コミット `f2b1b1c`）で、ZIP読込後の「工事一覧・原価概要」カードから ZIP内 `projects_summary.csv` を単体CSVビュー形式で表示できるようになった。他帳票は次フェーズ以降で接続予定。
+- Phase 2-4-9-2-d（コミット `c7b1cc4`）で、ZIP読込後の「日報・労務費」カードから ZIP内 `attendance_details.csv` を単体CSVビュー形式で表示できるようになった。`project_cost_details` / `machine_details` は次フェーズ以降で接続予定。
 
 ## 4. 推奨フォルダ構成
 

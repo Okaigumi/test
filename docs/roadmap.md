@@ -1251,7 +1251,30 @@ subcontractRows = 0
 
 - Phase 2-4-8-3：管理コンソール ZIP出力UI設計
 
-**実装状況：Phase 2-4-8 は 2-4-8-2（ZIPライブラリ同梱）まで完了。2-4-8-3 以降は未着手。HTMLへの組み込み・ZIP出力/読込実装は未着手。**
+#### Phase 2-4-8-3：管理コンソール ZIP出力UI設計（完了）
+
+- 状態：設計完了 / 実装：未着手
+- 設計ドキュメント：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md) §14
+- 対象：管理コンソールのCSV出力画面、年月指定UI、ZIP出力ボタン、個別CSV出力の予備化
+
+**設計内容：**
+
+- 対象期間は**年月のみ**（開始年月・終了年月。`<input type="month">` 案。日付指定は出さない。裏側で月初〜翌月初未満に変換）。
+- UIは「CSV一式をZIPで出力（推奨）」をメイン導線にする。
+- 個別CSV出力は廃止せず、詳細・予備・トラブル対応用として残す。
+- ZIP出力時に `manifest.json`（format_version / system / exported_at / period / files[]）生成を前提にする。
+- ZIPファイル名ルール：`okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip`。
+- 出力対象は4CSV。データなしCSVもヘッダーのみ/0行で同梱し、行数を manifest に記録。
+- バリデーション：開始/終了年月の空・逆転をエラー、長期間は警告検討、0件でもヘッダー＋manifest出力、ZIP失敗時は個別CSV出力を案内。
+- ZIP出力実装時は同梱済み JSZip（`vendor/jszip/jszip.min.js`）を使用予定。外部CDNは使わない。
+- **今回は設計のみ。** `admin-app.html` の変更なし。ZIP出力ロジック未実装。HTMLへの `<script>` 追加なし。
+- ZIPには原価情報・従業員情報・請求書情報が含まれるため、public領域に置かない。ZIP原本は編集禁止。
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-4：管理コンソール ZIP出力実装
+
+**実装状況：Phase 2-4-8 は 2-4-8-3（管理コンソール ZIP出力UI設計）まで完了。2-4-8-4 以降は未着手。`admin-app.html` 変更・ZIP出力/読込実装は未着手。**
 
 ## 保留・改善候補
 

@@ -473,3 +473,172 @@ vendor/jszip/jszip.min.js
 - 既存CSV列仕様は変更しない
 - 既存の個別CSV出力・個別CSV読込は残す
 - ZIP対応後も個別CSVによるトラブル切り分けを可能にする
+
+---
+
+## 14. 管理コンソール ZIP出力UI設計（Phase 2-4-8-3）
+
+- 状態：設計完了 / 実装：未着手
+- 対象：管理コンソール（`admin-app.html`）のCSV出力画面、年月指定UI、ZIP出力ボタン、個別CSV出力の予備化
+- 本フェーズは設計のみ。`admin-app.html` は変更しない。ZIP出力ロジックは実装しない。
+
+### 14.1 基本方針
+
+管理コンソールのCSV出力は、将来的に以下の構成にする。
+
+```text
+CSV出力
+├ 対象期間
+│  ├ 開始年月
+│  └ 終了年月
+├ CSV一式をZIPで出力（推奨）
+└ 個別CSV出力（詳細・予備）
+   ├ projects_summary
+   ├ attendance_details
+   ├ project_cost_details
+   └ machine_details
+```
+
+- 通常運用では **「CSV一式をZIPで出力」** をメイン導線にする。
+- 個別CSV出力は廃止せず、詳細・予備・トラブル対応用として残す。
+
+### 14.2 対象期間UI
+
+対象期間は **年月のみ**。日付指定は出さない。
+
+```text
+開始年月：YYYY-MM
+終了年月：YYYY-MM
+```
+
+- 入力タイプ案：`<input type="month">`
+- 表示例：`2026年4月〜2026年6月分`／単月は `2026年6月分`
+- 内部処理では年月から日付範囲へ変換：
+  - 開始年月 2026-04 → 2026-04-01 以上
+  - 終了年月 2026-06 → 2026-07-01 未満
+
+重要方針：
+
+- 利用者には年月のみ選ばせる。
+- 日付入力は出さない。
+- SQL/RPC/集計処理では裏側で月初〜翌月初未満に変換する。
+- `manifest.json` には年月粒度で記録する。
+- ZIPファイル名にも年月範囲を含める。
+
+### 14.3 ZIP出力ボタン
+
+メインボタン：`CSV一式をZIPで出力（推奨）`
+
+役割：
+
+- 4CSVを内部生成する
+- `manifest.json` を生成する
+- JSZip（`vendor/jszip/jszip.min.js`）で1つのZIPにまとめる
+- ZIPをダウンロードする
+
+※ 本フェーズでは実装しない（UI設計のみ）。
+
+### 14.4 個別CSV出力の扱い
+
+既存の個別CSV出力は残す（配置案：`個別CSV出力（詳細・予備）`）。
+
+残す理由：
+
+- ZIP出力に問題があった場合の切り分け
+- 1CSVだけ確認したい場合
+- 会計事務所や社内確認で一部だけ渡したい場合
+- 既存運用からの移行期間に必要
+- ZIP読込側の検証にも使える
+
+通常運用ではZIP出力を推奨する。
+
+### 14.5 出力対象CSV
+
+ZIPに含めるCSVは4つ：
+
+```text
+projects_summary.csv
+attendance_details.csv
+project_cost_details.csv
+machine_details.csv
+```
+
+- 対象期間にデータがないCSVも、原則ヘッダーのみまたは0行CSVとして同梱する。
+- `manifest.json` に行数を記録する。
+
+### 14.6 ZIPファイル名
+
+```text
+okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip
+```
+
+例：`okaigumi-csv-export_202604-202606_20260610-1530.zip`／単月 `okaigumi-csv-export_202606-202606_20260610-1530.zip`
+
+### 14.7 manifest.json
+
+管理コンソール側でZIP出力するとき `manifest.json` を生成する（構造は §5 に準拠）。
+
+```json
+{
+  "format_version": "1.0",
+  "system": "okaigumi-internal-system",
+  "exported_at": "2026-06-10T15:30:00+09:00",
+  "period": {
+    "from_month": "2026-04",
+    "to_month": "2026-06",
+    "granularity": "month",
+    "label": "2026年4月〜2026年6月分"
+  },
+  "files": [
+    { "type": "projects_summary", "name": "projects_summary.csv", "rows": 12 },
+    { "type": "attendance_details", "name": "attendance_details.csv", "rows": 340 },
+    { "type": "project_cost_details", "name": "project_cost_details.csv", "rows": 86 },
+    { "type": "machine_details", "name": "machine_details.csv", "rows": 18 }
+  ]
+}
+```
+
+### 14.8 画面表示案
+
+CSV出力画面に表示する説明：
+
+```text
+通常は「CSV一式をZIPで出力」を使用してください。
+個別CSV出力は、検証・トラブル対応・一部CSV確認用です。
+```
+
+ZIP出力ボタン付近の説明：
+
+```text
+4つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。
+ローカルCSVビューアーでは、このZIPを1つ読み込むだけで複数CSV統合ビューを利用できます。
+```
+
+### 14.9 エラー・バリデーション方針
+
+- 開始年月が空ならエラー
+- 終了年月が空ならエラー
+- 開始年月 > 終了年月ならエラー
+- 対象期間が長すぎる場合は警告または確認表示を検討
+- 出力対象が0件でも、ヘッダー付きCSVと `manifest.json` を出力できるようにする
+- ZIP生成に失敗した場合は、個別CSV出力を案内する
+
+### 14.10 セキュリティ・運用注意
+
+- ZIPには原価情報・従業員情報・請求書情報が含まれる
+- public URL、Vercel公開領域、public Storage には置かない
+- pCloud・NAS等の保存先では権限管理に注意する
+- ZIP原本は編集禁止
+- 加工する場合はコピーを作る
+- ZIPはCSV原本と同等以上に機密性の高いファイルとして扱う
+
+### 14.11 実装時の注意
+
+- JSZipは `vendor/jszip/jszip.min.js` を使う
+- 外部CDNは使わない
+- 既存の個別CSV出力関数を可能な限り再利用する
+- 4CSVの列仕様は変更しない
+- ZIP化してもCSV中身の列定義は維持する
+- 個別CSV出力は削除しない
+- ZIP出力実装コミットとビューアーZIP読込実装コミットは分ける
+- ZIP出力後、ローカルCSVビューアーで読み込めることを確認する

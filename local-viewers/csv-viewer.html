@@ -113,6 +113,18 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .multi-slot-note.warn{color:#9a5b00;}
 .multi-slot-note.error{color:#a32020;}
 
+/* 帳票選択メニュー（Phase 2-4-9-1） */
+.menu-intro{font-size:13px;color:var(--ink);margin:4px 0 10px;}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px;}
+.menu-card{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;display:flex;flex-direction:column;}
+.menu-card-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+.menu-card-file{font-size:11px;color:var(--faint);margin-bottom:6px;}
+.menu-card-count{font-size:13px;color:var(--accent);font-weight:700;margin-bottom:6px;}
+.menu-card-desc{font-size:12px;color:var(--muted);margin-bottom:10px;}
+.menu-card-zeronote{font-size:11px;color:#9a5b00;margin-bottom:10px;}
+.menu-card .back-btn{margin:auto 0 0;align-self:flex-start;}
+.menu-card-check{border-color:var(--accent-bg);background:var(--accent-bg);}
+
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
 
@@ -292,18 +304,18 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       <!-- 印刷時のみ表示する帳票ヘッダ -->
       <div class="print-head print-only">
         <div class="print-title">社内業務システム ローカルCSVビューアー</div>
-        <div class="print-sub">複数CSV統合ビュー</div>
+        <div class="print-sub">CSV確認ビューアー</div>
         <div class="print-stamp" id="multiPrintStamp"></div>
       </div>
       <div class="report-header">
-        <h1>複数CSV統合ビュー</h1>
-        <div class="rh-meta">projects_summary / attendance_details / project_cost_details / machine_details を同時に読み込み、project_id で横断確認します（Supabaseには接続しません）。</div>
+        <h1>CSV確認ビューアー</h1>
+        <div class="rh-meta">CSV一式ZIPを読み込み、帳票を選んで確認します。必要なときだけ「月次チェック・差異確認」で工事別に突き合わせます（Supabaseには接続しません）。</div>
         <button type="button" id="multiPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
       </div>
 
       <div class="card">
         <div class="card-title">CSV出力パッケージZIPを読み込む（推奨）</div>
-        <div class="note no-print" style="margin-top:0;margin-bottom:10px;">管理コンソールで出力したCSV一式ZIPを選択してください。4つのCSVとmanifest.jsonを自動で読み込み、複数CSV統合ビューに反映します。</div>
+        <div class="note no-print" style="margin-top:0;margin-bottom:10px;">管理コンソールで出力したCSV一式ZIPを選択してください。4つのCSVとmanifest.jsonを自動で読み込み、読込後に帳票選択メニューを表示します。</div>
         <div class="multi-slot-row no-print" style="margin-bottom:8px;">
           <input type="file" id="multiZipInput" accept=".zip,application/zip">
           <span id="multiZipFileName" class="multi-slot-status">ZIPファイルを選択してください</span>
@@ -314,31 +326,47 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <div id="multiPackageArea"></div>
       </div>
 
-      <div class="card no-print">
-        <div class="card-title">個別CSV読込（詳細・予備）</div>
-        <div class="note" style="margin-top:0;margin-bottom:10px;">個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。通常運用ではZIP読込を推奨します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
+      <!-- 帳票選択メニュー（ZIP読込後に表示）。Phase 2-4-9-1 -->
+      <div class="card hidden" id="multiMenuCard">
+        <div class="card-title">帳票選択メニュー</div>
+        <div id="multiMenuMsg" class="note no-print" style="display:none;"></div>
+        <div id="multiMenuArea"></div>
+      </div>
+
+      <!-- 月次チェック・差異確認（旧：複数CSV統合ビュー）。メニューから開く -->
+      <div class="hidden" id="multiIntegratedSection">
+        <button type="button" id="multiIntegratedBack" class="back-btn no-print">← 帳票選択メニューに戻る</button>
+        <div class="report-header">
+          <h1>月次チェック・差異確認</h1>
+          <div class="rh-meta">4CSVを工事別に突き合わせて、差異・未登録・確認事項を確認します。通常の帳票確認は、帳票選択メニューの各帳票を使用してください。</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">読み込み状況</div>
+          <div id="multiStatusArea" class="summary-grid"></div>
+          <div id="multiMissingArea"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">簡易工事一覧</div>
+          <div id="multiProjectArea"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">確認リスト</div>
+          <div id="multiCrossArea"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">警告・エラー</div>
+          <div id="multiMessagesArea"></div>
+        </div>
+      </div>
+
+      <div class="card no-print" id="multiIndividualCard">
+        <div class="card-title">詳細・トラブル対応用：個別CSV読込</div>
+        <div class="note" style="margin-top:0;margin-bottom:10px;">通常運用ではZIP読込を使用してください。個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
         <div id="multiLoadArea"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">読み込み状況</div>
-        <div id="multiStatusArea" class="summary-grid"></div>
-        <div id="multiMissingArea"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">簡易工事一覧</div>
-        <div id="multiProjectArea"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">確認リスト</div>
-        <div id="multiCrossArea"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">警告・エラー</div>
-        <div id="multiMessagesArea"></div>
       </div>
     </main>
   </div>
@@ -348,11 +376,11 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 <div id="multiDetailBody" class="hidden">
   <div class="app">
     <main class="main">
-      <button type="button" id="multiDetailBack" class="back-btn no-print">← 統合ビュー（工事一覧）に戻る</button>
+      <button type="button" id="multiDetailBack" class="back-btn no-print">← 月次チェック・差異確認に戻る</button>
       <!-- 印刷時のみ表示する帳票ヘッダ -->
       <div class="print-head print-only">
         <div class="print-title">社内業務システム ローカルCSVビューアー</div>
-        <div class="print-sub">複数CSV統合ビュー｜工事別 原価詳細</div>
+        <div class="print-sub">月次チェック・差異確認｜工事別 原価詳細</div>
         <div class="print-stamp" id="multiDetailPrintStamp"></div>
       </div>
       <div class="report-header">
@@ -2725,9 +2753,97 @@ function renderMultiProjectList(){
 }
 
 // ===== 工事別 労務費詳細（概要 / 月別労務費 / 労務明細） =====
+// ===== 帳票選択メニュー（Phase 2-4-9-1） =====
+// ZIP読込後の「ホーム」。各帳票カードと「月次チェック・差異確認」への導線を表示する。
+const MULTI_MENU_CARDS=[
+  {key:'projects_summary',title:'工事一覧・原価概要',file:'projects_summary.csv',countLabel:'工事件数',desc:'請負金額・原価・利益率を確認します。'},
+  {key:'attendance_details',title:'日報・労務費',file:'attendance_details.csv',countLabel:'労務明細',desc:'社員別・工事別・月別の労務費を確認します。'},
+  {key:'project_cost_details',title:'請求書費用',file:'project_cost_details.csv',countLabel:'請求書明細',desc:'材料費・外注費・重機リース等を確認します。'},
+  {key:'machine_details',title:'重機台帳',file:'machine_details.csv',countLabel:'重機台帳',desc:'所有・リース・月額・稼働状態を確認します。'}
+];
+// CSV由来値（行数・期間・ファイル名）は textContent / DOM API で描画（innerHTML は使わない）
+function renderMultiMenu(){
+  const area=document.getElementById('multiMenuArea');
+  if(!area)return;
+  clear(area);
+  const pkg=multiState.package;
+  const intro=document.createElement('div');intro.className='menu-intro';
+  intro.textContent='CSV一式ZIPを読み込みました。どの画面を見ますか？';
+  area.appendChild(intro);
+  if(pkg&&(pkg.periodLabel||pkg.exportedAt||pkg.fileName)){
+    const dl=document.createElement('dl');dl.className='kv-list';
+    const add=(k,v)=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.appendChild(dt);dl.appendChild(dd);};
+    if(pkg.periodLabel)add('対象期間',pkg.periodLabel);
+    if(pkg.exportedAt)add('出力日時',pkg.exportedAt);
+    if(pkg.fileName)add('ZIPファイル',pkg.fileName);
+    area.appendChild(dl);
+  }
+  const grid=document.createElement('div');grid.className='menu-grid';
+  MULTI_MENU_CARDS.forEach(c=>{
+    const loaded=!!multiState.files[c.key];
+    const count=multiState.rows[c.key]?multiState.rows[c.key].length:0;
+    const card=document.createElement('div');card.className='menu-card';
+    const t=document.createElement('div');t.className='menu-card-title';t.textContent=c.title;card.appendChild(t);
+    const f=document.createElement('div');f.className='menu-card-file';f.textContent=c.file;card.appendChild(f);
+    const cnt=document.createElement('div');cnt.className='menu-card-count';
+    cnt.textContent=loaded?(c.countLabel+'：'+count+'件'):(c.countLabel+'：未読込');
+    card.appendChild(cnt);
+    const d=document.createElement('div');d.className='menu-card-desc';d.textContent=c.desc;card.appendChild(d);
+    if(c.key==='project_cost_details'&&loaded&&count===0){
+      const z=document.createElement('div');z.className='menu-card-zeronote';
+      z.textContent='この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。';
+      card.appendChild(z);
+    }
+    const btn=document.createElement('button');btn.type='button';btn.className='back-btn';btn.textContent='開く';
+    btn.disabled=!loaded;
+    btn.addEventListener('click',()=>openMultiReport(c.key,c.title));
+    card.appendChild(btn);
+    grid.appendChild(card);
+  });
+  // 月次チェック・差異確認カード（旧：複数CSV統合ビュー）
+  const mc=document.createElement('div');mc.className='menu-card menu-card-check';
+  const mt=document.createElement('div');mt.className='menu-card-title';mt.textContent='月次チェック・差異確認';mc.appendChild(mt);
+  const md=document.createElement('div');md.className='menu-card-desc';
+  md.textContent='4CSVを工事別にまとめて確認します。差異確認・確認リスト・月別原価を確認します。';mc.appendChild(md);
+  const mb=document.createElement('button');mb.type='button';mb.className='back-btn';mb.textContent='開く';
+  mb.addEventListener('click',()=>showMultiIntegrated());
+  mc.appendChild(mb);
+  grid.appendChild(mc);
+  area.appendChild(grid);
+}
+// 単体CSV帳票画面は次フェーズ（2-4-9-2）で表示対応予定。今回は準備中メッセージで止める。
+function openMultiReport(key,title){
+  const msg=document.getElementById('multiMenuMsg');
+  if(!msg)return;
+  msg.style.display='';
+  msg.textContent='「'+title+'」の帳票画面は次フェーズで表示対応予定です。現時点では「月次チェック・差異確認」から内容を確認できます。';
+  if(msg.scrollIntoView)msg.scrollIntoView({block:'nearest'});
+}
+
+// データ変更時のホーム＝帳票選択メニューへ戻す（旧 showMultiHome の役割を踏襲）
 function showMultiHome(){
   document.getElementById('multiDetailBody').classList.add('hidden');
+  const sec=document.getElementById('multiIntegratedSection');if(sec)sec.classList.add('hidden');
+  renderMultiMenu();
+  const menu=document.getElementById('multiMenuCard');if(menu)menu.classList.toggle('hidden',!multiState.loaded);
+  const msg=document.getElementById('multiMenuMsg');if(msg){msg.style.display='none';msg.textContent='';}
   if(currentMode==='multi')document.getElementById('multiBody').classList.remove('hidden');
+}
+// 月次チェック・差異確認から帳票選択メニューへ戻る
+function showMultiMenu(){
+  const sec=document.getElementById('multiIntegratedSection');if(sec)sec.classList.add('hidden');
+  document.getElementById('multiDetailBody').classList.add('hidden');
+  const menu=document.getElementById('multiMenuCard');if(menu&&multiState.loaded)menu.classList.remove('hidden');
+  document.getElementById('multiBody').classList.remove('hidden');
+  window.scrollTo(0,0);
+}
+// 月次チェック・差異確認（既存の統合ビュー）を開く
+function showMultiIntegrated(){
+  const menu=document.getElementById('multiMenuCard');if(menu)menu.classList.add('hidden');
+  document.getElementById('multiIntegratedSection').classList.remove('hidden');
+  document.getElementById('multiDetailBody').classList.add('hidden');
+  document.getElementById('multiBody').classList.remove('hidden');
+  window.scrollTo(0,0);
 }
 function showMultiLaborDetail(projectKey){
   renderMultiLaborDetail(projectKey);
@@ -2957,11 +3073,17 @@ function setMode(mode){
     recomputeMultiMessages();
     renderMultiView();
     renderMultiPackageInfo();
+    // ZIP読込後は帳票選択メニューをホームにする（統合ビューはメニューから開く）
+    renderMultiMenu();
+    document.getElementById('multiMenuCard').classList.toggle('hidden',!multiState.loaded);
+    document.getElementById('multiIntegratedSection').classList.add('hidden');
+    const _m=document.getElementById('multiMenuMsg');if(_m){_m.style.display='none';_m.textContent='';}
   }
 }
 document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
-document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiHome());
+document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiIntegrated());
+document.getElementById('multiIntegratedBack').addEventListener('click',()=>showMultiMenu());
 
 // ===== CSV出力パッケージZIP読込の配線（inline onclick は使わない） =====
 document.getElementById('multiZipInput').addEventListener('change',handleMultiZipFileChange);

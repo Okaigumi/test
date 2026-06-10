@@ -1227,10 +1227,31 @@ subcontractRows = 0
 
 **次フェーズ候補：**
 
-- Phase 2-4-8-2：管理コンソール ZIP出力UI設計
-  - （ライブラリファイル追加を独立コミットで分ける場合は、2-4-8-2「ZIPライブラリ同梱」→ 2-4-8-3「管理コンソール ZIP出力UI設計」としてもよい）
+- Phase 2-4-8-2：ZIPライブラリ同梱（ライブラリファイル追加を独立コミットで分ける方針を採用）
 
-**実装状況：Phase 2-4-8 は 2-4-8-1（ZIPライブラリ同梱方針整理）まで完了。2-4-8-2 以降は未着手。ライブラリ本体は未追加。**
+#### Phase 2-4-8-2：ZIPライブラリ同梱（完了）
+
+- 状態：完了 / 実装：ライブラリ本体の同梱のみ
+- 管理コンソール実装：未着手 / ビューアー実装：未着手 / HTML参照追加：未着手
+- 設計ドキュメント：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md) §13
+
+**実施内容：**
+
+- JSZip v3.10.1 をリポジトリ内に同梱
+  - 配置先：`vendor/jszip/jszip.min.js`
+  - ライセンスファイル：`vendor/jszip/LICENSE.markdown`
+  - 同梱メモ：`vendor/jszip/README.md`
+- ライセンス：`MIT OR GPL-3.0-or-later`
+- 入手元：npm package `jszip@3.10.1`
+- 外部CDN不使用 / バージョン固定 / `file://` 運用維持方針
+- 管理コンソールZIP出力とローカルCSVビューアーZIP読込の共通利用を想定
+- **今回はライブラリ追加のみ。** `admin-app.html` への組み込みは未実装。`local-viewers/csv-viewer.html` への組み込みは未実装。HTMLへの `<script src>` 追加は未実装。ZIP出力・ZIP読込ロジックは未実装。
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-3：管理コンソール ZIP出力UI設計
+
+**実装状況：Phase 2-4-8 は 2-4-8-2（ZIPライブラリ同梱）まで完了。2-4-8-3 以降は未着手。HTMLへの組み込み・ZIP出力/読込実装は未着手。**
 
 ## 保留・改善候補
 

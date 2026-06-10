@@ -241,3 +241,5 @@ machines.company_id   → companies.name            （重機所属会社）
 - **CSV自体の列仕様は本仕様（§5〜§8）を維持する。ZIP化しても内部のCSV列定義は変更しない。**
 - `manifest.json` は出力パッケージのメタ情報（format_version・system・exported_at・period・files[]）として扱う。CSVの内容には含めない。
 - 個別CSV出力は廃止せず、予備・検証・トラブル対応用として残す。
+- ZIP出力の実装時は、ローカル同梱したZIPライブラリ（第一候補 JSZip。配置候補 `vendor/jszip/jszip.min.js`）を使う。**外部CDNは使わない。** ライブラリ選定・配置・ライセンス方針は `docs/csv-export-package-spec.md` §13 に従う。
+- ZIP化・パッケージ化を行っても **CSV列仕様（§5〜§8）は変更しない。**

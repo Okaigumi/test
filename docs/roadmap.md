@@ -1526,7 +1526,157 @@ manifest.json とZIPファイル名には年月粒度の from_month / to_month �
 - Phase 2-4-8-8：管理コンソールZIPとビューアーZIP読込の結合確認
 - Phase 2-4-8-9：docs・運用手順整理
 
-**実装状況：Phase 2-4-8 は 2-4-8-6（ローカルCSVビューアー ZIP読込実装）まで完了。管理コンソールZIP出力・ローカルCSVビューアーZIP読込ともに実装済み。2-4-8-7 以降（manifest検証強化・実ZIPによる結合確認・運用手順整理）は未着手。**
+#### Phase 2-4-8-8：管理コンソールZIPとビューアーZIP読込の結合確認（完了）
+
+- 種別：通し確認のみ。**実装変更なし／docs変更前の確認時点では `git status` clean。**
+- 管理コンソール側のZIP出力は、岡井さんが本番adminにログインして実施（実ログインが必要なため）。読込側はローカルCSVビューアーで確認。
+
+**確認環境：**
+
+- 本番admin（`https://system.okaigumi.co.jp/admin`）で実ZIP出力
+- ローカルHTTP配信
+- Playwrightブラウザ
+- `local-viewers/csv-viewer.html`
+
+**対象期間：**
+
+- `2026-06` 〜 `2026-06`
+- `period.label`：`2026年6月分`
+
+**実ZIP：**
+
+- ファイル名：`okaigumi-csv-export_202606-202606_20260610-1446.zip`
+- サイズ：`16,503 bytes`
+- ZIPファイル名は命名規則 `okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip` に合致
+
+**ZIP内ファイル確認：**
+
+```text
+projects_summary.csv：10行
+attendance_details.csv：41行
+project_cost_details.csv：0行
+machine_details.csv：22行
+manifest.json：あり
+```
+
+- ZIP内に余計な生成物なし
+- 各CSVにUTF-8 BOMあり
+- 各CSVヘッダーが `CSV_COLUMNS` と一致
+- 列数：projects_summary 23列／attendance_details 20列／project_cost_details 13列／machine_details 10列
+- manifest rows と実CSVデータ行数は全て一致
+
+**manifest確認：**
+
+- `format_version`：`1.0`
+- `system`：`okaigumi-internal-system`
+- `exported_at`：`2026-06-10T14:46:14+09:00`
+- `period.from_month`：`2026-06`
+- `period.to_month`：`2026-06`
+- `period.granularity`：`month`
+- `period.label`：`2026年6月分`
+- `files[].type` あり／`files[].name` あり／`files[].rows` あり
+
+**ビューアーZIP読込確認：**
+
+- 複数CSV統合モード表示OK
+- ZIP読込カード表示OK
+- ZIPファイル選択OK
+- ZIP読込OK
+- クリアボタンOK
+- JSZip読込OK
+- manifest読込状態OK
+- 4CSV自動読込OK
+- パッケージ情報表示OK
+- ZIP内ファイル一覧表示OK
+- manifest rows 表示OK
+- 実CSV rows 表示OK
+- 読込状態表示OK
+- Console重大エラーなし
+
+**複数CSV統合ビュー反映：**
+
+- 読み込み状況：projects_summary 10行／attendance_details 41行／project_cost_details 0行／machine_details 22行
+- 工事件数：10
+- 労務明細：41／請求書明細：0／重機台帳：22
+- 労務費合計：902,000円
+- 労務費対象工事：7／労務費対象月数：1
+- 請求書費用：0円
+- 月別原価合計：902,000円
+- 差異確認：2／横断確認：24／確認事項：26
+- エラー件数：0
+- NaN表示なし
+
+**工事詳細確認：**
+
+確認工事：`（一)加古川水系大和川護岸整備工事（その３）`
+
+- 工事詳細表示OK
+- 発注者：大志株式会社
+- 年度：2025
+- projects_summary 労務費：264,000円
+- attendance由来 労務費：264,000円
+- 差額：0
+- 工事別月別原価：2026年6月 264,000円／累計 264,000円
+- 差異確認カード：全項目一致
+- 月別労務費OK／労務明細OK
+- 月別請求書費用：0行／請求書明細：0行
+- 空表示でも崩れなし
+- 戻る操作OK
+
+**manifest優先判定：**
+
+- 4CSVすべて `manifest` 判定で読み込み済み
+- `projects_summary` 正しく割当
+- `attendance_details` 正しく割当
+- `project_cost_details` 正しく割当
+- `machine_details` 正しく割当
+
+**印刷/PDF確認：**
+
+- print emulationで確認
+- パッケージ情報は印刷対象
+- ZIPファイル選択・読込・クリアボタンは印刷対象外
+- 読み込み状況は印刷対象
+- 簡易工事一覧は印刷対象
+- 確認リストは印刷対象
+- 工事詳細の差異確認は印刷対象
+- 工事別月別原価は印刷対象
+- 戻るボタンは印刷対象外
+- PDF保存OK
+- 一時フォルダに約144KBのPDFを生成して確認後削除
+
+**Console / 一時ファイル：**
+
+- Console重大エラーなし
+- favicon.ico 404 のみで無害
+- 展開CSV・manifest・PDF・一時サーバースクリプトはリポジトリ外の一時フォルダで扱った
+- 確認後、一時フォルダごと削除済み
+- ダウンロードした実ZIP本体は Downloads に残置
+- リポジトリ内に `okaigumi-csv-export*`、manifest、展開CSV、`.playwright-cli` 等の混入なし
+- `git status` clean
+
+**補足：**
+
+```text
+今回の対象期間 2026-06 では project_cost_details.csv が0行だった。
+そのため請求書費用・費目別・月別請求書費用は0表示となり、横断確認に「請求書明細なし」が複数表示された。
+これは正常な確認事項表示であり、ビューアーの不具合ではない。
+```
+
+```text
+請求書明細が入っている期間（例：2026-04〜2026-06など）でも一度通し確認すると、費目別・月別請求書費用の反映まで実データで確認できる。
+```
+
+**次回候補：**
+
+```text
+Phase 2-4-8-7：manifest.json 検証・表示対応（必要になった場合のみ）
+請求書明細あり期間での追加通し確認
+Phase 2-4-8-9：docs・運用手順整理
+pCloud / NAS 保存運用ルール策定
+```
+
+**実装状況：Phase 2-4-8 は 2-4-8-6（ローカルCSVビューアー ZIP読込実装）まで実装完了、2-4-8-8（実ZIP結合確認）まで確認完了。管理コンソールZIP出力・ローカルCSVビューアーZIP読込ともに実装済みで、本番admin出力の実ZIPによる通し確認も2026-06単月（請求書0件ケース）で実施済み。2-4-8-7（manifest検証強化）・請求書明細あり期間での追加確認・2-4-8-9（運用手順整理）は未着手。**
 
 ## 保留・改善候補
 

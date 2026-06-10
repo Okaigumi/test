@@ -903,3 +903,24 @@ ZIP読込後も個別CSV読込を予備導線として残す。
 
 manifest.json はCSV種別判定とパッケージ情報表示に使うが、manifestがない場合もファイル名・CSVヘッダー判定で可能な範囲で読み込む。
 ```
+
+---
+
+## 18. 実確認済み：Phase 2-4-8-8（管理コンソールZIPとビューアーZIP読込の結合確認）
+
+種別：通し確認のみ（実装変更なし）。本番adminで出力した実ZIPを使って確認済み。
+
+- 対象期間：2026-06〜2026-06（`period.label`：`2026年6月分`）
+- ZIPファイル名：`okaigumi-csv-export_202606-202606_20260610-1446.zip`（16,503 bytes）
+- ZIP内5ファイル確認済み（projects_summary 10行 / attendance_details 41行 / project_cost_details 0行 / machine_details 22行 / manifest.json）
+- 各CSVにUTF-8 BOMあり・ヘッダーは `CSV_COLUMNS` と一致・列数 23/20/13/10
+- manifest確認済み（format_version 1.0 / system / exported_at +09:00 / period / files[].type・name・rows）
+- manifest rows と実CSV行数は全て一致
+- ローカルCSVビューアーでZIP読込成功（パッケージ情報・ZIP内ファイル一覧・読込状態表示OK）
+- manifest優先判定で4CSVを正しく割当成功
+- 複数CSV統合ビュー反映成功（工事件数10・労務費合計902,000円・月別原価合計902,000円・エラー0・NaNなし）
+- 工事詳細表示成功（差異確認カード全項目一致・月別原価・労務明細）
+- 印刷/PDF確認成功（パッケージ情報・確認リスト・差異確認・月別原価は印刷対象、ZIP操作UI・戻るボタンは印刷対象外、PDF保存OK）
+- 一時ファイル（展開CSV・manifest・PDF・一時サーバースクリプト）はリポジトリ外で扱い、確認後に削除済み。リポジトリ混入なし。
+- 2026-06は project_cost_details が0行のため、請求書費用統合は0件ケースとして確認済み（0行CSVはエラーではなく警告・確認事項として扱う動作を実確認）。
+- 請求書明細あり期間（例：2026-04〜2026-06）での追加確認は今後の候補。

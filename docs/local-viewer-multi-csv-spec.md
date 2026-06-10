@@ -764,6 +764,16 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - ZIP読込後も個別CSV読込を予備導線として残す。
 - `manifest.json` はCSV種別判定とパッケージ情報表示に使うが、manifestがない場合もファイル名・CSVヘッダー判定で可能な範囲で読み込む。
 
+### 実ZIP結合確認済み（Phase 2-4-8-8）
+
+- 管理コンソール（本番admin）で出力した実ZIPを、ローカルCSVビューアーで読込成功。
+- 実ZIP：`okaigumi-csv-export_202606-202606_20260610-1446.zip`（2026-06単月）。
+- manifest優先判定で4CSV（projects_summary / attendance_details / project_cost_details / machine_details）を正しく割当成功。
+- manifest rows と実CSV行数が全て一致することを実確認。
+- 0行CSV（project_cost_details）は、エラーではなく警告・確認事項として扱えることを実確認。
+- 複数CSV統合ビュー反映・工事詳細（差異確認・月別原価・労務明細）・印刷/PDF確認済み。
+- 請求書明細あり期間（例：2026-04〜2026-06）での追加確認は任意の今後候補。
+
 ---
 
 ## 12. MVP範囲

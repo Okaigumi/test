@@ -715,3 +715,95 @@ machine_details.csv：
 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
 2-4-9-2-g：全帳票回帰確認
 ```
+
+## 15. Phase 2-4-9-2-b：handleText分離 実装結果
+
+### 15.1 実装コミット
+
+```text
+64c699b Split handleText into parse and render phases
+```
+
+### 15.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 15.3 追加・変更した関数
+
+```text
+parseSingleCsvText(text)
+- CSVテキストを解析するparse部
+- 文字化け検知
+- parseCsvToMatrix
+- headers作成
+- detectCsvType
+- rows作成
+- __extra_N の超過列保持
+- 列数不一致チェック
+- warnings/errors生成
+- stateには触れない
+
+buildSingleStateAndRender(args)
+- parse結果からstateを構築して描画する処理
+- fileName/source/csvType/csvLabel/headers/rows/warnings/errors を受け取る
+- state.loaded/fileName/csvType/csvLabel/headers/rows/reports/warnings/errors/minDate/maxDate/generatedAt を構築
+- attendance_detailsではbuildAttendanceReportsを呼ぶ
+- project_cost_detailsではinvoice_dateからminDate/maxDateを推定
+- renderAllPages()
+- 初期表示は従来どおり
+- 致命的エラー時はmessagesページへ
+
+handleText(fileName, text)
+- 既存入口として残置
+- parseSingleCsvText(text)
+- buildSingleStateAndRender({ source:'file', ...parsed })
+- という薄いラッパに変更
+```
+
+### 15.4 維持した仕様
+
+```text
+- CSV列仕様変更なし
+- 既存集計ロジックの意味変更なし
+- renderAllPages の呼び出しタイミング維持
+- 単体CSV読込後の初期表示維持
+- projects_summary の工事一覧・工事詳細維持
+- attendance_details のreport_idピボット・二重計上防止維持
+- project_cost_details のinvoice_date期間推定維持
+- machine_details の既存表示維持
+- warnings/errors の表示維持
+- ZIP帳票カード接続は未実装
+```
+
+### 15.5 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全53項目PASS。
+
+確認内容：
+- projects_summary：種別判定、工事一覧、工事詳細、NaNなし
+- attendance_details：rows=3→reports=2、report_idピボット、二重計上防止、月別・従業員別表示、min/maxDate
+- project_cost_details：invoice_dateでmin/maxDate推定、請求書一覧、確認リスト、NaNなし
+- project_cost_details 0件：errors空、正常表示、dashboard表示、NaNなし
+- machine_details：重機一覧、月額表示、確認リスト、NaNなし
+- 未知CSV：csvType=null、errorsあり、messagesページ、headers保持
+- ZIP側：openMultiReportは準備中表示のまま
+- multiState/finalizeMulti/帳票選択メニュー描画は不変
+```
+
+### 15.6 未実装
+
+```text
+- ZIP帳票カードから単体CSVビューへの接続
+- openMultiReport の本格接続
+- ZIP由来単体ビューの戻る導線
+- ZIP由来単体ビューのPDF保存ボタン
+```
+
+次フェーズ：
+
+```text
+Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
+```

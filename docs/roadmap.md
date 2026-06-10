@@ -1833,6 +1833,35 @@ Phase 2-4-9-2：ZIP内CSVを単体CSVビューで表示
 Phase 2-4-9-2-b：handleText を parse部 と state構築＋描画部 に分離
 ```
 
+#### Phase 2-4-9-2-b：handleText を parse部 と state構築＋描画部 に分離（完了）
+
+- 実装コミット：`64c699b Split handleText into parse and render phases`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §15。
+
+**記録内容：**
+
+- `local-viewers/csv-viewer.html` のみ変更。
+- `parseSingleCsvText(text)` を追加。
+- `buildSingleStateAndRender(args)` を追加。
+- `handleText(fileName, text)` は既存入口として残し、`parseSingleCsvText` → `buildSingleStateAndRender` を呼ぶ薄いラッパに変更。
+- 旧handleTextが一体で行っていたCSVパース、種別判定、warnings/errors生成、state構築、reports生成、期間推定、renderAllPages呼び出しを責務分離。
+- warnings/errors はparse部で生成し、state構築＋描画部で `state.warnings` / `state.errors` へ反映。
+- 単体file読込の既存挙動維持を確認。
+- jsdom自動回帰で全53項目PASS。
+- project_cost_details 0件正常表示を確認。
+- 未知CSVエラー表示を確認。
+- ZIP読込後メニューへの影響なし。
+- 4帳票カードは準備中表示のまま。
+- ZIP帳票カード接続は未実装。
+- docs記録は本コミット（実装コミットとは分離）。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-c：projects_summary をZIP由来で単体ビュー表示
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

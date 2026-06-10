@@ -818,6 +818,14 @@ ZIP由来単体ビュー接続方針：
 
 本方針は Phase 2-4-9-2-a の docs 設計のみ。集計ロジック・CSV列仕様は変更しない。実装は次フェーズ（2-4-9-2-b〜）。
 
+### handleText分離 実装済み（Phase 2-4-9-2-b）
+
+実装コミット：`64c699b Split handleText into parse and render phases`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §15。
+
+- ZIP由来単体ビュー接続の前提となる handleText 分離を実装した（`parseSingleCsvText` / `buildSingleStateAndRender` を追加）。
+- 現時点では帳票カード接続は未実装で、4帳票カードは準備中表示のまま。
+- 次フェーズ（2-4-9-2-c）で projects_summary から接続する。
+
 ---
 
 ## 12. MVP範囲

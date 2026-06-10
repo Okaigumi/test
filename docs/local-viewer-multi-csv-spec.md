@@ -894,6 +894,14 @@ ZIP由来単体ビュー接続方針：
 - 帳票名は `MULTI_MENU_CARDS` の title と統一。対象期間は `multiState.package.periodLabel` を表示。
 - `openMultiReport` / `buildSingleStateAndRender` / CSV解析 / 集計ロジックは無変更。jsdom確認済み。
 
+### 印刷・PDF保存導線の整備 設計（Phase 2-4-9-5）
+
+設計の詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §25。
+
+- ZIP由来単体ビューと月次チェック・差異確認に「印刷・PDF保存」導線を追加する方針とする。
+- 帳票選択メニューは保存対象ではないため、ボタン配置対象外とする。
+- PDFライブラリは追加せず、ブラウザ標準の `window.print()` を使う。
+
 ---
 
 ## 12. MVP範囲

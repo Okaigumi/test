@@ -27,6 +27,8 @@
 > **Phase 2-4-9-3-b（実装済み）**：個別CSV読込エリアを「詳細・トラブル対応用」として初期折りたたみ表示に変更した。通常運用ではZIP読込を主導線とし、個別CSV読込は検証・トラブル対応・一部CSVのみ確認したい場合の補助導線として残す（コミット `d9a87f6`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §23 を参照。
 >
 > **Phase 2-4-9-3-c（実装済み）**：ZIP由来単体ビューの上部情報を整理した。ZIP内CSVを単体ビューで確認中であること、帳票名、読込元CSV、対象期間を表示し、個別CSV読込由来の単体ビューと混同しにくくした（コミット `8ca17e0`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §24 を参照。
+>
+> **Phase 2-4-9-5（設計）**：帳票確認後に保存・共有しやすくするため、印刷・PDF保存導線を整備する。PDFライブラリは追加せず、ブラウザ標準の `window.print()` を使う方針とする。設計は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §25 を参照。
 
 ## 1. 目的
 

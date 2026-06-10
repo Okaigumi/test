@@ -1961,6 +1961,36 @@ Phase 2-4-9-2-e：project_cost_details をZIP由来で単体ビュー表示
 Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
 ```
 
+#### Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示（完了）
+
+- 実装コミット：`26d7a30 Connect ZIP machine details to single CSV viewer`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §19。
+
+**記録内容：**
+
+- `local-viewers/csv-viewer.html` のみ変更。
+- `openMultiReport(key,title)` の分岐条件に `machine_details` を追加。
+- ZIP読込後の帳票選択メニューから「重機台帳」カードを実接続。
+- ZIP内 `machine_details.csv` を単体CSVビュー形式で表示できるようにした。
+- `openZipSingleReport(type)` は既存の汎用処理をそのまま利用。
+- `buildSingleStateAndRender({ source:'zip', ... })` を使い、既存 machine_details 単体CSVビューを再利用。
+- `machineCostRaw` / `computeMachineChecks` は無変更。
+- 重機一覧、所有/リース別集計、月額表示、確認リストを確認。
+- 0件CSVでも errors空・正常表示・NaNなしを確認。
+- ZIP由来単体ビュー上部の戻る導線、読込元、対象期間表示は既存仕組みを踏襲。
+- 帳票選択メニューへ戻った後もZIP読込状態を保持。
+- projects_summary / attendance_details / project_cost_details / machine_details の4カードすべて接続済み。
+- jsdom自動回帰で全40項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット（実装コミットとは分離）。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-2-g：全帳票回帰確認
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

@@ -847,6 +847,13 @@ ZIP由来単体ビュー接続方針：
 - 「請求書費用」カードから ZIP内 `project_cost_details.csv` を単体CSVビュー形式で表示できるようにした。0件CSVでも正常表示する。
 - `projects_summary` / `attendance_details` / `project_cost_details` は接続済み。`machine_details` は引き続き準備中表示。
 
+### machine_details ZIP由来単体ビュー接続 実装済み（Phase 2-4-9-2-f）
+
+実装コミット：`26d7a30 Connect ZIP machine details to single CSV viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §19。
+
+- 「重機台帳」カードから ZIP内 `machine_details.csv` を単体CSVビュー形式で表示できるようにした。
+- これにより、帳票選択メニューの4カード（projects_summary / attendance_details / project_cost_details / machine_details）すべてが接続済みになった。
+
 ---
 
 ## 12. MVP範囲

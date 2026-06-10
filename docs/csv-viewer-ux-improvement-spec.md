@@ -1194,3 +1194,154 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全41項目PASS。
 ```text
 Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
 ```
+
+## 19. Phase 2-4-9-2-f：machine_details ZIP由来単体ビュー接続 実装結果
+
+### 19.1 実装コミット
+
+```text
+26d7a30 Connect ZIP machine details to single CSV viewer
+```
+
+### 19.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 19.3 実装内容
+
+```text
+- 帳票選択メニューの「重機台帳」カードを実接続
+- ZIP内 machine_details.csv を、既存の単体CSVビューと同じ構成で表示
+- openMultiReport(key,title) の分岐条件に machine_details を追加
+- openZipSingleReport(type) は既存汎用処理を利用
+- buildSingleStateAndRender({ source:'zip', ... }) を利用
+- state はZIP由来 machine_details で上書き
+- multiState は保持
+- 4カードすべてがZIP由来単体ビューへ接続済みになった
+```
+
+### 19.4 追加・変更した主な関数
+
+```text
+openMultiReport(key,title)
+- projects_summary / attendance_details / project_cost_details に加え、machine_details も openZipSingleReport へ分岐
+- これにより4カードすべてが実接続済みになった
+
+openZipSingleReport(type)
+- 既存の汎用処理をそのまま利用
+- multiState.rows[type] / multiState.files[type] を buildSingleStateAndRender へ渡す
+
+buildSingleStateAndRender(args)
+- 既存処理を変更せず利用
+
+machineCostRaw(row)
+- 変更なし
+
+computeMachineChecks(rows)
+- 変更なし
+```
+
+### 19.5 machine_details 表示確認
+
+```text
+ZIP由来 machine_details 単体ビューで、既存単体CSVビューの重機台帳表示を再利用した。
+工事別原価への重機費連携は今回の対象外であり、集計ロジックの意味変更は行っていない。
+```
+
+確認結果：
+
+```text
+テストCSVで以下を確認した。
+- 重機一覧表示OK
+- ユンボ表示OK
+- ダンプ表示OK
+- 月額120,000表示OK
+- 所有/リース別集計OK
+- active / ownership 表示OK
+- 確認リスト表示OK
+- dashboard / 一覧 / 集計 / 確認リストでNaNなし
+```
+
+### 19.6 0件CSVの正常表示
+
+```text
+0件 machine_details CSVでも、errors空・正常表示・NaNなしを確認した。
+```
+
+確認結果：
+
+```text
+- 0件でも errors空
+- 初期ページ dashboard が正常表示
+- 重機一覧でNaNなし
+- 確認リストでNaNなし
+- 読込元「ZIP内 machine_details.csv」表示OK
+```
+
+### 19.7 戻る導線
+
+```text
+ZIP由来 machine_details 単体ビューでも、既存の #zipSingleBack を使用。
+「← 帳票選択メニューに戻る」からメニューへ復帰する。
+読込元「ZIP内 machine_details.csv」と対象期間を表示する。
+単体ビュー内の重機各ページのページ切替とは別導線として扱う。
+```
+
+### 19.8 4カード全接続
+
+```text
+Phase 2-4-9-2-f により、帳票選択メニューの4カードすべてがZIP由来単体ビューへ接続済みになった。
+```
+
+接続済み：
+
+```text
+- projects_summary：工事一覧・原価概要
+- attendance_details：日報・労務費
+- project_cost_details：請求書費用
+- machine_details：重機台帳
+```
+
+### 19.9 回帰確認結果
+
+```text
+jsdomで実HTML＋実コードをヘッドレス実行し、全40項目PASS。
+
+確認内容：
+- ZIP読込状態を loadMultiSlotFromText + finalizeMulti で再現
+- 重機台帳カード「開く」からZIP由来 machine_details 単体ビュー表示OK
+- 読込元「ZIP内 machine_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 重機一覧表示OK
+- 所有/リース別集計OK
+- 月額表示OK
+- 確認リストOK
+- active / ownership 表示OK
+- 0件CSVでも正常表示OK
+- 帳票選択メニューに戻るOK
+- 戻った後もZIP読込状態保持OK
+- projects_summary / attendance_details / project_cost_details の接続済み状態も維持
+- 4カードすべて実接続済みOK
+- 個別CSV読込回帰OK
+- ZIP由来単体表示と個別CSV読込が混同しないことOK
+- NaNなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 19.10 未実装
+
+```text
+- ZIP由来単体ビューのPDF保存ボタン
+- 月次チェック・差異確認の内部名称整理
+- 個別CSV読込の折りたたみ化
+- 重機費の工事別原価連携
+```
+
+次フェーズ：
+
+```text
+Phase 2-4-9-2-g：全帳票回帰確認
+```

@@ -2116,6 +2116,33 @@ Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整
 Phase 2-4-9-5：印刷・PDF保存導線の整備
 ```
 
+#### Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §24。
+
+**記録内容：**
+
+- 実装コミット：`8ca17e0 Clarify ZIP single report header details`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- ZIP由来単体ビューの上部情報を分かりやすく整理。
+- 表示内容を「ZIP内CSVを単体ビューで確認中」「帳票」「読込元」「対象期間」の4行構成に変更。
+- 帳票名は `MULTI_MENU_CARDS` の title と統一。
+- 読込元は「ZIP内 xxx.csv」として表示。
+- 対象期間は `periodLabel` を表示。
+- 戻るボタン「← 帳票選択メニューに戻る」は既存のまま維持。
+- 個別CSV読込由来の単体ビューは変更なし。
+- file読込時の `zipSingleBack` 非表示を維持。
+- `openMultiReport` / `buildSingleStateAndRender` / CSV解析 / 集計ロジックは無変更。
+- 4帳票すべてで表示確認済み。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-5：印刷・PDF保存導線の整備
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

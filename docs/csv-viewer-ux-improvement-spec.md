@@ -1824,3 +1824,90 @@ local-viewers/csv-viewer.html のみ
 jsdomで実HTML＋実コードをヘッドレス実行し、全35項目PASS。
 初期折りたたみ、開閉、aria-expanded、個別4種CSV読込、ZIPメニュー、4カード、月次チェック、NaNなし、Console重大エラーなしを確認。
 ```
+
+## 24. Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整 実装結果
+
+### 24.1 実装コミット
+
+```text
+8ca17e0 Clarify ZIP single report header details
+```
+
+### 24.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 24.3 実装目的
+
+ZIP読込後に4帳票を単体CSVビューで開いたとき、今どの帳票を見ているか、ZIP由来の表示であること、読込元CSV、対象期間、帳票選択メニューへの戻り導線を分かりやすくする。
+
+### 24.4 表示内容
+
+ZIP由来単体ビューでは、`#zipSingleSource` に以下を表示する。
+
+```text
+- ZIP内CSVを単体ビューで確認中
+- 帳票：<帳票名>
+- 読込元：ZIP内 <fileName>
+- 対象期間：<periodLabel>
+```
+
+### 24.5 対象帳票
+
+```text
+- projects_summary：工事一覧・原価概要
+- attendance_details：日報・労務費
+- project_cost_details：請求書費用
+- machine_details：重機台帳
+```
+
+### 24.6 実装内容
+
+```text
+- openZipSingleReport(type) 内の ZIP由来単体ビュー用表示を調整
+- #zipSingleSource を clear() してから DOM API で再構築
+- 表示は textContent を使用
+- 帳票名は MULTI_MENU_CARDS の title と統一
+- 対象期間は multiState.package.periodLabel を使用
+- periodLabel がない場合は「—」を表示
+- 戻るボタン「← 帳票選択メニューに戻る」は既存のまま維持
+```
+
+### 24.7 変更しなかったもの
+
+```text
+- 個別CSV読込由来の単体ビュー
+- file読込時の zipSingleBack 非表示
+- openMultiReport
+- buildSingleStateAndRender
+- CSV解析処理
+- 集計ロジック
+- ZIP読込ロジック
+- 月次チェック・差異確認
+- PDF保存ボタン
+```
+
+### 24.8 回帰確認結果
+
+```text
+- 4帳票すべてで上部情報表示OK
+- 帳票名表示OK
+- 読込元「ZIP内 xxx.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 帳票選択メニューへ戻る導線OK
+- 戻った後も multiState.loaded 維持OK
+- 戻った後も rows 維持OK
+- 個別CSV読込エリアの折りたたみ維持OK
+- file読込時 zipSingleBack 非表示OK
+- 月次チェックへの影響なし
+- NaNなし
+- Console重大エラーなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 24.9 最終判定
+
+ZIP由来単体ビューと個別CSV読込由来の単体ビューの区別が分かりやすくなった。4帳票接続・集計・月次チェック・個別CSV読込への影響はない。

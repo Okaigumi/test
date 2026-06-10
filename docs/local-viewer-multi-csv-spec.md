@@ -886,6 +886,14 @@ ZIP由来単体ビュー接続方針：
 - `#multiLoadArea` は削除せず `#multiIndividualBody` 内へ移動し、既存の個別CSV読込機能を維持したまま、通常運用時には目立たせすぎない構成にした。
 - jsdom自動回帰で全35項目PASS。handleText 経路・集計は無変更。
 
+### ZIP由来単体ビュー上部情報の微調整 実装済み（Phase 2-4-9-3-c）
+
+実装コミット：`8ca17e0 Clarify ZIP single report header details`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §24。
+
+- ZIP由来単体ビューの `#zipSingleSource` 表示を整理した。4帳票すべてで「ZIP内CSVを単体ビューで確認中」「帳票」「読込元」「対象期間」を表示し、帳票選択メニューへの戻り導線を維持する。
+- 帳票名は `MULTI_MENU_CARDS` の title と統一。対象期間は `multiState.package.periodLabel` を表示。
+- `openMultiReport` / `buildSingleStateAndRender` / CSV解析 / 集計ロジックは無変更。jsdom確認済み。
+
 ---
 
 ## 12. MVP範囲

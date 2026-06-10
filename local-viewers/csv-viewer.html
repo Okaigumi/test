@@ -197,6 +197,11 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
     </aside>
 
     <main class="main">
+      <!-- ZIP由来単体ビュー用の戻る導線（個別file読込時は非表示。Phase 2-4-9-2-c） -->
+      <div id="zipSingleBack" class="no-print hidden" style="margin-bottom:14px;">
+        <button type="button" id="zipSingleBackBtn" class="back-btn" style="margin:0;">← 帳票選択メニューに戻る</button>
+        <div id="zipSingleSource" class="note" style="margin-top:6px;"></div>
+      </div>
       <!-- 帳票ヘッダ（印刷時も残す） -->
       <div class="report-header" id="reportHeader"></div>
       <!-- 画面用チップ（印刷時は非表示） -->
@@ -1703,6 +1708,8 @@ function buildSingleStateAndRender(args){
     reports:null,warnings:warnings,errors:errors,minDate:'',maxDate:'',generatedAt:nowStamp()};
   document.getElementById('preLoad').classList.add('hidden');
   document.getElementById('viewerBody').classList.remove('hidden');
+  // ZIP由来単体ビューの戻る導線は既定で隠す。ZIP経路（openZipSingleReport）でのみ後から表示する。
+  const _zsb=document.getElementById('zipSingleBack');if(_zsb)_zsb.classList.add('hidden');
 
   // 致命的エラーがある（種別未確定）場合はメッセージページへ。
   // 種別不明など headers が取得できているケースでは state.headers を保持する（旧 handleText 同等）。
@@ -1888,7 +1895,8 @@ function loadMultiSlotFromText(slotKey,fileName,text){
   // データ行 → オブジェクト配列
   const rows=matrixToRows(headers,matrix.slice(1));
   multiState.rows[slotKey]=rows;
-  multiState.files[slotKey]={fileName:fileName,csvType:detected.key,csvLabel:detected.label,rowCount:rows.length};
+  // headers も保持（ZIP由来単体ビュー表示で buildSingleStateAndRender に渡すため。0行CSVでも headers は得られる）
+  multiState.files[slotKey]={fileName:fileName,csvType:detected.key,csvLabel:detected.label,rowCount:rows.length,headers:headers};
   multiState.slotNotes[slotKey]={type:'ok',text:fileName+'：読み込み済み（'+rows.length+'行）'};
 }
 
@@ -2854,8 +2862,13 @@ function renderMultiMenu(){
   grid.appendChild(mc);
   area.appendChild(grid);
 }
-// 単体CSV帳票画面は次フェーズ（2-4-9-2）で表示対応予定。今回は準備中メッセージで止める。
+// 帳票カードの「開く」。projects_summary はZIP由来単体ビューへ実接続済み（Phase 2-4-9-2-c）。
+// 他種別（attendance_details / project_cost_details / machine_details）は次フェーズで対応予定のため準備中表示のまま。
 function openMultiReport(key,title){
+  if(key==='projects_summary'&&multiState.files[key]){
+    openZipSingleReport(key);
+    return;
+  }
   const msg=document.getElementById('multiMenuMsg');
   if(!msg)return;
   msg.style.display='';
@@ -2863,10 +2876,59 @@ function openMultiReport(key,title){
   if(msg.scrollIntoView)msg.scrollIntoView({block:'nearest'});
 }
 
+// ZIP由来の1CSVを、既存の単体CSVビュー（state＋renderAllPages）で表示する（Phase 2-4-9-2-c）。
+// multiState は保持したまま、state のみ当該CSVで上書きする。raw text は使わず multiState.rows / headers を流用。
+function openZipSingleReport(type){
+  const file=multiState.files[type];
+  if(!file)return; // 未読込（ボタンは disabled のはずだが念のため）
+  const rows=multiState.rows[type]||[];
+  const headers=Array.isArray(file.headers)?file.headers:[];
+
+  // 統合ビュー側の表示を隠し、単体ビュー（viewerBody）に切り替える
+  document.getElementById('multiBody').classList.add('hidden');
+  document.getElementById('multiDetailBody').classList.add('hidden');
+  const sec=document.getElementById('multiIntegratedSection');if(sec)sec.classList.add('hidden');
+
+  // ZIP由来は parse 済みなので、parse部を通さず描画部のみ呼ぶ。warnings/errors は付けない
+  // （ZIP読込時の検証は loadMultiSlotFromText 側で済んでおり、ここで二重生成しない）。
+  buildSingleStateAndRender({
+    fileName:file.fileName,
+    source:'zip',
+    csvType:file.csvType,
+    csvLabel:file.csvLabel,
+    headers:headers,
+    rows:rows,
+    warnings:[],
+    errors:[]
+  });
+
+  // ZIP由来用の戻る導線・読込元表示を出す（buildSingleStateAndRender で一旦隠した後に表示）
+  const back=document.getElementById('zipSingleBack');if(back)back.classList.remove('hidden');
+  const src=document.getElementById('zipSingleSource');
+  if(src){
+    const pkg=multiState.package;
+    const period=(pkg&&pkg.periodLabel)?pkg.periodLabel:'—';
+    src.textContent='読込元：ZIP内 '+(file.fileName||(type+'.csv'))+'　対象期間：'+period;
+  }
+  window.scrollTo(0,0);
+}
+
+// ZIP由来単体ビューから帳票選択メニューへ戻る（multiState は保持）。
+function backFromZipSingleToMenu(){
+  document.getElementById('viewerBody').classList.add('hidden');
+  const back=document.getElementById('zipSingleBack');if(back)back.classList.add('hidden');
+  showMultiMenu();
+}
+
 // データ変更時のホーム＝帳票選択メニューへ戻す（旧 showMultiHome の役割を踏襲）
 function showMultiHome(){
   document.getElementById('multiDetailBody').classList.add('hidden');
   const sec=document.getElementById('multiIntegratedSection');if(sec)sec.classList.add('hidden');
+  // ZIP由来単体ビュー（viewerBody）を表示中なら隠してメニューへ戻す
+  if(currentMode==='multi'){
+    document.getElementById('viewerBody').classList.add('hidden');
+    const _zsb=document.getElementById('zipSingleBack');if(_zsb)_zsb.classList.add('hidden');
+  }
   renderMultiMenu();
   const menu=document.getElementById('multiMenuCard');if(menu)menu.classList.toggle('hidden',!multiState.loaded);
   const msg=document.getElementById('multiMenuMsg');if(msg){msg.style.display='none';msg.textContent='';}
@@ -3099,6 +3161,8 @@ function setMode(mode){
   if(single){
     document.getElementById('multiBody').classList.add('hidden');
     document.getElementById('multiDetailBody').classList.add('hidden');
+    // 単体file読込モードへ切り替えたら、ZIP由来単体ビューの戻る導線は隠す
+    const _zsb=document.getElementById('zipSingleBack');if(_zsb)_zsb.classList.add('hidden');
     // 単体ビューの状態に応じて preLoad / viewerBody を復帰
     if(state.loaded){
       document.getElementById('preLoad').classList.add('hidden');
@@ -3127,6 +3191,8 @@ document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('s
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
 document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiIntegrated());
 document.getElementById('multiIntegratedBack').addEventListener('click',()=>showMultiMenu());
+// ZIP由来単体ビュー → 帳票選択メニューに戻る（Phase 2-4-9-2-c）
+document.getElementById('zipSingleBackBtn').addEventListener('click',()=>backFromZipSingleToMenu());
 
 // ===== CSV出力パッケージZIP読込の配線（inline onclick は使わない） =====
 document.getElementById('multiZipInput').addEventListener('change',handleMultiZipFileChange);

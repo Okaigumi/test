@@ -284,6 +284,11 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       </div>
 
       <div class="card">
+        <div class="card-title">確認リスト</div>
+        <div id="multiCrossArea"></div>
+      </div>
+
+      <div class="card">
         <div class="card-title">警告・エラー</div>
         <div id="multiMessagesArea"></div>
       </div>
@@ -302,6 +307,7 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       </div>
       <div class="card"><div class="card-title">工事概要</div><div id="multiDetailOverview"></div></div>
       <div class="card"><div class="card-title">工事別月別原価</div><div id="multiDetailCostMonthly"></div></div>
+      <div class="card"><div class="card-title">差異確認</div><div id="multiDetailRecon"></div></div>
       <div class="card"><div class="card-title">月別労務費</div><div id="multiDetailMonthly"></div></div>
       <div class="card"><div class="card-title">労務明細</div><div id="multiDetailRows"></div></div>
       <div class="card"><div class="card-title">月別請求書費用</div><div id="multiDetailInvoiceMonthly"></div></div>
@@ -1674,9 +1680,12 @@ const multiState={
     invoiceByProjectId:new Map(),       // project_id -> {amount,rowCount,invoiceCount,vendorCount,monthCount,material,subcontract,machine_lease,other,unknown}
     invoiceMonthlyByProjectId:new Map(),// project_id -> [{month,amount,material,subcontract,machine_lease,other,unknown,rowCount,vendorCount}]（月昇順）
     // Phase 2-4-7-4：労務費＋請求書費用を月キーで統合した月別原価
-    costMonthlyByProjectId:new Map()    // project_id -> [{month,labor_cost,material,subcontract,machine_lease,other,unknown,monthTotal,cumulative}]（月昇順）
+    costMonthlyByProjectId:new Map(),   // project_id -> [{month,labor_cost,material,subcontract,machine_lease,other,unknown,monthTotal,cumulative}]（月昇順）
+    // Phase 2-4-7-5：projects_summary とローカル再集計の差異確認
+    reconciliationByProjectId:new Map() // project_id -> {items:[{label,psRaw,localVal,loaded,diff,judge}],diffCount,unloadedCount,reasons:[]}
   },
   unknownCostCategories:[],     // project_cost_details に現れた未知の cost_category 値
+  crossChecks:[],               // Phase 2-4-7-5：複数CSV横断の確認リスト [{kind,target,detail,severity,action,projectId}]
   slotNotes:{                   // 各枠の読込結果メモ {type:'ok'|'warn'|'error',text}|null
     projects_summary:null,
     attendance_details:null,
@@ -1761,6 +1770,8 @@ function finalizeMulti(){
   buildMultiLaborSummaries();
   buildMultiInvoiceSummaries();
   buildMultiMonthlyCostSummaries();
+  buildMultiReconciliation();
+  buildMultiCrossChecks();
   multiState.loaded=!!multiState.files.projects_summary;
   recomputeMultiMessages();
   renderMultiView();
@@ -1966,6 +1977,119 @@ function buildMultiMonthlyCostSummaries(){
   multiState.summaries.costMonthlyByProjectId=result;
 }
 
+// projects_summary の集計値とローカル再集計値の差異確認（Phase 2-4-7-5）
+// 差異はエラーではなく「確認事項」。費目カバレッジ差により total_cost と不一致は設計上あり得る。
+// 外注費は projects_summary の invoice_subcontract_cost（請求書由来）と比較する
+// （subcontract_cost_total は日報由来を含むため、請求書明細のみの再集計とは一致しない）。
+function buildMultiReconciliation(){
+  const result=new Map();
+  const attLoaded=!!multiState.files.attendance_details;
+  const invLoaded=!!multiState.files.project_cost_details;
+
+  multiState.rows.projects_summary.forEach(prow=>{
+    const id=isBlankId(prow['project_id'])?'':String(prow['project_id']).trim();
+    if(id==='')return; // 空 project_id 工事は照合対象外（確認リストで別途）
+    const labor=multiState.summaries.laborByProjectId.get(id)||null;
+    const inv=multiState.summaries.invoiceByProjectId.get(id)||null;
+    const costArr=multiState.summaries.costMonthlyByProjectId.get(id)||[];
+    const localTotal=costArr.length?costArr[costArr.length-1].cumulative:0;
+
+    const items=[];
+    const mk=(label,psKey,localVal,loaded)=>{
+      const psRaw=prow[psKey];
+      const psHas=!isBlankId(psRaw);
+      let judge,diff;
+      if(!loaded){judge='未読込';diff=null;}
+      else if(!psHas){judge='対象外';diff=null;}
+      else{diff=toNumber(psRaw)-toNumber(localVal);judge=(diff===0)?'一致':'要確認';}
+      items.push({label:label,psRaw:psHas?psRaw:null,localVal:loaded?toNumber(localVal):null,loaded:loaded,diff:diff,judge:judge});
+    };
+    mk('労務費','labor_cost',labor?labor.labor_cost:0,attLoaded);
+    mk('材料費','material_cost',inv?inv.material:0,invLoaded);
+    mk('外注費（請求書由来）','invoice_subcontract_cost',inv?inv.subcontract:0,invLoaded);
+    mk('重機費/重機リース等','machine_cost',inv?inv.machine_lease:0,invLoaded);
+    mk('その他費用','other_cost',inv?inv.other:0,invLoaded);
+    mk('合計原価','total_cost',localTotal,attLoaded||invLoaded);
+
+    const diffCount=items.filter(it=>it.judge==='要確認').length;
+    const unloadedCount=items.filter(it=>it.judge==='未読込').length;
+
+    // 工事ごとに該当しそうな差異理由
+    const reasons=[];
+    if(!attLoaded)reasons.push('attendance_details 未読込');
+    if(!invLoaded)reasons.push('project_cost_details 未読込');
+    if(inv&&inv.unknown>0)reasons.push('unknown cost_category あり');
+    if(isBlankId(prow['contract_amount'])||toNumber(prow['contract_amount'])===0)reasons.push('請負金額未入力');
+    reasons.push('月別原価ビューに含まれない費目あり（ダンプ費・警備費・日報由来外注費・税区分等）');
+
+    result.set(id,{items:items,diffCount:diffCount,unloadedCount:unloadedCount,reasons:reasons});
+  });
+
+  multiState.summaries.reconciliationByProjectId=result;
+}
+
+// 複数CSV横断の確認リスト（Phase 2-4-7-5）
+// 未読込CSVに対する大量の誤警告を避けるため、該当チェックは読込時のみ実施し、
+// 未読込は「未読込」注記を各1件に留める。
+function buildMultiCrossChecks(){
+  const checks=[];
+  const psLoaded=!!multiState.files.projects_summary;
+  const attLoaded=!!multiState.files.attendance_details;
+  const invLoaded=!!multiState.files.project_cost_details;
+  const machineLoaded=!!multiState.files.machine_details;
+  const idx=multiState.indexes;
+  const add=(kind,target,detail,severity,action,projectId)=>{
+    checks.push({kind:kind,target:target,detail:detail,severity:severity,action:action,projectId:projectId||''});
+  };
+
+  if(psLoaded){
+    multiState.rows.projects_summary.forEach(prow=>{
+      const id=isBlankId(prow['project_id'])?'':String(prow['project_id']).trim();
+      const name=prow['site_name']||'(名称なし)';
+      if(id==='')return;
+      if(attLoaded){
+        const a=idx.attendanceByProjectId.get(id);
+        if(!a||a.length===0)add('労務明細なし',name,'projects_summary にあるが attendance_details に労務明細がありません。','確認','attendance_details の出力範囲を確認',id);
+      }
+      if(invLoaded){
+        const v=idx.invoicesByProjectId.get(id);
+        if(!v||v.length===0)add('請求書明細なし',name,'projects_summary にあるが project_cost_details に請求書明細がありません。','確認','project_cost_details の出力範囲を確認',id);
+      }
+      if(isBlankId(prow['contract_amount'])||toNumber(prow['contract_amount'])===0)
+        add('請負金額未入力',name,'請負金額が0または空です。','注意','請負金額を入力',id);
+      const rate=calcCostRate(prow['total_cost'],prow['contract_amount']);
+      if(rate!==null&&rate>=100)add('原価率100%以上',name,'合計原価が請負金額以上です（原価率 '+formatNumber(rate,1)+'%）。','注意','原価・請負金額を確認',id);
+    });
+    // attendance / invoice にあって projects_summary にない project_id
+    if(attLoaded){
+      idx.attendanceByProjectId.forEach((list,id)=>{
+        if(!idx.projectsById.has(id))add('未登録 project_id（労務）',id,'attendance_details にあるが projects_summary に存在しない project_id です。','確認','project_id を確認',id);
+      });
+    }
+    if(invLoaded){
+      idx.invoicesByProjectId.forEach((list,id)=>{
+        if(!idx.projectsById.has(id))add('未登録 project_id（請求書）',id,'project_cost_details にあるが projects_summary に存在しない project_id です。','確認','project_id を確認',id);
+      });
+    }
+  }
+  // project_id 空行（件数のみ・現場なし扱い）
+  if(attLoaded&&multiState.emptyProjectId.attendance>0)
+    add('project_id 空（労務）','attendance_details',multiState.emptyProjectId.attendance+' 件の労務明細に project_id がありません（現場なし日報）。','注意','現場紐付け／出力元を確認','');
+  if(invLoaded&&multiState.emptyProjectId.invoice>0)
+    add('project_id 空（請求書）','project_cost_details',multiState.emptyProjectId.invoice+' 件の請求書明細に project_id がありません（現場なし請求書）。','注意','現場紐付け／出力元を確認','');
+  // unknown cost_category
+  if(invLoaded&&multiState.unknownCostCategories.length>0)
+    add('unknown cost_category','project_cost_details','未知の cost_category があります（'+multiState.unknownCostCategories.join(' / ')+'）。月別原価の月合計には含めていません。','確認','費目分類を確認','');
+  // machine_details は工事別月別原価に未反映（恒常的な参考注記）
+  if(machineLoaded)
+    add('重機台帳 未反映','machine_details','machine_details は工事ID・日付・現場を持たないため、工事別月別原価には反映していません（MVP仕様）。','参考','MVP仕様上の未反映','');
+  // 未読込CSVの注記（大量誤警告を避けるため、各1件のみ）
+  if(psLoaded&&!attLoaded)add('未読込','attendance_details','attendance_details 未読込のため、労務明細有無の横断チェックは未実施です。','参考','必要なら attendance_details を読み込む','');
+  if(psLoaded&&!invLoaded)add('未読込','project_cost_details','project_cost_details 未読込のため、請求書明細有無の横断チェックは未実施です。','参考','必要なら project_cost_details を読み込む','');
+
+  multiState.crossChecks=checks;
+}
+
 // 警告・エラー配列を再計算（枠メモ＋派生警告を集約）
 function recomputeMultiMessages(){
   const warnings=[];
@@ -2012,7 +2136,41 @@ function renderMultiView(){
   renderMultiLoadArea();
   renderMultiStatus();
   renderMultiProjectList();
+  renderMultiCrossChecks();
   renderMultiMessages();
+}
+
+// 確認事項バッジ（過度な警告色は避ける：差異はエラーではなく確認事項）
+function reconBadge(label){
+  const map={'一致':'cr-normal','要確認':'cr-caution','対象外':'cr-normal','未読込':'cr-normal',
+             '確認':'cr-caution','注意':'cr-caution','参考':'cr-normal'};
+  const span=document.createElement('span');
+  span.className='cr-badge '+(map[label]||'cr-normal');
+  span.textContent=label;
+  return span;
+}
+
+// 横断確認リスト（種別 / 対象 / 内容 / 重要度 / 対応方針）
+function renderMultiCrossChecks(){
+  const area=document.getElementById('multiCrossArea');clear(area);
+  area.appendChild(noteEl('差異はエラーではなく確認事項です。月別原価ビューの合計は費目カバレッジ表に基づく算出可能費目の合計で、projects_summary.total_cost と一致しない場合があります。差異の詳細確認・運用判断はこの確認リストを起点に行います。'));
+  if(!multiState.files.projects_summary){
+    area.appendChild(noteEl('projects_summary.csv が未読込のため、確認リストを表示できません（必須CSV）。'));
+    return;
+  }
+  const checks=multiState.crossChecks;
+  if(checks.length===0){
+    area.appendChild(noteEl('確認事項はありません。'));
+    return;
+  }
+  const cols=[
+    {label:'種別',render:(td,r)=>{td.textContent=r.kind;}},
+    {label:'対象',render:(td,r)=>{td.textContent=textOr(r.target);}},
+    {label:'内容',render:(td,r)=>{td.textContent=r.detail;}},
+    {label:'重要度',render:(td,r)=>{td.appendChild(reconBadge(r.severity));}},
+    {label:'対応方針',render:(td,r)=>{td.textContent=r.action;}}
+  ];
+  renderSummaryTable(area,cols,checks);
 }
 
 // 4枠の読み込みUI
@@ -2117,6 +2275,15 @@ function renderMultiStatus(){
   addSummary(area,'月別原価対象月数',costLoaded?String(costMonthSet.size):'—');
   addSummary(area,'月別原価合計',yenOrDash(costLoaded,costTotal));
 
+  // 差異確認・確認リストの件数（Phase 2-4-7-5）。projects_summary 読込時のみ実数
+  const psLoaded=!!multiState.files.projects_summary;
+  let diffProjects=0;
+  multiState.summaries.reconciliationByProjectId.forEach(r=>{if(r.diffCount>0)diffProjects++;});
+  const crossN=multiState.crossChecks.length;
+  addSummary(area,'差異確認件数',psLoaded?String(diffProjects):'—');
+  addSummary(area,'横断確認件数',psLoaded?String(crossN):'—');
+  addSummary(area,'確認事項合計',psLoaded?String(diffProjects+crossN):'—');
+
   addSummary(area,'警告件数',String(multiState.warnings.length));
   addSummary(area,'エラー件数',String(multiState.errors.length));
 
@@ -2154,8 +2321,8 @@ function renderMultiProjectList(){
     area.appendChild(noteEl('請求書費用は project_cost_details.amount を project_id + invoice_date(月) で集計しています。費目別集計は cost_category に基づきます。'));
   }
   area.appendChild(noteEl('月別原価の月合計は、労務費・材料費・請求書由来外注費・請求書由来重機リース等・請求書由来その他費用の合計です。ダンプ費・警備費・日報由来外注費・machine_details 由来の台帳費・unknown cost_category は含みません。'));
-  area.appendChild(noteEl('月別原価合計は、projects_summary.total_cost と完全一致しない場合があります（差異確認は次フェーズ）。'));
-  area.appendChild(noteEl('工事名または「詳細」ボタンで、選択工事の工事別月別原価・月別労務費・労務明細・月別請求書費用・請求書明細を表示します。'));
+  area.appendChild(noteEl('月別原価合計は、projects_summary.total_cost と完全一致しない場合があります。差異は下の「確認リスト」と工事別の「差異確認」カードで確認事項として表示します（エラーではありません）。'));
+  area.appendChild(noteEl('工事名または「詳細」ボタンで、選択工事の工事別月別原価・差異確認・月別労務費・労務明細・月別請求書費用・請求書明細を表示します。'));
 
   const costLoaded=attLoaded||invLoaded;
   const sum=multiState.summaries.laborByProjectId;
@@ -2166,6 +2333,10 @@ function renderMultiProjectList(){
   const invoiceOf=row=>{const id=keyOf(row);return id?(invSum.get(id)||null):null;};
   const costOf=row=>{const id=keyOf(row);return id?(costSum.get(id)||null):null;};
   const costTotalOf=arr=>arr?arr.reduce((a,m)=>a+m.monthTotal,0):0;
+  const reconSum=multiState.summaries.reconciliationByProjectId;
+  const reconOf=row=>{const id=keyOf(row);return id?(reconSum.get(id)||null):null;};
+  const crossByProj=new Map();
+  multiState.crossChecks.forEach(c=>{if(c.projectId)crossByProj.set(c.projectId,(crossByProj.get(c.projectId)||0)+1);});
   const cols=[
     {label:'工事名',render:(td,row)=>{
       const btn=document.createElement('button');btn.className='link-btn';
@@ -2228,6 +2399,18 @@ function renderMultiProjectList(){
     {label:'月別原価合計',cls:'num',render:(td,row)=>{
       if(!costLoaded){td.textContent='—';return;}
       td.textContent=formatMoney(costTotalOf(costOf(row)));
+    }},
+    {label:'差異確認',render:(td,row)=>{
+      const r=reconOf(row);
+      if(!r){td.textContent='—';return;}
+      if(r.diffCount>0){td.appendChild(reconBadge('要確認'));td.appendChild(document.createTextNode(' '+r.diffCount+'件'));}
+      else if(r.unloadedCount>0){td.appendChild(reconBadge('未読込'));td.appendChild(document.createTextNode('あり'));}
+      else{td.appendChild(reconBadge('一致'));td.appendChild(document.createTextNode(' 差異なし'));}
+    }},
+    {label:'確認事項',cls:'num',render:(td,row)=>{
+      const r=reconOf(row);const id=keyOf(row);
+      const n=(r?r.diffCount:0)+(id?(crossByProj.get(id)||0):0);
+      td.textContent=String(n);
     }},
     {label:'詳細',cls:'no-print',render:(td,row)=>{
       const btn=document.createElement('button');btn.className='back-btn';btn.style.margin='0';
@@ -2298,8 +2481,8 @@ function renderMultiLaborDetail(projectKey){
     add('月別原価対象月数',costLoaded?String(costArr.length):'—');
     add('月別原価累計最終値',costLoaded?(formatMoney(costLast)+' 円'):'—');
     ov.appendChild(dl);
-    ov.appendChild(noteEl('差額は参考表示です。差異確認の本実装は Phase 2-4-7-5 で行うため、ここでは警告扱いにしません。'));
-    ov.appendChild(noteEl('この月別原価合計は、projects_summary.total_cost と一致しない場合があります（費目カバレッジ差。差異確認は Phase 2-4-7-5）。'));
+    ov.appendChild(noteEl('差額・差異はエラーではなく確認事項です。費目別・合計の差異確認は下の「差異確認」カードを参照してください。'));
+    ov.appendChild(noteEl('この月別原価合計は、projects_summary.total_cost と一致しない場合があります（費目カバレッジ差）。'));
   }
 
   // 工事別月別原価（労務費＋請求書費用を月キーで統合・月合計＝算出可能費目のみ）
@@ -2308,7 +2491,7 @@ function renderMultiLaborDetail(projectKey){
     carea.appendChild(noteEl('attendance_details.csv / project_cost_details.csv がいずれも未読込のため、工事別月別原価を表示できません。'));
   }else{
     carea.appendChild(noteEl('月合計＝労務費＋材料費＋外注費＋重機リース等＋その他費用（いずれも算出可能費目のみ）。ダンプ費・警備費・日報由来外注費・machine_details 由来の台帳費・未分類(unknown)は月合計に含めません。'));
-    carea.appendChild(noteEl('projects_summary.total_cost との差異確認は次フェーズ（2-4-7-5）で扱います。'));
+    carea.appendChild(noteEl('projects_summary.total_cost との差異は、下の「差異確認」カードで確認事項として表示します。'));
     if(!attLoaded)carea.appendChild(noteEl('attendance_details.csv 未読込のため、労務費列は0です。'));
     if(!invLoaded)carea.appendChild(noteEl('project_cost_details.csv 未読込のため、費目別費用列は0です。'));
     const arr=id?(multiState.summaries.costMonthlyByProjectId.get(id)||[]):[];
@@ -2328,6 +2511,28 @@ function renderMultiLaborDetail(projectKey){
       ];
       renderSummaryTable(carea,cols,arr);
     }
+  }
+
+  // 差異確認（projects_summary 集計値 vs ローカル再集計値・確認事項）
+  const rcarea=document.getElementById('multiDetailRecon');clear(rcarea);
+  rcarea.appendChild(noteEl('差異はエラーではなく確認事項です。projects_summary 側の集計値と、CSVからのローカル再集計値を比較しています。'));
+  rcarea.appendChild(noteEl('合計原価は、月別原価ビュー（算出可能費目のみ）の累計最終値と比較します。ダンプ費・警備費・日報由来外注費・machine_details 由来の台帳費・unknown は含まないため、projects_summary.total_cost と一致しないことは設計上あり得ます。'));
+  const recon=prow?multiState.summaries.reconciliationByProjectId.get(id):null;
+  if(!prow){
+    rcarea.appendChild(noteEl('対象工事が特定できないため、差異確認を表示できません。'));
+  }else if(!recon){
+    rcarea.appendChild(noteEl('差異確認データがありません。'));
+  }else{
+    const cols=[
+      {label:'項目',render:(td,it)=>{td.textContent=it.label;}},
+      {label:'projects_summary',cls:'num',render:(td,it)=>{td.textContent=(it.psRaw===null||it.psRaw===undefined)?'—':formatMoney(it.psRaw);}},
+      {label:'ローカル再集計',cls:'num',render:(td,it)=>{td.textContent=(it.localVal===null)?'—':formatMoney(it.localVal);}},
+      {label:'差異',cls:'num',render:(td,it)=>{td.textContent=(it.diff===null)?'—':formatMoney(it.diff);}},
+      {label:'判定',render:(td,it)=>{td.appendChild(reconBadge(it.judge));}}
+    ];
+    renderSummaryTable(rcarea,cols,recon.items);
+    rcarea.appendChild(noteEl('該当しそうな理由：'+recon.reasons.join('、')));
+    rcarea.appendChild(noteEl('外注費は projects_summary.invoice_subcontract_cost（請求書由来）と比較しています。subcontract_cost_total は日報由来外注費を含むため、請求書明細のみの再集計とは一致しません。'));
   }
 
   // 月別労務費

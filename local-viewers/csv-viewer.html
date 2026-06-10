@@ -124,6 +124,9 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .menu-card-zeronote{font-size:11px;color:#9a5b00;margin-bottom:10px;}
 .menu-card .back-btn{margin:auto 0 0;align-self:flex-start;}
 .menu-card-check{border-color:var(--accent-bg);background:var(--accent-bg);}
+.menu-section{margin-top:18px;}
+.menu-section-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+.menu-section-desc{font-size:12px;color:var(--muted);margin-bottom:4px;}
 
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
@@ -2809,10 +2812,10 @@ function renderMultiProjectList(){
 // ===== 帳票選択メニュー（Phase 2-4-9-1） =====
 // ZIP読込後の「ホーム」。各帳票カードと「月次チェック・差異確認」への導線を表示する。
 const MULTI_MENU_CARDS=[
-  {key:'projects_summary',title:'工事一覧・原価概要',file:'projects_summary.csv',countLabel:'工事件数',desc:'請負金額・原価・利益率を確認します。'},
-  {key:'attendance_details',title:'日報・労務費',file:'attendance_details.csv',countLabel:'労務明細',desc:'社員別・工事別・月別の労務費を確認します。'},
-  {key:'project_cost_details',title:'請求書費用',file:'project_cost_details.csv',countLabel:'請求書明細',desc:'材料費・外注費・重機リース等を確認します。'},
-  {key:'machine_details',title:'重機台帳',file:'machine_details.csv',countLabel:'重機台帳',desc:'所有・リース・月額・稼働状態を確認します。'}
+  {key:'projects_summary',title:'工事一覧・原価概要',file:'projects_summary.csv',countLabel:'工事件数',desc:'工事別の請負金額・原価・粗利を確認します。'},
+  {key:'attendance_details',title:'日報・労務費',file:'attendance_details.csv',countLabel:'労務明細',desc:'日報・労務費を月別・従業員別に確認します。'},
+  {key:'project_cost_details',title:'請求書費用',file:'project_cost_details.csv',countLabel:'請求書明細',desc:'請求書明細を業者別・工事別・費目別に確認します。'},
+  {key:'machine_details',title:'重機台帳',file:'machine_details.csv',countLabel:'重機台帳',desc:'重機一覧、所有・リース、月額を確認します。'}
 ];
 // CSV由来値（行数・期間・ファイル名）は textContent / DOM API で描画（innerHTML は使わない）
 function renderMultiMenu(){
@@ -2821,7 +2824,7 @@ function renderMultiMenu(){
   clear(area);
   const pkg=multiState.package;
   const intro=document.createElement('div');intro.className='menu-intro';
-  intro.textContent='CSV一式ZIPを読み込みました。どの画面を見ますか？';
+  intro.textContent='確認したい帳票を選んでください。通常は4つの個別帳票で内容を確認し、最後に「月次チェック・差異確認」で全体の違和感を確認します。';
   area.appendChild(intro);
   if(pkg&&(pkg.periodLabel||pkg.exportedAt||pkg.fileName)){
     const dl=document.createElement('dl');dl.className='kv-list';
@@ -2831,6 +2834,10 @@ function renderMultiMenu(){
     if(pkg.fileName)add('ZIPファイル',pkg.fileName);
     area.appendChild(dl);
   }
+  // 個別帳票セクション（4帳票）
+  const indivSec=document.createElement('div');indivSec.className='menu-section';
+  const indivTitle=document.createElement('div');indivTitle.className='menu-section-title';indivTitle.textContent='個別帳票を確認';indivSec.appendChild(indivTitle);
+  const indivDesc=document.createElement('div');indivDesc.className='menu-section-desc';indivDesc.textContent='各CSVを見やすい単体ビューで確認します。';indivSec.appendChild(indivDesc);
   const grid=document.createElement('div');grid.className='menu-grid';
   MULTI_MENU_CARDS.forEach(c=>{
     const loaded=!!multiState.files[c.key];
@@ -2853,16 +2860,23 @@ function renderMultiMenu(){
     card.appendChild(btn);
     grid.appendChild(card);
   });
-  // 月次チェック・差異確認カード（旧：複数CSV統合ビュー）
+  indivSec.appendChild(grid);
+  area.appendChild(indivSec);
+  // 横断チェックセクション（月次チェック・差異確認＝旧：複数CSV統合ビュー）
+  const crossSec=document.createElement('div');crossSec.className='menu-section';
+  const crossTitle=document.createElement('div');crossTitle.className='menu-section-title';crossTitle.textContent='横断チェック';crossSec.appendChild(crossTitle);
+  const crossDesc=document.createElement('div');crossDesc.className='menu-section-desc';crossDesc.textContent='4帳票をまとめて、確認事項・差異・違和感を確認します。';crossSec.appendChild(crossDesc);
+  const crossGrid=document.createElement('div');crossGrid.className='menu-grid';
   const mc=document.createElement('div');mc.className='menu-card menu-card-check';
   const mt=document.createElement('div');mt.className='menu-card-title';mt.textContent='月次チェック・差異確認';mc.appendChild(mt);
   const md=document.createElement('div');md.className='menu-card-desc';
-  md.textContent='4CSVを工事別にまとめて確認します。差異確認・確認リスト・月別原価を確認します。';mc.appendChild(md);
+  md.textContent='4帳票をまとめて、確認事項・差異・違和感を確認します。';mc.appendChild(md);
   const mb=document.createElement('button');mb.type='button';mb.className='back-btn';mb.textContent='開く';
   mb.addEventListener('click',()=>showMultiIntegrated());
   mc.appendChild(mb);
-  grid.appendChild(mc);
-  area.appendChild(grid);
+  crossGrid.appendChild(mc);
+  crossSec.appendChild(crossGrid);
+  area.appendChild(crossSec);
 }
 // 帳票カードの「開く」。4カード（projects_summary 2-4-9-2-c / attendance_details 2-4-9-2-d /
 // project_cost_details 2-4-9-2-e / machine_details 2-4-9-2-f）すべてZIP由来単体ビューへ実接続済み。

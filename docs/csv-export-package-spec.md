@@ -642,3 +642,31 @@ ZIP出力ボタン付近の説明：
 - 個別CSV出力は削除しない
 - ZIP出力実装コミットとビューアーZIP読込実装コミットは分ける
 - ZIP出力後、ローカルCSVビューアーで読み込めることを確認する
+
+---
+
+## 15. 実装済み機能：Phase 2-4-8-4（管理コンソール ZIP出力実装）
+
+実装コミット：`11b01aa Add admin CSV ZIP export`（対象：`admin-app.html`）
+
+- 管理コンソールにZIP出力UIを実装。
+- 開始年月・終了年月は `<input type="month">`。
+- 個別CSV出力は詳細・予備として残す。
+- JSZipは `vendor/jszip/jszip.min.js` をローカル参照。外部CDN不使用。
+- 4CSVと `manifest.json` をZIPに格納。
+- 既存RPCと既存CSV列定義を再利用（新規RPCなし）。
+- ZIPファイル名は `okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip`。
+- `manifest.json` は §5 仕様通り生成。
+- 管理コンソール側では、終了年月を月末日に変換して既存RPCへ渡す。
+  - 理由：既存RPCの `date_to_input` が inclusive 比較で使われる想定に合わせるため。
+- ZIP出力実装は完了。ビューアー側ZIP読込は未実装。
+
+### 設計上の注意（Phase 2-4-8-4 時点）
+
+```text
+CSV出力パッケージの利用者向け期間指定は年月粒度で統一する。
+
+管理コンソール実装では、既存RPC仕様に合わせ、開始年月は月初日、終了年月は月末日に変換してRPCへ渡す。
+
+manifest.json とZIPファイル名には年月情報のみを保持し、日付粒度の操作を利用者に見せない。
+```

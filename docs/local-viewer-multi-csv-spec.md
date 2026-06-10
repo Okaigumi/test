@@ -724,6 +724,7 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - ZIP読込の実装時は、ローカル同梱した JSZip（同梱済み：`vendor/jszip/jszip.min.js`・v3.10.1）を使う予定。**外部CDNは使わず、`file://` 動作を維持する。** ライブラリ方針は `docs/csv-export-package-spec.md` §13 に従う。
 - ZIP読込UI・読み込みロジックは次フェーズ以降（2-4-8-5〜）で実装する。ZIP読込後は既存の複数CSV統合処理を再利用する。
 - 管理コンソールのZIP出力UI（`docs/csv-export-package-spec.md` §14）は、ローカルCSVビューアーのZIP読込を前提としたパッケージ（4CSV＋manifest.json）を生成する。ビューアー側は `manifest.json` の `files[].type` をCSV種別判定に使う。
+- **管理コンソール側のZIP出力は実装済み**（Phase 2-4-8-4・`admin-app.html`）。**ローカルCSVビューアー側のZIP読込は未実装。** 次フェーズ以降（2-4-8-5/2-4-8-6）で、管理コンソールのZIPを読み込むUIと処理を追加する。
 
 ---
 

@@ -1274,7 +1274,86 @@ subcontractRows = 0
 
 - Phase 2-4-8-4：管理コンソール ZIP出力実装
 
-**実装状況：Phase 2-4-8 は 2-4-8-3（管理コンソール ZIP出力UI設計）まで完了。2-4-8-4 以降は未着手。`admin-app.html` 変更・ZIP出力/読込実装は未着手。**
+#### Phase 2-4-8-4：管理コンソール ZIP出力実装（完了）
+
+- 実装コミット：`11b01aa Add admin CSV ZIP export`
+- 対象ファイル：`admin-app.html`（このファイルのみ変更）
+- 設計ドキュメント：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md) §14
+
+**実装内容：**
+
+- 管理コンソールCSV出力ページに、年月指定UIと「CSV一式をZIPで出力（推奨）」ボタンを追加。
+- JSZipはローカル同梱ファイル（`vendor/jszip/jszip.min.js`）を参照。外部CDNは追加していない。
+- `service_role` 追加なし。inline `onclick` 追加なし（ボタンは id ＋ `addEventListener` で配線）。
+- 既存の個別CSV出力は削除せず、詳細・予備として残した。
+- 既存のCSV列仕様（`CSV_COLUMNS`）は変更していない。既存RPCを再利用し、新規RPCは作成していない。
+- SQL実行・DB変更なし。
+
+**追加UI：**
+
+- 開始年月 `<input type="month">` / 終了年月 `<input type="month">`
+- 「CSV一式をZIPで出力（推奨）」ボタン
+- 「個別CSV出力（詳細・予備）」見出し ＋ 用途注記
+
+**追加関数：**
+
+- `monthToStartDate` / `monthToEndDate` / `formatPeriodLabel` / `formatZipTimestamp` / `formatExportedAtJst` / `currentMonthStr` / `buildCsvText` / `exportCsvZip`
+
+**ZIP出力内容：** `projects_summary.csv` / `attendance_details.csv` / `project_cost_details.csv` / `machine_details.csv` / `manifest.json`
+
+**ZIPファイル名：** `okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip`
+
+**manifest.json：** `format_version` / `system` / `exported_at` / `period.from_month` / `period.to_month` / `period.granularity = month` / `period.label` / `files[].type` / `files[].name` / `files[].rows`
+
+**挙動：**
+
+- ZIP生成中はボタンを disabled にし、文言を「ZIP作成中...」へ変更。完了・失敗後にボタン状態を復元。
+- ZIP出力失敗時は個別CSV出力の利用を案内。
+- 生成ZIPはリポジトリに残さない。
+
+**年月指定の実装仕様：**
+
+```text
+利用者には年月のみ選ばせる。
+日付入力は出さない。
+
+開始年月は月初日へ変換する。
+例：2026-04 → 2026-04-01
+
+終了年月は、管理コンソールの既存RPCが date_to_input を inclusive 比較で扱う想定に合わせ、月末日へ変換して渡す。
+例：2026-06 → 2026-06-30
+
+manifest.json とZIPファイル名には年月粒度の from_month / to_month を記録する。
+```
+
+補足：設計上の「月初〜翌月初未満」という考え方は期間概念として維持するが、現行RPC呼び出しでは既存仕様に合わせて終了月の月末日を `date_to_input` に渡す。
+
+**実ブラウザ確認（OK）：**
+
+- 管理コンソール表示OK / CSV出力エリア表示OK
+- 開始年月 input type=month OK / 終了年月 input type=month OK
+- CSV一式をZIPで出力（推奨）ボタンOK / 個別CSV出力（詳細・予備）が残っていることOK
+- JSZip読込確認OK
+- 開始年月空・終了年月空・開始年月>終了年月のバリデーションOK（いずれも早期return）
+- ZIP生成OK / ZIPファイル名OK / ZIP内に4CSV＋manifest.json があることOK / manifest.json の内容OK
+- 個別CSV出力回帰OK / 既存CSV列仕様が壊れていないことOK
+- Console重大エラーなし / JS構文チェックOK
+
+**未実装（次フェーズ以降・未着手）：**
+
+- ローカルCSVビューアー側のZIP読込UI
+- ローカルCSVビューアー側のZIP読込実装
+- ZIP読込後のmanifest表示
+- ZIP読込後の複数CSV統合モード自動反映
+- 実ログイン環境での実データ最終確認
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-5：ローカルCSVビューアー ZIP読込UI設計
+- Phase 2-4-8-6：ローカルCSVビューアー ZIP読込実装
+- Phase 2-4-8-7：manifest.json 検証・表示対応
+
+**実装状況：Phase 2-4-8 は 2-4-8-4（管理コンソール ZIP出力実装）まで完了。2-4-8-5 以降は未着手。ローカルCSVビューアー側のZIP読込は未実装。**
 
 ## 保留・改善候補
 

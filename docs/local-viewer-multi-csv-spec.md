@@ -739,6 +739,31 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - ZIP読込ボタン・ファイル選択は印刷対象外、パッケージ情報は印刷対象にする。
 - 実装は次フェーズ以降（2-4-8-6〜）。本フェーズでは設計のみ。
 
+### 実装済み機能：Phase 2-4-8-6（CSV出力パッケージZIP読込実装）
+
+実装コミット：`c867027 Add viewer ZIP package import`（対象：`local-viewers/csv-viewer.html`）
+
+- ZIP読込実装済み。
+- JSZipは `../vendor/jszip/jszip.min.js` をローカル参照（外部CDN不使用・`file://` 維持）。
+- ZIP読込カードを複数CSV統合モード上部に追加。
+- 個別CSV読込は詳細・予備として残す。
+- `multiState.package` にパッケージ情報（ファイル名・出力日時・対象期間・format_version・system・manifest読込状態・ファイル一覧・警告/エラー）を保持。
+- CSV種別判定は manifest優先 → ファイル名 → CSVヘッダー（既存 `detectCsvType`）の順。
+- `loadMultiSlotFromText` によりZIP内CSVを既存スロットへ流し込む（既存 `loadMultiSlot` は非finalizeのコア `loadMultiSlotFromText` と薄いラッパにリファクタ）。
+- ZIP読込時は既存の複数CSV状態を一旦クリアし、ZIP内CSVで置換（古いCSVとの混在防止）。
+- 全CSV流し込み後に既存 `finalizeMulti()` を1回実行。
+- 既存の労務費統合・請求書費用統合・月別原価・差異確認・確認リスト・印刷UIを再利用。
+- CSV列仕様や集計ロジックは変更しない。
+- CSV由来値は `textContent` / DOM API で描画。inline `onclick` は追加なし。Supabase接続情報・service_role は追加なし。
+- 印刷時はパッケージ情報を残し、ZIPファイル選択・読込・クリアボタンは印刷対象外。
+
+#### 設計上の注意（Phase 2-4-8-6 時点）
+
+- ZIP読込は、既存の複数CSV統合処理への入力導線であり、集計ロジックそのものは変更しない。
+- CSV列仕様は個別CSV読込と同一。
+- ZIP読込後も個別CSV読込を予備導線として残す。
+- `manifest.json` はCSV種別判定とパッケージ情報表示に使うが、manifestがない場合もファイル名・CSVヘッダー判定で可能な範囲で読み込む。
+
 ---
 
 ## 12. MVP範囲

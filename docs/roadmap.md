@@ -1379,7 +1379,154 @@ manifest.json とZIPファイル名には年月粒度の from_month / to_month �
 
 - Phase 2-4-8-6：ローカルCSVビューアー ZIP読込実装
 
-**実装状況：Phase 2-4-8 は 2-4-8-5（ローカルCSVビューアー ZIP読込UI設計）まで完了。2-4-8-6 以降は未着手。ローカルCSVビューアー側のZIP読込は未実装。**
+#### Phase 2-4-8-6：ローカルCSVビューアー ZIP読込実装（完了）
+
+- 実装コミット：`c867027 Add viewer ZIP package import`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+
+**実装内容：**
+
+- ローカルCSVビューアーの複数CSV統合モードに、CSV出力パッケージZIP読込機能を追加
+- JSZipはローカル同梱ファイルを参照（`../vendor/jszip/jszip.min.js`）
+- 外部CDNは追加していない
+- Supabase接続情報・service_role は追加していない
+- inline `onclick` は追加していない
+- ZIP読込はローカルブラウザ内で完結
+- CSV由来値は `textContent` / DOM API で描画
+- 既存の個別CSV読込は「詳細・予備」として残した
+- ZIP読込は、既存の複数CSV統合処理への入口として実装
+- 集計ロジック・CSV列仕様は変更していない
+- ZIP読込時は既存の複数CSV状態を一旦クリアし、ZIP内CSVで置換する
+- 古い個別CSVと新しいZIP内CSVの混在を防ぐ設計
+
+**追加UI：**
+
+- 「CSV出力パッケージZIPを読み込む（推奨）」カード
+- ZIPファイル選択
+- 選択中ファイル名表示
+- ZIPを読み込むボタン
+- クリアボタン
+- 状態メッセージ
+- パッケージ情報表示
+- ZIP内ファイル一覧
+- 個別CSV読込（詳細・予備）見出し
+- 個別CSV読込の注記
+
+**追加・変更した主な関数：**
+
+- `emptyMultiPackage`
+- `zipBaseName`
+- `isIgnoredZipEntry`
+- `parseZipManifest`
+- `buildZipManifestTypeMap`
+- `detectZipEntryCsvType`
+- `headerCsvTypeOf`
+- `setMultiZipStatus`
+- `handleMultiZipFileChange`
+- `loadMultiZipPackage`
+- `clearMultiZipPackage`
+- `renderMultiPackageInfo`
+- `loadMultiSlotFromText`
+- 既存の `loadMultiSlot` は、非finalizeのコア `loadMultiSlotFromText` と薄いラッパにリファクタした（個別CSV読込の挙動は維持）
+
+**ZIP読込ロジック：**
+
+- `JSZip.loadAsync(file)` でZIPを展開
+- `__MACOSX`、隠しファイル、フォルダは無視
+- manifest.json を探索・解析
+- manifest がある場合は `files[].type` をCSV種別判定に優先使用
+- manifest がない場合は警告を出し、ファイル名・CSVヘッダー判定にフォールバック
+- CSV種別判定順
+  1. manifest.json の `files[].type`
+  2. ファイル名
+  3. CSVヘッダー
+- 対象CSV
+  - `projects_summary`
+  - `attendance_details`
+  - `project_cost_details`
+  - `machine_details`
+- 各CSVを既存スロットへ流し込み
+- 最後に `finalizeMulti()` を1回実行
+- 既存の集計・描画処理を再利用
+
+**manifest.json の扱い：**
+
+- `exported_at`
+- `system`
+- `format_version`
+- `period.label`
+- `files[].type`
+- `files[].name`
+- `files[].rows`
+- manifest rows と実CSV rows の照合
+- 未対応 `format_version` は警告して続行
+- manifestなし・manifest解析エラーは警告し、フォールバック判定へ進む
+- パッケージ情報として、ファイル名・出力日時・対象期間・format_version・system・manifest読込状態を表示
+- ZIP内ファイル一覧として、type / name / manifest rows / 実CSV rows / 読込状態を表示
+
+**エラー・警告確認：**
+
+- ZIP読不可エラーOK
+- JSZip未読込エラーOK
+- projects_summaryなしZIPはエラーOK
+- manifestなしZIPは警告＋ファイル名判定OK
+- unknown CSV入りZIPは警告OK
+- 同一type重複は先頭採用＋警告OK
+- manifest rows不一致は警告OK
+- 0行CSVはrows 0扱い＋警告OK
+- 任意CSVなしは警告または未読込扱いOK
+
+**実ブラウザ確認（OK）：**
+
+- ローカルCSVビューアー表示OK
+- 複数CSV統合モード表示OK
+- ZIP読込カード表示OK
+- ZIPファイル選択OK
+- ZIP読込ボタンOK
+- クリアボタンOK
+- 個別CSV読込（詳細・予備）が残っていることOK
+- JSZip読込OK
+- 4CSV + manifest 自動読込OK
+- パッケージ情報表示OK
+- ZIP内ファイル一覧表示OK
+- 行数表示OK
+- 読み込み状況ダッシュボードOK
+- 簡易工事一覧OK
+- 確認リストOK
+- 工事選択OK
+- 工事別月別原価OK
+- 差異確認カードOK
+- 月別労務費OK
+- 月別請求書費用OK
+- 請求書明細OK
+- 労務明細OK
+- NaN表示なし
+- Console重大エラーなし
+- JS構文チェックOK
+- 個別CSV読込回帰OK
+- 単体CSVモード回帰OK
+
+**印刷/PDF確認（OK）：**
+
+- ZIP読込後の統合ビュー印刷OK
+- パッケージ情報が印刷対象に含まれることOK
+- ZIPファイル選択・読込ボタン・クリアボタンは印刷対象外OK
+- 確認リスト・差異確認・月別原価の既存印刷レイアウト維持OK
+
+**未実装（次フェーズ以降・未着手）：**
+
+- manifest.json 検証・表示のさらなる強化
+- 管理コンソールで出力した実ZIPを使った実ログイン環境での通し確認
+- 運用手順整理
+- pCloud / NAS への保存運用手順化
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-7：manifest.json 検証・表示対応
+- Phase 2-4-8-8：管理コンソールZIPとビューアーZIP読込の結合確認
+- Phase 2-4-8-9：docs・運用手順整理
+
+**実装状況：Phase 2-4-8 は 2-4-8-6（ローカルCSVビューアー ZIP読込実装）まで完了。管理コンソールZIP出力・ローカルCSVビューアーZIP読込ともに実装済み。2-4-8-7 以降（manifest検証強化・実ZIPによる結合確認・運用手順整理）は未着手。**
 
 ## 保留・改善候補
 

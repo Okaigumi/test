@@ -871,3 +871,35 @@ manifest の rows と実CSV行数が合わない
 2-4-8-8：manifest検証・パッケージ情報表示
 2-4-8-9：実ZIP結合確認・docs整理
 ```
+
+---
+
+## 17. 実装済み機能：Phase 2-4-8-6（ローカルCSVビューアー ZIP読込実装）
+
+実装コミット：`c867027 Add viewer ZIP package import`（対象：`local-viewers/csv-viewer.html`）
+
+- ローカルCSVビューアーにZIP読込機能を実装。
+- JSZipは `../vendor/jszip/jszip.min.js` をローカル参照（外部CDN不使用）。
+- ZIP読込UIを複数CSV統合モード上部に追加。
+- 個別CSV読込は詳細・予備として残す。
+- ZIP内CSVはmanifest優先でCSV種別判定。
+- manifestなしの場合はファイル名・CSVヘッダーでフォールバック。
+- 既存の `multiState` と集計・描画処理を再利用。
+- ZIP読込時は既存状態を置換し、古いCSVとの混在を防止。
+- パッケージ情報・ZIP内ファイル一覧を表示。
+- エラー・警告表示を実装。
+- 印刷時はパッケージ情報を残し、ZIP操作UIは印刷対象外。
+- ZIP読込実装は完了。
+- 管理コンソールZIPとの実ログイン環境での実ZIPによる通し確認は次フェーズ以降。
+
+### 設計上の注意（Phase 2-4-8-6 時点）
+
+```text
+ZIP読込は、既存の複数CSV統合処理への入力導線であり、集計ロジックそのものは変更しない。
+
+CSV列仕様は個別CSV読込と同一である。
+
+ZIP読込後も個別CSV読込を予備導線として残す。
+
+manifest.json はCSV種別判定とパッケージ情報表示に使うが、manifestがない場合もファイル名・CSVヘッダー判定で可能な範囲で読み込む。
+```

@@ -2862,10 +2862,10 @@ function renderMultiMenu(){
   grid.appendChild(mc);
   area.appendChild(grid);
 }
-// 帳票カードの「開く」。projects_summary はZIP由来単体ビューへ実接続済み（Phase 2-4-9-2-c）。
-// 他種別（attendance_details / project_cost_details / machine_details）は次フェーズで対応予定のため準備中表示のまま。
+// 帳票カードの「開く」。projects_summary（2-4-9-2-c）/ attendance_details（2-4-9-2-d）はZIP由来単体ビューへ実接続済み。
+// 他種別（project_cost_details / machine_details）は次フェーズで対応予定のため準備中表示のまま。
 function openMultiReport(key,title){
-  if(key==='projects_summary'&&multiState.files[key]){
+  if((key==='projects_summary'||key==='attendance_details')&&multiState.files[key]){
     openZipSingleReport(key);
     return;
   }

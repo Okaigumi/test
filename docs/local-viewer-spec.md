@@ -19,6 +19,8 @@
 > **Phase 2-4-9-2-f（実装済み）**：ZIP読込後の帳票選択メニューから `machine_details` を既存単体CSVビュー形式で表示できるようにした（コミット `26d7a30`）。これにより projects_summary / attendance_details / project_cost_details / machine_details の4カードすべてが接続済みになった。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §19 を参照。
 >
 > **Phase 2-4-9-2-g（確認済み）**：ZIP読込後の4帳票単体ビュー接続について総合回帰確認を実施し、全90項目PASSを確認した。projects_summary / attendance_details / project_cost_details / machine_details の4カードすべてで、開く・表示・戻る・個別CSV読込非混同・NaNなしを確認済み。確認結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §20 を参照。
+>
+> **Phase 2-4-9-3（設計）**：4帳票接続完了後の実運用UXを整理する。通常運用はZIP読込を主導線とし、個別CSV読込は詳細・トラブル対応用として扱う。PDF保存ボタンは後続フェーズで整備予定。設計は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §21 を参照。
 
 ## 1. 目的
 

@@ -90,6 +90,7 @@ okaigumi-csv-export_202606-202606_20260610-1446.zip
 - Phase 2-4-9-2-d（コミット `c7b1cc4`）で、ZIP読込後の「日報・労務費」カードから ZIP内 `attendance_details.csv` を単体CSVビュー形式で表示できるようになった。`project_cost_details` / `machine_details` は次フェーズ以降で接続予定。
 - Phase 2-4-9-2-e（コミット `34d5d73`）で、ZIP読込後の「請求書費用」カードから ZIP内 `project_cost_details.csv` を単体CSVビュー形式で表示できるようになった。0件CSVでも正常表示する。`machine_details` は次フェーズで接続予定。
 - Phase 2-4-9-2-f（コミット `26d7a30`）で、ZIP読込後の「重機台帳」カードから ZIP内 `machine_details.csv` を単体CSVビュー形式で表示できるようになった。これにより帳票選択メニューの4カードすべてが接続済み。
+- Phase 2-4-9-2-g で、ZIP読込後の4帳票単体ビュー接続について総合回帰確認を実施し、全90項目PASSを確認した。これにより Phase 2-4-9-2 は完了。
 
 ## 4. 推奨フォルダ構成
 

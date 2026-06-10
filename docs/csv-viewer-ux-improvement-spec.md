@@ -1345,3 +1345,197 @@ jsdomで実HTML＋実コードをヘッドレス実行し、全40項目PASS。
 ```text
 Phase 2-4-9-2-g：全帳票回帰確認
 ```
+
+## 20. Phase 2-4-9-2-g：全帳票回帰確認 結果
+
+### 20.1 確認概要
+
+```text
+Phase 2-4-9-2-c〜f で接続した4帳票について、ZIP読込後の帳票選択メニューから単体CSVビューを開き、各ビュー・戻り導線・月次チェック・個別CSV読込回帰を総合確認した。
+```
+
+### 20.2 確認方法
+
+```text
+jsdomで local-viewers/csv-viewer.html の実HTML＋実コードをヘッドレス実行。
+ZIP読込状態は loadMultiSlotFromText + finalizeMulti で再現。
+periodLabel は 2026年6月分。
+データありZIP＋0件ZIPの2シナリオを連続実行。
+検証スクリプト・テストCSVはリポジトリ外の一時フォルダに作成し、実行後に削除した。
+```
+
+### 20.3 結果
+
+```text
+総合 jsdom 回帰：全90項目PASS
+PASS件数：90 pass / 0 fail
+EXIT 0
+```
+
+### 20.4 projects_summary 確認結果
+
+```text
+- 工事一覧・原価概要カード「開く」OK
+- ZIP由来 projects_summary 単体ビュー表示OK
+- 読込元「ZIP内 projects_summary.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 工事一覧表示OK
+- 年度別集計表示OK
+- 発注者別集計表示OK
+- 工事分類別集計表示OK
+- 工事詳細表示OK
+- 工事詳細→工事一覧戻りOK
+- 帳票選択メニュー戻りOK
+- 戻った後もZIP読込状態保持OK
+- NaNなし
+```
+
+### 20.5 attendance_details 確認結果
+
+```text
+- 日報・労務費カード「開く」OK
+- ZIP由来 attendance_details 単体ビュー表示OK
+- 読込元「ZIP内 attendance_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 月別サマリー表示OK
+- 従業員別サマリー表示OK
+- 全体サマリー表示OK
+- 社員別月別詳細表示OK
+- 社員別月別詳細→従業員別一覧戻りOK
+- 帳票選択メニュー戻りOK
+- NaNなし
+```
+
+report_id ピボット確認：
+
+```text
+- reports=2
+- R1 normal_mins=480
+- R1 overtime_mins=60
+- normal_mins / overtime_mins は複製を二重計上しない
+- labor_cost_total=60000
+- site 2件集約OK
+```
+
+### 20.6 project_cost_details 確認結果
+
+```text
+- 請求書費用カード「開く」OK
+- ZIP由来 project_cost_details 単体ビュー表示OK
+- 読込元「ZIP内 project_cost_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 請求書一覧表示OK
+- 業者別集計表示OK
+- 工事別集計表示OK
+- 月別集計表示OK
+- 費目別集計表示OK
+- 確認リスト表示OK
+- 帳票選択メニュー戻りOK
+- NaNなし
+```
+
+データありCSV確認：
+
+```text
+- invoice_date から minDate=2026-06-10 / maxDate=2026-06-25 推定OK
+```
+
+0件CSV確認：
+
+```text
+- 0件でも errors空
+- dashboard正常表示
+- 安心文言表示OK
+- 「この期間の請求書明細は0件です。対象期間に請求書登録がない場合は正常です。」表示OK
+- 確認リストが異常扱いになりすぎない
+- NaNなし
+```
+
+### 20.7 machine_details 確認結果
+
+```text
+- 重機台帳カード「開く」OK
+- ZIP由来 machine_details 単体ビュー表示OK
+- 読込元「ZIP内 machine_details.csv」表示OK
+- 対象期間「2026年6月分」表示OK
+- 重機一覧表示OK
+- ユンボ表示OK
+- 月額120,000表示OK
+- 所有/リース別集計表示OK
+- 確認リスト表示OK
+- active / ownership 表示OK
+- 帳票選択メニュー戻りOK
+- NaNなし
+```
+
+0件CSV確認：
+
+```text
+- 0件でも errors空
+- dashboard正常表示
+- 重機一覧・確認リストでNaNなし
+```
+
+### 20.8 月次チェック・差異確認
+
+```text
+- 月次チェック・差異確認カード「開く」OK
+- 簡易工事一覧表示OK
+- 確認リスト表示OK
+- 警告エラー表示OK
+- 工事詳細表示OK
+- 工事詳細の概要・差異確認描画OK
+- 工事詳細→月次チェック・差異確認戻りOK
+- 月次チェック・差異確認→帳票選択メニュー戻りOK
+- 4カード操作後でも問題なく開ける
+- 連続オープンで表示が混ざらない
+- NaNなし
+```
+
+### 20.9 戻り導線・状態保持
+
+```text
+- ZIP由来単体ビュー→帳票選択メニューOK
+- 工事詳細→工事一覧OK
+- 社員別月別詳細→従業員別一覧OK
+- 月次チェック・差異確認→帳票選択メニューOK
+- 月次チェック内工事詳細→月次チェック・差異確認OK
+- 戻った後も multiState.loaded 維持OK
+- 戻った後も各CSV rows 維持OK
+- 複数カードを連続して開いても表示が混ざらない
+```
+
+### 20.10 個別CSV読込回帰
+
+```text
+- 個別CSV projects_summary.csv 読込OK
+- 個別CSV attendance_details.csv 読込OK
+- 個別CSV project_cost_details.csv 読込OK
+- 個別CSV machine_details.csv 読込OK
+- file読込時に zipSingleBack 非表示OK
+- 単体file読込の初期表示OK
+- ZIP由来表示と個別CSV読込が混同しない
+- NaNなし
+```
+
+### 20.11 最終判定
+
+```text
+- NaN表示なし
+- Console重大エラーなし
+- git diff --check エラーなし
+- git status clean
+- SQL実行なし
+- DB変更なし
+- 実装変更なし
+- Phase 2-4-9-2「ZIP内CSVを単体CSVビューで表示」は完了
+```
+
+### 20.12 残課題
+
+```text
+- ZIP由来単体ビューのPDF保存ボタン本格整備
+- 月次チェック・差異確認の内部名称整理
+- 個別CSV読込の折りたたみ化
+- 重機費の工事別原価連携
+```

@@ -1991,6 +1991,45 @@ Phase 2-4-9-2-f：machine_details をZIP由来で単体ビュー表示
 Phase 2-4-9-2-g：全帳票回帰確認
 ```
 
+#### Phase 2-4-9-2-g：全帳票回帰確認（完了）
+
+- 確認対象：ZIP内CSVを単体CSVビューで表示する4帳票全体。
+- 実装変更なし。docs記録は本コミット。
+- 確認結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §20。
+
+**記録内容：**
+
+- jsdomで実HTML＋実コードをヘッドレス実行。
+- ZIP読込状態は `loadMultiSlotFromText` + `finalizeMulti` で再現。
+- periodLabel は 2026年6月分。
+- データありZIP＋0件ZIPの2シナリオを連続実行。
+- 総合 jsdom 回帰：全90項目PASS。
+- PASS件数：90 pass / 0 fail。
+- projects_summary：工事一覧・年度別・発注者別・分類別・工事詳細・戻り導線OK。
+- attendance_details：月別・従業員別・全体・社員別月別詳細・report_idピボット・二重計上防止OK。
+- project_cost_details：請求書一覧・業者別・工事別・月別・費目別・確認リスト・0件正常表示OK。
+- machine_details：重機一覧・所有/リース別集計・月額表示・確認リスト・0件正常表示OK。
+- 月次チェック・差異確認：確認リスト・警告エラー表示・工事詳細・戻り導線OK。
+- 個別CSV読込回帰：4帳票すべてOK。
+- ZIP由来単体表示と個別CSV読込が混同しないことを確認。
+- 4カード操作後でも月次チェック・差異確認を開けることを確認。
+- 戻った後も `multiState.loaded` と rows が保持されることを確認。
+- NaN表示なし。
+- Console重大エラーなし。
+- git status clean。
+- SQL実行・DB変更なし。
+- Phase 2-4-9-2「ZIP内CSVを単体CSVビューで表示」は完了。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-3：ZIP読込後UXの微調整
+または
+Phase 2-4-9-5：ZIP由来単体ビューのPDF保存ボタン本格整備
+```
+
+※ 現時点では、PDF保存ボタンは未実装のままでよい。
+
 ## 保留・改善候補
 
 - favicon.ico 追加

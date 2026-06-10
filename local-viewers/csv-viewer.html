@@ -291,18 +291,20 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   </div>
 </div>
 
-<!-- 複数CSV統合：工事別 労務費詳細（Phase 2-4-7-2） -->
+<!-- 複数CSV統合：工事別 原価詳細（Phase 2-4-7-2 労務費 / 2-4-7-3 請求書費用） -->
 <div id="multiDetailBody" class="hidden">
   <div class="app">
     <main class="main">
       <button type="button" id="multiDetailBack" class="back-btn no-print">← 統合ビュー（工事一覧）に戻る</button>
       <div class="report-header">
-        <h1>工事別 労務費詳細</h1>
+        <h1>工事別 原価詳細</h1>
         <div class="rh-meta" id="multiDetailMeta"></div>
       </div>
       <div class="card"><div class="card-title">工事概要</div><div id="multiDetailOverview"></div></div>
       <div class="card"><div class="card-title">月別労務費</div><div id="multiDetailMonthly"></div></div>
       <div class="card"><div class="card-title">労務明細</div><div id="multiDetailRows"></div></div>
+      <div class="card"><div class="card-title">月別請求書費用</div><div id="multiDetailInvoiceMonthly"></div></div>
+      <div class="card"><div class="card-title">請求書明細</div><div id="multiDetailInvoiceRows"></div></div>
     </main>
   </div>
 </div>
@@ -1664,10 +1666,14 @@ const multiState={
     invoicesByProjectId:new Map(),  // project_id -> project_cost_details 行[]
     machinesById:new Map()          // machine_id -> machine_details 行
   },
-  summaries:{                   // 派生集計（Phase 2-4-7-2：労務費）
-    laborByProjectId:new Map(),        // project_id -> {labor_cost,labor_days,rowCount,reportCount,monthCount}
-    laborMonthlyByProjectId:new Map()  // project_id -> [{month,labor_cost,labor_days,reportCount,rowCount}]（月昇順）
+  summaries:{                   // 派生集計
+    laborByProjectId:new Map(),         // project_id -> {labor_cost,labor_days,rowCount,reportCount,monthCount}
+    laborMonthlyByProjectId:new Map(),  // project_id -> [{month,labor_cost,labor_days,reportCount,rowCount}]（月昇順）
+    // Phase 2-4-7-3：請求書費用
+    invoiceByProjectId:new Map(),       // project_id -> {amount,rowCount,invoiceCount,vendorCount,monthCount,material,subcontract,machine_lease,other,unknown}
+    invoiceMonthlyByProjectId:new Map() // project_id -> [{month,amount,material,subcontract,machine_lease,other,unknown,rowCount,vendorCount}]（月昇順）
   },
+  unknownCostCategories:[],     // project_cost_details に現れた未知の cost_category 値
   slotNotes:{                   // 各枠の読込結果メモ {type:'ok'|'warn'|'error',text}|null
     projects_summary:null,
     attendance_details:null,
@@ -1750,6 +1756,7 @@ function clearMultiSlot(slotKey){
 function finalizeMulti(){
   rebuildMultiIndexes();
   buildMultiLaborSummaries();
+  buildMultiInvoiceSummaries();
   multiState.loaded=!!multiState.files.projects_summary;
   recomputeMultiMessages();
   renderMultiView();
@@ -1849,6 +1856,67 @@ function buildMultiLaborSummaries(){
   multiState.summaries.laborMonthlyByProjectId=laborMonthlyByProjectId;
 }
 
+// 費目（cost_category）：既知カテゴリと日本語表示名
+const KNOWN_COST_CATS=['material','subcontract','machine_lease','other'];
+const COST_CAT_LABELS={material:'材料費',subcontract:'外注費',machine_lease:'重機リース等',other:'その他費用'};
+
+// 工事別・月別・費目別の請求書費用集計（project_cost_details.amount をSUM）
+// - project_id が空の行は集計対象外（rebuildMultiIndexes 側で警告計上済み）
+// - 月キーは invoice_date の YYYY-MM
+// - cost_category 別に amount をSUM（未知カテゴリは unknown バケットに退避し別途注記）
+// - 請求書件数は invoice_id のユニーク数、明細件数は行数、業者数は vendor_name のユニーク数
+function buildMultiInvoiceSummaries(){
+  const byProject=new Map();      // id -> {amount,rowCount,invoiceSet,vendorSet,monthSet,cat{}}
+  const byProjectMonth=new Map(); // id -> Map(ym -> {amount,rowCount,vendorSet,cat{}})
+  const unknownCats=new Set();
+  const newCat=()=>({material:0,subcontract:0,machine_lease:0,other:0,__unknown:0});
+
+  multiState.rows.project_cost_details.forEach((r,i)=>{
+    const id=isBlankId(r['project_id'])?'':String(r['project_id']).trim();
+    if(id==='')return; // 現場なし請求書は工事別集計に含めない
+    const dateStr=r['invoice_date']!==undefined?String(r['invoice_date']):'';
+    const ym=dateStr.length>=7?dateStr.slice(0,7):'(不明)';
+    const amt=toNumber(r['amount']);
+    const rawCat=isBlankId(r['cost_category'])?'other':String(r['cost_category']).trim();
+    const catKey=KNOWN_COST_CATS.indexOf(rawCat)>=0?rawCat:'__unknown';
+    if(catKey==='__unknown')unknownCats.add(rawCat);
+    const invId=(!isBlankId(r['invoice_id']))?String(r['invoice_id']).trim():('__row_'+i);
+    const vendor=isBlankId(r['vendor_name'])?'':String(r['vendor_name']).trim();
+
+    let p=byProject.get(id);
+    if(!p){p={amount:0,rowCount:0,invoiceSet:new Set(),vendorSet:new Set(),monthSet:new Set(),cat:newCat()};byProject.set(id,p);}
+    p.amount+=amt;p.rowCount+=1;p.invoiceSet.add(invId);if(vendor)p.vendorSet.add(vendor);p.monthSet.add(ym);p.cat[catKey]+=amt;
+
+    let mm=byProjectMonth.get(id);
+    if(!mm){mm=new Map();byProjectMonth.set(id,mm);}
+    let m=mm.get(ym);
+    if(!m){m={amount:0,rowCount:0,vendorSet:new Set(),cat:newCat()};mm.set(ym,m);}
+    m.amount+=amt;m.rowCount+=1;if(vendor)m.vendorSet.add(vendor);m.cat[catKey]+=amt;
+  });
+
+  const invoiceByProjectId=new Map();
+  byProject.forEach((v,id)=>{
+    invoiceByProjectId.set(id,{
+      amount:v.amount,rowCount:v.rowCount,invoiceCount:v.invoiceSet.size,vendorCount:v.vendorSet.size,monthCount:v.monthSet.size,
+      material:v.cat.material,subcontract:v.cat.subcontract,machine_lease:v.cat.machine_lease,other:v.cat.other,unknown:v.cat.__unknown
+    });
+  });
+
+  const invoiceMonthlyByProjectId=new Map();
+  byProjectMonth.forEach((mm,id)=>{
+    const arr=Array.from(mm.entries()).map(([ym,v])=>({
+      month:ym,amount:v.amount,rowCount:v.rowCount,vendorCount:v.vendorSet.size,
+      material:v.cat.material,subcontract:v.cat.subcontract,machine_lease:v.cat.machine_lease,other:v.cat.other,unknown:v.cat.__unknown
+    }));
+    arr.sort((a,b)=>a.month<b.month?-1:(a.month>b.month?1:0));
+    invoiceMonthlyByProjectId.set(id,arr);
+  });
+
+  multiState.summaries.invoiceByProjectId=invoiceByProjectId;
+  multiState.summaries.invoiceMonthlyByProjectId=invoiceMonthlyByProjectId;
+  multiState.unknownCostCategories=Array.from(unknownCats);
+}
+
 // 警告・エラー配列を再計算（枠メモ＋派生警告を集約）
 function recomputeMultiMessages(){
   const warnings=[];
@@ -1881,6 +1949,10 @@ function recomputeMultiMessages(){
     warnings.push('project_cost_details に project_id が空の行が'+multiState.emptyProjectId.invoice+'件あります（工事別には集計しません）。');
   if(multiState.dupProjectId>0)
     warnings.push('projects_summary に project_id が重複する行が'+multiState.dupProjectId+'件あります（最後の行を採用）。');
+
+  // 未知の cost_category（費目別集計では4費目に含めず「未分類」として扱う）
+  if(multiState.unknownCostCategories&&multiState.unknownCostCategories.length>0)
+    warnings.push('project_cost_details に未知の cost_category があります（'+multiState.unknownCostCategories.join(' / ')+'）。費目別集計では材料費/外注費/重機リース等/その他費用に含めず、未分類として扱います（請求書費用合計には含めます）。');
 
   multiState.warnings=warnings;
   multiState.errors=errors;
@@ -1970,6 +2042,23 @@ function renderMultiStatus(){
   addSummary(area,'労務費対象工事件数',attLoaded?String(labor.size):'—');
   addSummary(area,'労務費対象月数',attLoaded?String(monthSet.size):'—');
 
+  // 請求書費用サマリー（project_cost_details 読込時のみ実数、未読込は「—」）
+  const invLoaded=!!multiState.files.project_cost_details;
+  const inv=multiState.summaries.invoiceByProjectId;
+  let invTotal=0,mMaterial=0,mSub=0,mMachine=0,mOther=0;const invMonthSet=new Set(),vendorSet=new Set();
+  inv.forEach(v=>{invTotal+=v.amount;mMaterial+=v.material;mSub+=v.subcontract;mMachine+=v.machine_lease;mOther+=v.other;});
+  multiState.summaries.invoiceMonthlyByProjectId.forEach(arr=>arr.forEach(m=>invMonthSet.add(m.month)));
+  multiState.rows.project_cost_details.forEach(r=>{if(!isBlankId(r['vendor_name']))vendorSet.add(String(r['vendor_name']).trim());});
+  const yenOrDash=(loaded,v)=>loaded?(formatMoney(v)+' 円'):'—';
+  addSummary(area,'請求書費用合計',yenOrDash(invLoaded,invTotal));
+  addSummary(area,'請求書費用対象工事件数',invLoaded?String(inv.size):'—');
+  addSummary(area,'請求書費用対象月数',invLoaded?String(invMonthSet.size):'—');
+  addSummary(area,'業者数',invLoaded?String(vendorSet.size):'—');
+  addSummary(area,'材料費合計',yenOrDash(invLoaded,mMaterial));
+  addSummary(area,'外注費合計',yenOrDash(invLoaded,mSub));
+  addSummary(area,'重機リース等合計',yenOrDash(invLoaded,mMachine));
+  addSummary(area,'その他費用合計',yenOrDash(invLoaded,mOther));
+
   addSummary(area,'警告件数',String(multiState.warnings.length));
   addSummary(area,'エラー件数',String(multiState.errors.length));
 
@@ -1997,19 +2086,24 @@ function renderMultiProjectList(){
   const attLoaded=!!multiState.files.attendance_details;
   const invLoaded=!!multiState.files.project_cost_details;
   if(!attLoaded)area.appendChild(noteEl('attendance_details.csv が未読込のため、労務費関連の列は「—」表示です。'));
-  if(!invLoaded)area.appendChild(noteEl('project_cost_details.csv が未読込のため「請求書明細件数」は「—」表示です。'));
-  area.appendChild(noteEl('本フェーズ（2-4-7-2）では labor_cost による工事別・月別の労務費集計まで実装しています。請求書費用・月別原価の総合計・差異確認は次フェーズ以降です。'));
+  if(!invLoaded)area.appendChild(noteEl('project_cost_details.csv が未読込のため、請求書費用関連の列は「—」表示です。'));
+  area.appendChild(noteEl('本フェーズ（2-4-7-3）では labor_cost による労務費集計に加え、project_cost_details.amount による工事別・月別・費目別の請求書費用集計まで実装しています。'));
   if(attLoaded){
     area.appendChild(noteEl('労務費は attendance_details.labor_cost を project_id + report_date(月) で集計しています。'));
     area.appendChild(noteEl('normal_mins / overtime_mins は二重計上防止のため、この工事別月別集計では生SUMしていません。'));
   }
+  if(invLoaded){
+    area.appendChild(noteEl('請求書費用は project_cost_details.amount を project_id + invoice_date(月) で集計しています。費目別集計は cost_category に基づきます。'));
+  }
+  area.appendChild(noteEl('この段階では、労務費と請求書費用を合算した月別原価総合計はまだ表示していません。'));
   area.appendChild(noteEl('月別原価ビューの総合計は、projects_summary.total_cost と完全一致しない場合があります。'));
-  area.appendChild(noteEl('工事名または「労務詳細」ボタンで、選択工事の月別労務費・労務明細を表示します。'));
+  area.appendChild(noteEl('工事名または「詳細」ボタンで、選択工事の月別労務費・労務明細・月別請求書費用・請求書明細を表示します。'));
 
-  const idx=multiState.indexes;
   const sum=multiState.summaries.laborByProjectId;
+  const invSum=multiState.summaries.invoiceByProjectId;
   const keyOf=row=>isBlankId(row['project_id'])?'':String(row['project_id']).trim();
   const laborOf=row=>{const id=keyOf(row);return id?(sum.get(id)||null):null;};
+  const invoiceOf=row=>{const id=keyOf(row);return id?(invSum.get(id)||null):null;};
   const cols=[
     {label:'工事名',render:(td,row)=>{
       const btn=document.createElement('button');btn.className='link-btn';
@@ -2037,14 +2131,37 @@ function renderMultiProjectList(){
       if(!attLoaded){td.textContent='—';return;}
       const s=laborOf(row);td.textContent=String(s?s.rowCount:0);
     }},
+    {label:'請求書費用合計',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=formatMoney(s?s.amount:0);
+    }},
+    {label:'請求書対象月数',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=String(s?s.monthCount:0);
+    }},
     {label:'請求書明細件数',cls:'num',render:(td,row)=>{
       if(!invLoaded){td.textContent='—';return;}
-      const id=keyOf(row);const list=id?idx.invoicesByProjectId.get(id):null;
-      td.textContent=String(list?list.length:0);
+      const s=invoiceOf(row);td.textContent=String(s?s.rowCount:0);
     }},
-    {label:'労務詳細',cls:'no-print',render:(td,row)=>{
+    {label:'材料費',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=formatMoney(s?s.material:0);
+    }},
+    {label:'外注費',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=formatMoney(s?s.subcontract:0);
+    }},
+    {label:'重機リース等',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=formatMoney(s?s.machine_lease:0);
+    }},
+    {label:'その他',cls:'num',render:(td,row)=>{
+      if(!invLoaded){td.textContent='—';return;}
+      const s=invoiceOf(row);td.textContent=formatMoney(s?s.other:0);
+    }},
+    {label:'詳細',cls:'no-print',render:(td,row)=>{
       const btn=document.createElement('button');btn.className='back-btn';btn.style.margin='0';
-      btn.textContent='労務詳細';
+      btn.textContent='詳細';
       btn.addEventListener('click',()=>showMultiLaborDetail(keyOf(row)));
       td.appendChild(btn);
     }}
@@ -2066,6 +2183,7 @@ function showMultiLaborDetail(projectKey){
 function renderMultiLaborDetail(projectKey){
   const id=isBlankId(projectKey)?'':String(projectKey).trim();
   const attLoaded=!!multiState.files.attendance_details;
+  const invLoaded=!!multiState.files.project_cost_details;
   const prow=id?multiState.indexes.projectsById.get(id):null;
   const moneyUnit=v=>{const s=moneyOr(v);return s==='—'?s:s+' 円';};
 
@@ -2092,6 +2210,15 @@ function renderMultiLaborDetail(projectKey){
     add('attendance_details 由来の労務費合計',attLoaded?(formatMoney(s.labor_cost)+' 円'):'—（未読込）');
     if(attLoaded&&!isBlankId(psLabor))add('差額（参考）',formatMoney(toNumber(psLabor)-s.labor_cost)+' 円');
     else add('差額（参考）','—');
+    // 請求書費用（Phase 2-4-7-3）
+    const inv=multiState.summaries.invoiceByProjectId.get(id)||{amount:0,material:0,subcontract:0,machine_lease:0,other:0,unknown:0,rowCount:0,vendorCount:0};
+    add('project_cost_details 由来の請求書費用合計',invLoaded?(formatMoney(inv.amount)+' 円'):'—（未読込）');
+    add('材料費',invLoaded?(formatMoney(inv.material)+' 円'):'—');
+    add('外注費',invLoaded?(formatMoney(inv.subcontract)+' 円'):'—');
+    add('重機リース等',invLoaded?(formatMoney(inv.machine_lease)+' 円'):'—');
+    add('その他費用',invLoaded?(formatMoney(inv.other)+' 円'):'—');
+    add('請求書明細件数',invLoaded?String(inv.rowCount):'—');
+    add('業者数',invLoaded?String(inv.vendorCount):'—');
     ov.appendChild(dl);
     ov.appendChild(noteEl('差額は参考表示です。差異確認の本実装は Phase 2-4-7-5 で行うため、ここでは警告扱いにしません。'));
   }
@@ -2129,6 +2256,45 @@ function renderMultiLaborDetail(projectKey){
       {label:'メモ',render:(td,r)=>{td.textContent=textOr(r['memo']);}}
     ];
     renderSummaryTable(rarea,cols,list);
+  }
+
+  // 月別請求書費用（invoice_date の YYYY-MM・費目別）
+  const imarea=document.getElementById('multiDetailInvoiceMonthly');clear(imarea);
+  if(!invLoaded){
+    imarea.appendChild(noteEl('project_cost_details.csv が未読込のため、月別請求書費用を表示できません。'));
+  }else{
+    imarea.appendChild(noteEl('請求書費用は amount を project_id + invoice_date(月) でSUM。費目別は cost_category に基づきます（amount は税込/税抜混在の生値）。'));
+    const arr=id?(multiState.summaries.invoiceMonthlyByProjectId.get(id)||[]):[];
+    const cols=[
+      {key:'month',label:'月',fmt:v=>formatMonthLabel(v)},
+      {key:'amount',label:'請求書費用',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'material',label:'材料費',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'subcontract',label:'外注費',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'machine_lease',label:'重機リース等',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'other',label:'その他費用',cls:'num',fmt:v=>formatMoney(v)},
+      {key:'rowCount',label:'明細件数',cls:'num'},
+      {key:'vendorCount',label:'業者数',cls:'num'}
+    ];
+    renderSummaryTable(imarea,cols,arr);
+  }
+
+  // 請求書明細（invoice_date 昇順）
+  const irarea=document.getElementById('multiDetailInvoiceRows');clear(irarea);
+  if(!invLoaded){
+    irarea.appendChild(noteEl('project_cost_details.csv が未読込のため、請求書明細を表示できません。'));
+  }else{
+    const list=(id?(multiState.indexes.invoicesByProjectId.get(id)||[]):[]).slice()
+      .sort((a,b)=>{const da=a['invoice_date']||'',db=b['invoice_date']||'';return da<db?-1:(da>db?1:0);});
+    const cols=[
+      {label:'請求日',render:(td,r)=>{td.textContent=textOr(r['invoice_date']);}},
+      {label:'業者名',render:(td,r)=>{td.textContent=textOr(r['vendor_name']);}},
+      {label:'費目',render:(td,r)=>{td.textContent=formatCostCategory(r['cost_category'])||textOr(r['cost_category']);}},
+      {label:'摘要',render:(td,r)=>{td.textContent=textOr(r['description']);}},
+      {label:'金額',cls:'num',render:(td,r)=>{td.textContent=formatMoney(r['amount']);}},
+      {label:'状態',render:(td,r)=>{td.textContent=formatInvoiceStatus(r['status'])||textOr(r['status']);}},
+      {label:'メモ',render:(td,r)=>{td.textContent=textOr(r['memo']);}}
+    ];
+    renderSummaryTable(irarea,cols,list);
   }
 }
 

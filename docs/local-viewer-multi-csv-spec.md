@@ -870,6 +870,14 @@ ZIP由来単体ビュー接続方針：
 - 個別CSV読込は通常導線ではなく補助導線として折りたたみ候補とする。
 - 今回は設計のみで実装変更なし。
 
+### 帳票選択メニュー文言・グルーピングの微調整 実装済み（Phase 2-4-9-3-a）
+
+実装コミット：`cca89af Refine ZIP report menu labels and grouping`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §22。
+
+- 帳票選択メニューの文言とグルーピングを微調整した。
+- 4帳票カードは「個別帳票を確認」、月次チェック・差異確認は「横断チェック」として分けて表示する。
+- jsdom自動回帰で全32項目PASS。接続ロジック・集計は無変更。
+
 ---
 
 ## 12. MVP範囲

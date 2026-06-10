@@ -2054,6 +2054,36 @@ Phase 2-4-9-3-b：個別CSV読込エリアの折りたたみ
 Phase 2-4-9-5：ZIP由来単体ビューのPDF保存ボタン本格整備
 ```
 
+#### Phase 2-4-9-3-a：帳票選択メニュー文言・補足説明の微調整（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §22。
+
+**記録内容：**
+
+- 実装コミット：`cca89af Refine ZIP report menu labels and grouping`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- 帳票選択メニューを「個別帳票を確認」と「横断チェック」の2セクション構造に整理。
+- メニュー上部に、通常は4つの個別帳票で確認し、最後に月次チェック・差異確認で全体の違和感を確認する旨の説明を追加。
+- 個別帳票セクションに projects_summary / attendance_details / project_cost_details / machine_details の4カードを配置。
+- 横断チェックセクションに月次チェック・差異確認カードを配置。
+- 4帳票カードの説明文を実運用向けに更新。
+- 月次チェック・差異確認カードの説明文を「4帳票をまとめて、確認事項・差異・違和感を確認します。」に統一。
+- `.menu-section` / `.menu-section-title` / `.menu-section-desc` の最小CSSを追加。
+- `openMultiReport` / `openZipSingleReport` / `buildSingleStateAndRender` / 集計ロジックは無変更。
+- 4帳票接続への影響なし。
+- 月次チェック・差異確認への影響なし。
+- jsdom自動回帰で全32項目PASS。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-3-b：個別CSV読込エリアの折りたたみ
+Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の微調整
+Phase 2-4-9-5：印刷・PDF保存導線の整備
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

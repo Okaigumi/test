@@ -512,7 +512,7 @@ Phase 2-4-7-0：複数CSV統合モード設計（完了）
 Phase 2-4-7-1：複数CSV読み込みUIと multiState（完了）
 Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）（完了）
 Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）（完了）
-Phase 2-4-7-4：工事別月別原価ビュー
+Phase 2-4-7-4：工事別月別原価ビュー（完了）
 Phase 2-4-7-5：差異確認・確認リスト
 Phase 2-4-7-6：印刷・UI調整
 Phase 2-4-7-7：machine_details / machine_locations の将来設計
@@ -597,6 +597,49 @@ Phase 2-4-7-3 時点では、統合ビューで表示される金額は「労務
 労務費＋請求書費用を合算した工事別月別原価ビューは、Phase 2-4-7-4 で実装する。
 
 月別合計は、費目カバレッジ表に従い、算出可能な費目のみを対象にする。
+```
+
+### 実装済み機能：Phase 2-4-7-4（工事別月別原価ビュー）
+
+実装コミット：`4fddc44 Add multi CSV monthly cost view`（対象：`local-viewers/csv-viewer.html`）
+
+- 労務費と請求書費用を月キー `YYYY-MM` で統合する
+- 労務費は `multiState.summaries.laborMonthlyByProjectId` を使う
+- 請求書費用は `multiState.summaries.invoiceMonthlyByProjectId` を使う
+- 統合結果は `multiState.summaries.costMonthlyByProjectId` に保持する
+- 月別原価行の項目：
+  - 月
+  - 労務費
+  - 材料費
+  - 外注費
+  - 重機リース等
+  - その他費用
+  - 未分類・確認対象
+  - 月合計
+  - 累計
+- 月合計は、費目カバレッジ表に含まれる算出可能費目のみ
+- 月合計の計算式：
+
+```text
+月合計 = 労務費 + 材料費 + 外注費 + 重機リース等 + その他費用
+```
+
+- `unknown cost_category` は月合計に含めず、未分類・確認対象として別表示
+- 累計は月順に月合計を加算する
+- ダッシュボードと簡易工事一覧に月別原価サマリーを追加
+- 工事別詳細に工事別月別原価カードを追加
+- `projects_summary.total_cost` との差異確認は未実装で、Phase 2-4-7-5 で扱う
+
+#### 設計上の注意（Phase 2-4-7-4 時点）
+
+```text
+Phase 2-4-7-4 時点では、月別原価ビューは「算出可能な月別明細の合計」を表示する。
+
+この月別原価合計は、projects_summary.total_cost と完全一致することを目的としない。
+
+ダンプ費・警備費・日報由来外注費・machine_details由来の台帳費はMVPの月合計には含めない。
+
+projects_summary.total_cost との差異は Phase 2-4-7-5 で確認事項として扱う。
 ```
 
 ---

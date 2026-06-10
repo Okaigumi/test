@@ -922,7 +922,74 @@ subcontractRows = 0
   - 月合計・累計列を用意する
   - `projects_summary.total_cost` との差異確認は Phase 2-4-7-5 で扱う
 
-**実装状況：2-4-7-3（projects_summary + project_cost_details 統合／請求書費用）まで実装済み。2-4-7-4 以降は未着手。**
+#### Phase 2-4-7-4：工事別月別原価ビュー（完了）
+
+- 実装コミット：`4fddc44 Add multi CSV monthly cost view`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+
+**実装内容：**
+
+- 複数CSV統合ビューに、労務費＋請求書費用を月キーで統合した工事別月別原価ビューを追加
+- 労務費は `attendance_details.csv` 由来、請求書費用は `project_cost_details.csv` 由来
+- 月キーは `YYYY-MM`
+- 追加データ：`multiState.summaries.costMonthlyByProjectId`
+- 月別原価ビューで表示する列：月／労務費／材料費／外注費／重機リース等／その他費用／未分類・確認対象／月合計／累計
+- 月合計は算出可能費目のみを対象：労務費／材料費／外注費（請求書由来）／重機リース等（請求書由来）／その他費用（請求書由来）
+- `unknown cost_category` は月合計に含めず、「未分類・確認対象」として別列表示
+- MVPの月合計に含めないもの：ダンプ費／警備費／日報由来外注費／`machine_details` 由来の重機台帳費
+- 累計は月順に月合計を加算
+- 読み込み状況ダッシュボードに月別原価サマリーを追加：月別原価対象工事件数／月別原価対象月数／月別原価合計
+- 簡易工事一覧に追加：月別原価対象月数／月別原価合計
+- 工事別詳細に追加：工事別月別原価カード／月別原価合計／月別原価対象月数／月別原価累計最終値
+- `projects_summary.total_cost` との差異確認は Phase 2-4-7-5 で扱うため、今回は未実装
+
+**安全性：**
+
+- CSV由来値は `textContent` / DOM API で描画
+- inline `onclick` は追加なし（event listener で実装）
+- Supabase接続情報・外部CDNなし、`file://` 動作維持
+
+**実ブラウザ確認（OK）：**
+
+- 複数CSV統合モード表示OK
+- projects_summary 読込OK / attendance_details 読込OK / project_cost_details 読込OK
+- 月別原価対象工事件数表示OK / 月別原価対象月数表示OK / 月別原価合計表示OK
+- 簡易工事一覧の月別原価合計OK
+- 工事選択OK / 選択工事の工事別月別原価OK / 月合計OK / 累計OK
+- 未分類・確認対象が月合計に混ざっていないことOK
+- NaN表示なし / Console重大エラーなし
+
+**回帰確認（OK）：**
+
+- 労務費統合回帰OK / 労務費合計表示OK / 簡易工事一覧の労務費合計OK
+- 選択工事の月別労務費OK / 選択工事の労務明細OK
+- 請求書費用統合回帰OK / 請求書費用合計表示OK / 簡易工事一覧の請求書費用合計OK
+- 選択工事の月別請求書費用OK / 選択工事の請求書明細OK / 未知 `cost_category` 警告OK
+- 4CSV読み込み枠OK / 誤種別CSV警告OK / クリア処理OK
+- machine_details が工事別に結合されていないことOK
+- 単体CSV読み込みOK
+- attendance_details 既存ページOK / projects_summary 既存ページOK / project_cost_details 既存ページOK / machine_details 既存ページOK
+- JS構文チェックOK
+- CSV由来値は `textContent` / DOM API 描画 / inline `onclick` 不使用 / Supabase接続情報・外部CDNなし
+
+**未実装（次フェーズ以降・未着手）：**
+
+- `projects_summary.total_cost` との差異確認
+- 横断確認リスト
+- `machine_details` / `machine_locations` 統合
+- 印刷調整
+
+**次フェーズ候補：**
+
+- Phase 2-4-7-5：差異確認・確認リスト
+  - `projects_summary.total_cost` と統合ビューの月別原価再集計値の差異を確認事項として表示
+  - `projects_summary.labor_cost` と `attendance_details` 由来労務費合計の差異確認
+  - `projects_summary.material_cost` 等と `project_cost_details` 由来費用の差異確認
+  - 差異はエラーではなく確認事項として扱う
+  - 差異の主因注記を表示（税込/税抜の非正規化／外注費二重計上リスク／ダンプ費・警備費の未明細／重機費の台帳未反映／pending日報／unknown cost_category）
+  - 複数CSV横断の確認リストを追加（明細なし工事／`projects_summary` に存在しない `project_id`／現場なし行／請負金額未入力／原価率100%以上）
+
+**実装状況：2-4-7-4（工事別月別原価ビュー）まで実装済み。2-4-7-5 以降は未着手。**
 
 ## 保留・改善候補
 

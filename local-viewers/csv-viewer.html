@@ -1624,16 +1624,16 @@ function renderAllPages(){
 }
 
 // ===== メイン処理 =====
-function handleText(fileName,text){
-  // 状態初期化
-  state={loaded:true,fileName:fileName,csvType:null,csvLabel:'',headers:[],rows:[],
-    reports:null,warnings:[],errors:[],minDate:'',maxDate:'',generatedAt:nowStamp()};
-  document.getElementById('preLoad').classList.add('hidden');
-  document.getElementById('viewerBody').classList.remove('hidden');
+// CSVテキストを解析して headers / rows / csvType / warnings / errors を返す（parse部）。
+// 状態（state）には触れない純粋なパース処理。ZIP由来など他入口からも再利用できるようにする。
+// errors が1件以上ある場合は致命的（csvType=null）。warnings は致命的ではない注意。
+function parseSingleCsvText(text){
+  const warnings=[];
+  const errors=[];
 
   // 文字化け検知
   if(text.indexOf('�')!==-1){
-    state.warnings.push('文字化けの可能性があります。Excelで保存し直したShift_JIS CSVではなく、admin画面から出力したUTF-8 CSVを読み込んでください。');
+    warnings.push('文字化けの可能性があります。Excelで保存し直したShift_JIS CSVではなく、admin画面から出力したUTF-8 CSVを読み込んでください。');
   }
 
   // パース
@@ -1641,34 +1641,31 @@ function handleText(fileName,text){
   try{
     matrix=parseCsvToMatrix(text);
   }catch(err){
-    state.errors.push(err.code==='UNCLOSED_QUOTE'?'クォートが閉じていません。':('CSVの解析に失敗しました：'+err.message));
-    renderAllPages();showViewerPage('messages');return;
+    errors.push(err.code==='UNCLOSED_QUOTE'?'クォートが閉じていません。':('CSVの解析に失敗しました：'+err.message));
+    return{headers:[],rows:[],csvType:null,csvLabel:'',warnings,errors};
   }
   if(matrix.length===0){
-    state.errors.push('CSVが空です。ヘッダ行がありません。');
-    renderAllPages();showViewerPage('messages');return;
+    errors.push('CSVが空です。ヘッダ行がありません。');
+    return{headers:[],rows:[],csvType:null,csvLabel:'',warnings,errors};
   }
 
   // ヘッダ（トリムしてBOM残り対策）
   const headers=matrix[0].map(h=>h.trim());
   if(headers.length===0||headers.every(h=>h==='')){
-    state.errors.push('ヘッダ行がありません。');
-    renderAllPages();showViewerPage('messages');return;
+    errors.push('ヘッダ行がありません。');
+    return{headers:[],rows:[],csvType:null,csvLabel:'',warnings,errors};
   }
-  state.headers=headers;
 
   // CSV種別判定
   const detected=detectCsvType(headers);
   if(detected.key===null){
-    state.errors.push('未知のCSV形式です。admin画面から出力したCSVを選択してください。');
-    renderAllPages();showViewerPage('messages');return;
+    errors.push('未知のCSV形式です。admin画面から出力したCSVを選択してください。');
+    return{headers,rows:[],csvType:null,csvLabel:'',warnings,errors};
   }
   if(detected.multiple){
     const labels=detected.matches.map(m=>m.label).join(' / ');
-    state.warnings.push('複数のCSV種別に一致しました（'+labels+'）。必須列数が最も多い「'+detected.label+'」として扱います。');
+    warnings.push('複数のCSV種別に一致しました（'+labels+'）。必須列数が最も多い「'+detected.label+'」として扱います。');
   }
-  state.csvType=detected.key;
-  state.csvLabel=detected.label;
 
   // データ行 → オブジェクト配列
   const dataMatrix=matrix.slice(1);
@@ -1683,10 +1680,41 @@ function handleText(fileName,text){
     }
     return obj;
   });
-  state.rows=rows;
   if(colCountMismatch>0){
-    state.warnings.push('データ行の列数がヘッダ列数と一致しない行が'+colCountMismatch+'件あります。不足列は空文字として扱います。'+(hasExtra?'超過列は __extra_N として保持しています。':''));
+    warnings.push('データ行の列数がヘッダ列数と一致しない行が'+colCountMismatch+'件あります。不足列は空文字として扱います。'+(hasExtra?'超過列は __extra_N として保持しています。':''));
   }
+
+  return{headers,rows,csvType:detected.key,csvLabel:detected.label,warnings,errors};
+}
+
+// parse結果から state を構築して描画する（state構築＋描画部）。
+// 単体file読込でも、将来のZIP由来単体表示でも、この共通処理を使う。
+// args: { fileName, source, csvType, csvLabel, headers, rows, warnings, errors }
+//   source : 'file'（単体file読込）/ 'zip'（ZIP由来単体表示・次フェーズ）など読込元の識別子。
+function buildSingleStateAndRender(args){
+  const fileName=args.fileName||'';
+  const headers=args.headers||[];
+  const rows=args.rows||[];
+  const warnings=Array.isArray(args.warnings)?args.warnings.slice():[];
+  const errors=Array.isArray(args.errors)?args.errors.slice():[];
+
+  // 状態初期化（parse部で得た warnings/errors を取りこぼさず引き継ぐ）
+  state={loaded:true,fileName:fileName,csvType:null,csvLabel:'',headers:[],rows:[],
+    reports:null,warnings:warnings,errors:errors,minDate:'',maxDate:'',generatedAt:nowStamp()};
+  document.getElementById('preLoad').classList.add('hidden');
+  document.getElementById('viewerBody').classList.remove('hidden');
+
+  // 致命的エラーがある（種別未確定）場合はメッセージページへ。
+  // 種別不明など headers が取得できているケースでは state.headers を保持する（旧 handleText 同等）。
+  if(errors.length>0||!args.csvType){
+    state.headers=headers;
+    renderAllPages();showViewerPage('messages');return;
+  }
+
+  state.headers=headers;
+  state.csvType=args.csvType;
+  state.csvLabel=args.csvLabel||'';
+  state.rows=rows;
 
   // attendance_details：report_id ピボット
   if(state.csvType==='attendance_details'){
@@ -1710,6 +1738,21 @@ function handleText(fileName,text){
 
   renderAllPages();
   showViewerPage('dashboard');
+}
+
+// 単体file読込の入口（従来どおり）。parse部 → state構築＋描画部の順で呼ぶ。
+function handleText(fileName,text){
+  const parsed=parseSingleCsvText(text);
+  buildSingleStateAndRender({
+    fileName:fileName,
+    source:'file',
+    csvType:parsed.csvType,
+    csvLabel:parsed.csvLabel,
+    headers:parsed.headers,
+    rows:parsed.rows,
+    warnings:parsed.warnings,
+    errors:parsed.errors
+  });
 }
 
 // ===== ファイル選択 =====

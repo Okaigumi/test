@@ -1138,6 +1138,78 @@ subcontractRows = 0
 
 **実装状況：2-4-7-6（印刷・UI調整）まで実装済み。2-4-7-7 以降は未着手。**
 
+### Phase 2-4-8：CSV出力パッケージ化
+
+- 設計ドキュメント：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md)
+- 関連：[`docs/csv-export-spec.md`](csv-export-spec.md) / [`docs/local-viewer-multi-csv-spec.md`](local-viewer-multi-csv-spec.md)
+
+#### Phase 2-4-8-0：CSV出力パッケージ仕様設計（完了）
+
+- 状態：設計完了 / 実装：未着手
+- 対象：管理コンソールCSV出力、ローカルCSVビューアーZIP読込、`manifest.json`
+
+**目的：**
+
+- 4CSV（projects_summary / attendance_details / project_cost_details / machine_details）を、利用者には1つのZIP出力パッケージとしてまとめて配布・保管・読込できるようにする。
+- ローカルCSVビューアーで、ZIPを1つ選ぶだけで複数CSV統合モードに自動反映する。
+- 出力日時・対象期間・ファイル一覧・行数を `manifest.json` として同梱する。
+- 個別CSV出力は廃止せず、予備・検証・トラブル対応用として残す。
+
+**ZIP方式：**
+
+- 案A：ZIP処理ライブラリをローカル同梱する方式を採用（外部CDN不使用・`file://` 維持・バージョン固定・入手元/ライセンスを docs 記録）。
+- ライブラリ追加は次フェーズ（2-4-8-1）で実施し、今回はライブラリファイルを追加しない。
+- 将来の配置候補：`local-viewers/vendor/jszip.min.js` または `vendor/jszip/jszip.min.js`（実装前に最終決定）。
+
+**年月のみの期間指定：**
+
+- 期間指定は年月のみ（開始年月 YYYY-MM／終了年月 YYYY-MM）。UIに日付入力は出さない。
+- 内部では月初〜翌月初未満に変換（例：2026-04〜2026-06 → 2026-04-01 以上 2026-07-01 未満）。
+- ZIPファイル名にも年月範囲を含める（例：`okaigumi-csv-export_202604-202606_20260610-1530.zip`）。
+
+**manifest.json：**
+
+- `format_version` / `system` / `exported_at` / `period`（from_month / to_month / granularity / label）/ `files[]`（type / name / rows）を記録する。
+- ビューアー側の自動判定・出力内容確認・将来の互換性管理に使う。
+
+**管理コンソール側の将来UI：**
+
+- 対象期間（開始年月・終了年月）／「CSV一式をZIPで出力（推奨）」／「個別CSV出力（詳細・予備）」。
+
+**ビューアー側の将来UI：**
+
+- 「CSV出力パッケージZIPを読み込む（推奨）」をメイン導線にし、パッケージ情報（出力日時・対象期間・format_version・ファイル一覧/行数）と読み込み結果を表示。
+- 「個別CSV読込（詳細・予備）」は残す。ZIP読込後は既存の複数CSV統合処理を再利用する。
+- 読み込み判定優先順位：manifest.json の type → ファイル名 → CSVヘッダー。
+
+**注意点：**
+
+- ZIPには原価情報・従業員情報・請求書情報が含まれる。public URL / Vercel公開領域 / public Storage には置かない。
+- ZIP原本も編集禁止。加工する場合はコピーを作る。pCloud 保管・NAS 複製・外付けHDD月次退避の対象候補とする。
+- ZIP化しても内部のCSV列定義は変更しない（`docs/csv-export-spec.md` を維持）。
+
+**今後の実装ステップ：**
+
+```text
+2-4-8-0：CSV出力パッケージ仕様設計（完了）
+2-4-8-1：ZIPライブラリ同梱方針整理
+2-4-8-2：管理コンソール ZIP出力UI設計
+2-4-8-3：管理コンソール ZIP出力実装
+2-4-8-4：ローカルCSVビューアー ZIP読込UI設計
+2-4-8-5：ローカルCSVビューアー ZIP読込実装
+2-4-8-6：manifest.json 検証・表示対応
+2-4-8-7：docs・運用手順整理
+```
+
+**次フェーズ候補：**
+
+- Phase 2-4-8-1：ZIPライブラリ同梱方針整理
+  - ZIP処理ライブラリ（JSZip 等）の入手元・バージョン・ライセンスを確定する。
+  - 同梱配置を最終決定する。
+  - `file://` 動作・外部CDN不使用・バージョン固定の方針を維持する。
+
+**実装状況：Phase 2-4-8 は 2-4-8-0（仕様設計）のみ完了。2-4-8-1 以降は未着手。**
+
 ## 保留・改善候補
 
 - favicon.ico 追加

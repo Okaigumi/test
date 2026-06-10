@@ -228,3 +228,16 @@ machines.company_id   → companies.name            （重機所属会社）
 - `reports.status` を confirmed 限定に切り替える運用判断
 - 外注費二重計上の運用ルール確定（日報外注と請求書外注の切り分け）
 - `site_budgets` 同条件複数件（データ不整合）の検出・警告方法
+
+---
+
+## 10. CSV出力パッケージ化（将来：Phase 2-4-8）
+
+設計：[`docs/csv-export-package-spec.md`](csv-export-package-spec.md)（Phase 2-4-8-0 設計完了 / 実装未着手）。
+
+- 個別CSV出力（本仕様）に加え、**CSV一式ZIP出力**を将来追加する。
+- 出力パッケージの期間指定は**年月のみ**とし、日付指定はしない（裏側で月初〜翌月初未満に変換）。
+- ZIPには4CSV（projects_summary / attendance_details / project_cost_details / machine_details）と `manifest.json` を入れる。
+- **CSV自体の列仕様は本仕様（§5〜§8）を維持する。ZIP化しても内部のCSV列定義は変更しない。**
+- `manifest.json` は出力パッケージのメタ情報（format_version・system・exported_at・period・files[]）として扱う。CSVの内容には含めない。
+- 個別CSV出力は廃止せず、予備・検証・トラブル対応用として残す。

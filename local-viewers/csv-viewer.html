@@ -2864,10 +2864,10 @@ function renderMultiMenu(){
   grid.appendChild(mc);
   area.appendChild(grid);
 }
-// 帳票カードの「開く」。projects_summary（2-4-9-2-c）/ attendance_details（2-4-9-2-d）/ project_cost_details（2-4-9-2-e）はZIP由来単体ビューへ実接続済み。
-// 他種別（machine_details）は次フェーズで対応予定のため準備中表示のまま。
+// 帳票カードの「開く」。4カード（projects_summary 2-4-9-2-c / attendance_details 2-4-9-2-d /
+// project_cost_details 2-4-9-2-e / machine_details 2-4-9-2-f）すべてZIP由来単体ビューへ実接続済み。
 function openMultiReport(key,title){
-  if((key==='projects_summary'||key==='attendance_details'||key==='project_cost_details')&&multiState.files[key]){
+  if((key==='projects_summary'||key==='attendance_details'||key==='project_cost_details'||key==='machine_details')&&multiState.files[key]){
     openZipSingleReport(key);
     return;
   }

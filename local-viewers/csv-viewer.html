@@ -2922,13 +2922,30 @@ function openZipSingleReport(type){
     errors:[]
   });
 
-  // ZIP由来用の戻る導線・読込元表示を出す（buildSingleStateAndRender で一旦隠した後に表示）
+  // ZIP由来用の戻る導線・読込元表示を出す（buildSingleStateAndRender で一旦隠した後に表示）。
+  // ここはZIP由来単体ビュー専用。個別file読込（handleText）経路は zipSingleBack を隠したまま通らない。
   const back=document.getElementById('zipSingleBack');if(back)back.classList.remove('hidden');
   const src=document.getElementById('zipSingleSource');
   if(src){
+    // CSV由来値はすべて textContent で描画（innerHTML は使わない）
+    clear(src);
     const pkg=multiState.package;
     const period=(pkg&&pkg.periodLabel)?pkg.periodLabel:'—';
-    src.textContent='読込元：ZIP内 '+(file.fileName||(type+'.csv'))+'　対象期間：'+period;
+    // 帳票名は帳票選択メニューのカード名と統一（無ければ csvLabel/種別キーにフォールバック）
+    const card=MULTI_MENU_CARDS.find(c=>c.key===type);
+    const reportName=(card&&card.title)||file.csvLabel||type;
+    const lines=[
+      {text:'ZIP内CSVを単体ビューで確認中',head:true},
+      {text:'帳票：'+reportName},
+      {text:'読込元：ZIP内 '+(file.fileName||(type+'.csv'))},
+      {text:'対象期間：'+period}
+    ];
+    lines.forEach(line=>{
+      const d=document.createElement('div');
+      d.textContent=line.text;
+      if(line.head)d.style.fontWeight='600';
+      src.appendChild(d);
+    });
   }
   window.scrollTo(0,0);
 }

@@ -782,6 +782,17 @@ Phase 2-4-7-6 は表示・印刷の整備フェーズであり、原価集計ロ
 - 配布時はJSZipとの相対パス維持が必要（`local-viewers/` と `vendor/jszip/` の相対位置）。
 - 現時点では pCloud と外付けHDDを前提に配布・保管し、UGREEN NASync導入後はNASにも配布コピーを保管する（NASは現時点では未導入・後日購入予定）。
 
+### UX改善方針（Phase 2-4-9-0）
+
+設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md)
+
+- 複数CSV統合ビューは、今後メイン導線ではなく「月次チェック・差異確認」として扱う。
+- ZIP読込後は、まず帳票選択メニューを表示する設計に修正する。
+- 単体CSVビューの分かりやすさを活かし、projects_summary / attendance_details / project_cost_details / machine_details の各画面へ遷移できるようにする。
+- 既存の複数CSV統合機能は、工事別突き合わせ・差異確認・確認リスト用として残す。
+- 個別CSV読込は詳細・トラブル対応用として折りたたむ。
+- 本方針は Phase 2-4-9-0 の設計のみ。集計ロジック・CSV列仕様は変更しない。実装は次フェーズ以降。
+
 ---
 
 ## 12. MVP範囲

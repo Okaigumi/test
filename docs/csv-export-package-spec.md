@@ -935,3 +935,15 @@ manifest.json はCSV種別判定とパッケージ情報表示に使うが、man
 - UGREEN NASync は後日購入予定（現時点では未導入）。
 - UGREEN NASync導入後の保存運用は operation guide を参照。
 - ビューアー配布時は `local-viewers/` と `vendor/jszip/` の相対位置を維持する。
+
+---
+
+## 20. ZIP読込後のUX方針（Phase 2-4-9-0）
+
+設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md)
+
+- ZIP読込後のUX方針を修正する。
+- ZIP読込後に直接統合ビューへ入るのではなく、帳票選択メニューを表示する。
+- 各CSVは単体CSVビュー相当の画面で確認できるようにする。
+- 統合ビューは「月次チェック・差異確認」として最終確認用に残す。
+- 本方針は設計のみ。実装は次フェーズ以降（ZIP読込・出力ロジック・CSV列仕様は変更しない）。

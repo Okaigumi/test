@@ -65,6 +65,16 @@ okaigumi-csv-export_YYYYMM-YYYYMM_YYYYMMDD-HHMM.zip
 okaigumi-csv-export_202606-202606_20260610-1446.zip
 ```
 
+### ビューアーでの確認導線（Phase 2-4-9-0 設計、実装は次フェーズ以降）
+
+設計：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md)
+
+- ZIPを読み込んだ後は、まず帳票選択メニューから見たい帳票を選ぶ方針に変更する。
+- 通常確認は、工事一覧・日報労務費・請求書費用・重機台帳の各帳票画面を使う。
+- 月次チェック・差異確認は、最終確認や不一致確認のために使う。
+- 個別CSV読込は通常運用では使わず、トラブル対応用とする。
+- 上記の新導線はビューアー側の改修後に有効になる。改修前は、ZIP読込後に複数CSV統合ビューへ直接入る現行構成のまま。
+
 ## 4. 推奨フォルダ構成
 
 pCloudを日常保管、外付けHDDを現時点の暫定バックアップ、UGREEN NASyncを将来の社内バックアップとして整理する。

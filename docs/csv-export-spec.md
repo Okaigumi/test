@@ -253,3 +253,4 @@ machines.company_id   → companies.name            （重機所属会社）
 - 個別CSV出力は詳細・予備として残す。通常運用ではZIP出力を推奨。
 - 現時点の保管は pCloud + 外付けHDD暫定バックアップ。
 - UGREEN NASync 導入後はNASバックアップ運用を追加する（現時点では未導入・後日購入予定）。
+- CSV ZIPは、ビューアーで読み込んだ後、帳票選択メニューから各CSV帳票を確認する方針にする（UX改善方針：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md)・Phase 2-4-9-0 設計のみ・実装は次フェーズ以降）。

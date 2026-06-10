@@ -373,8 +373,12 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 
       <div class="card no-print" id="multiIndividualCard">
         <div class="card-title">詳細・トラブル対応用：個別CSV読込</div>
-        <div class="note" style="margin-top:0;margin-bottom:10px;">通常運用ではZIP読込を使用してください。個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
-        <div id="multiLoadArea"></div>
+        <div class="note" style="margin-top:0;margin-bottom:10px;">通常は上のZIP読込を使ってください。個別CSVを確認したい場合だけ開きます。</div>
+        <button type="button" id="multiIndividualToggle" class="back-btn" style="margin:0 0 10px;" aria-expanded="false" aria-controls="multiIndividualBody">個別CSV読込を開く</button>
+        <div id="multiIndividualBody" class="hidden">
+          <div class="note" style="margin-top:0;margin-bottom:10px;">個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
+          <div id="multiLoadArea"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -3214,6 +3218,15 @@ document.getElementById('zipSingleBackBtn').addEventListener('click',()=>backFro
 document.getElementById('multiZipInput').addEventListener('change',handleMultiZipFileChange);
 document.getElementById('multiZipLoadBtn').addEventListener('click',()=>loadMultiZipPackage());
 document.getElementById('multiZipClearBtn').addEventListener('click',()=>clearMultiZipPackage());
+
+// ===== 個別CSV読込エリアの開閉（Phase 2-4-9-3-b）。既存の個別読込UIは本文内にそのまま保持 =====
+document.getElementById('multiIndividualToggle').addEventListener('click',function(){
+  const body=document.getElementById('multiIndividualBody');
+  const open=body.classList.contains('hidden');
+  body.classList.toggle('hidden',!open);
+  this.setAttribute('aria-expanded',open?'true':'false');
+  this.textContent=open?'個別CSV読込を閉じる':'個別CSV読込を開く';
+});
 
 // ===== 印刷（複数CSV統合ビュー） =====
 // 印刷ボタンは window.print() を呼ぶのみ。表示中の内容（home または detail）が印刷対象。

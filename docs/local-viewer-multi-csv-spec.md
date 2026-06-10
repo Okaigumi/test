@@ -513,7 +513,7 @@ Phase 2-4-7-1：複数CSV読み込みUIと multiState（完了）
 Phase 2-4-7-2：projects_summary + attendance_details 統合（労務費）（完了）
 Phase 2-4-7-3：projects_summary + project_cost_details 統合（請求書費用）（完了）
 Phase 2-4-7-4：工事別月別原価ビュー（完了）
-Phase 2-4-7-5：差異確認・確認リスト
+Phase 2-4-7-5：差異確認・確認リスト（完了）
 Phase 2-4-7-6：印刷・UI調整
 Phase 2-4-7-7：machine_details / machine_locations の将来設計
 ```
@@ -640,6 +640,48 @@ Phase 2-4-7-4 時点では、月別原価ビューは「算出可能な月別明
 ダンプ費・警備費・日報由来外注費・machine_details由来の台帳費はMVPの月合計には含めない。
 
 projects_summary.total_cost との差異は Phase 2-4-7-5 で確認事項として扱う。
+```
+
+### 実装済み機能：Phase 2-4-7-5（差異確認・確認リスト）
+
+実装コミット：`f994c45 Add multi CSV reconciliation checks`（対象：`local-viewers/csv-viewer.html`）
+
+- `projects_summary` とローカル再集計値の差異確認を実装
+- 差異はエラーではなく確認事項として扱う
+- 差異確認結果は `multiState.summaries.reconciliationByProjectId` に保持する
+- 横断確認リストは `multiState.crossChecks` に保持する
+- 差異確認対象：
+  - 労務費
+  - 材料費
+  - 外注費
+  - 重機費 / 重機リース等
+  - その他費用
+  - 合計原価
+- 合計原価のローカル再集計値は、月別原価ビューの累計最終値を使う
+- 月別原価ビューは算出可能費目のみの合計であり、`projects_summary.total_cost` との完全一致は目的としない
+- 外注費は `projects_summary.invoice_subcontract_cost`（請求書由来）と比較する（`subcontract_cost_total` は日報由来を含むため不一致になりうる）
+- 確認リストに含める内容：
+  - 明細なし工事
+  - `projects_summary` に存在しない `project_id`
+  - `project_id` 空行
+  - 請負金額未入力
+  - 原価率100%以上
+  - unknown cost_category
+  - machine_details 工事別未反映
+- 未読込CSVがある場合、大量の誤警告を出さず、未読込注記として扱う
+- `machine_details` は工事別原価には直接結合しない
+- ダッシュボード、簡易工事一覧、工事別詳細に確認事項表示を追加
+
+#### 設計上の注意（Phase 2-4-7-5 時点）
+
+```text
+Phase 2-4-7-5 時点では、差異確認は自動修正ではなく確認支援である。
+
+差異があること自体をエラーとは扱わない。
+
+差異の主因は、税込/税抜の非正規化、外注費二重計上リスク、ダンプ費・警備費の未明細、重機費の台帳未反映、pending日報、unknown cost_category、CSV未読込などが想定される。
+
+運用上は、確認リストを起点にCSV出力元・原価入力・費目分類を確認する。
 ```
 
 ---

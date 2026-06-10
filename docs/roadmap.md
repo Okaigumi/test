@@ -989,7 +989,86 @@ subcontractRows = 0
   - 差異の主因注記を表示（税込/税抜の非正規化／外注費二重計上リスク／ダンプ費・警備費の未明細／重機費の台帳未反映／pending日報／unknown cost_category）
   - 複数CSV横断の確認リストを追加（明細なし工事／`projects_summary` に存在しない `project_id`／現場なし行／請負金額未入力／原価率100%以上）
 
-**実装状況：2-4-7-4（工事別月別原価ビュー）まで実装済み。2-4-7-5 以降は未着手。**
+#### Phase 2-4-7-5：差異確認・確認リスト（完了）
+
+- 実装コミット：`f994c45 Add multi CSV reconciliation checks`
+- 対象ファイル：`local-viewers/csv-viewer.html`（このファイルのみ変更）
+
+**実装内容：**
+
+- 複数CSV統合ビューに、`projects_summary.csv` とローカル再集計値の差異確認を追加
+- 差異はエラーではなく「確認事項」として表示
+- 複数CSV横断の確認リストを追加
+- ダッシュボードに追加：差異確認件数／横断確認件数／確認事項合計
+- 簡易工事一覧に追加：差異確認／確認事項
+- 工事別詳細に差異確認カードを追加
+- 統合ビューに確認リストカードを追加
+- 追加データ：`multiState.summaries.reconciliationByProjectId` ／ `multiState.crossChecks`
+
+**差異確認で比較する項目：**
+
+- 労務費／材料費／外注費／重機費・重機リース等／その他費用／合計原価
+- 比較方針：
+  - `projects_summary` 側の集計値
+  - `attendance_details` / `project_cost_details` 由来のローカル再集計値
+  - 合計原価は月別原価ビューの累計最終値を使う
+- `projects_summary.total_cost` と月別原価ビューの合計は完全一致を目的としない（月別原価ビューは費目カバレッジ表に基づく算出可能費目の合計）
+- 外注費は `projects_summary.invoice_subcontract_cost`（請求書由来）と比較する（`subcontract_cost_total` は日報由来を含むため不一致）
+- 差異の主因注記を表示：税込/税抜の非正規化／外注費二重計上リスク／ダンプ費・警備費の未明細／重機費の台帳未反映／pending日報／unknown cost_category／CSV未読込
+
+**複数CSV横断の確認リスト：**
+
+- projects_summary にあるが attendance_details に明細がない工事
+- projects_summary にあるが project_cost_details に明細がない工事
+- attendance_details にあるが projects_summary に存在しない project_id
+- project_cost_details にあるが projects_summary に存在しない project_id
+- project_id が空の attendance_details 行
+- project_id が空の project_cost_details 行
+- 請負金額が0または空の工事
+- 原価率100%以上の工事
+- unknown cost_category がある行
+- machine_details は工事別月別原価に未反映
+- 未読込CSVについては大量の誤警告を出さず、未読込注記に留める
+- `machine_details` は工事別には結合せず、未反映の参考注記として扱う
+
+**安全性：**
+
+- CSV由来値は `textContent` / DOM API で描画
+- inline `onclick` は追加なし（event listener で実装）
+- Supabase接続情報・外部CDNなし、`file://` 動作維持
+
+**実ブラウザ確認（OK）：**
+
+- 複数CSV統合モード表示OK
+- projects_summary 読込OK / attendance_details 読込OK / project_cost_details 読込OK
+- 差異確認件数表示OK / 横断確認件数表示OK / 確認事項合計表示OK
+- 簡易工事一覧の差異確認列OK / 確認リスト表示OK
+- 工事選択OK / 選択工事の差異確認カードOK
+- 差異はエラーではなく確認事項として表示OK
+- NaN表示なし / Console重大エラーなし
+
+**回帰確認（OK）：**
+
+- 工事別月別原価ビュー回帰OK / 月別原価合計表示OK / 工事別月別原価カードOK / 月合計OK / 累計OK / unknown が月合計に混ざっていないことOK
+- 労務費統合回帰OK / 労務費合計表示OK / 簡易工事一覧の労務費合計OK / 選択工事の月別労務費OK / 選択工事の労務明細OK
+- 請求書費用統合回帰OK / 請求書費用合計表示OK / 簡易工事一覧の請求書費用合計OK / 選択工事の月別請求書費用OK / 選択工事の請求書明細OK / 未知 cost_category 警告OK
+- 4CSV読み込み枠OK / 誤種別CSV警告OK / クリア処理OK / machine_details が工事別に結合されていないことOK
+- 単体CSV読み込みOK / attendance_details 既存ページOK / projects_summary 既存ページOK / project_cost_details 既存ページOK / machine_details 既存ページOK
+- JS構文チェックOK
+- CSV由来値は `textContent` / DOM API 描画 / inline `onclick` 不使用 / Supabase接続情報・外部CDNなし
+
+**未実装（次フェーズ以降・未着手）：**
+
+- `machine_details` / `machine_locations` 統合
+- 差異の自動修正
+- 印刷調整
+
+**次フェーズ候補：**
+
+- Phase 2-4-7-6：印刷・UI調整
+- Phase 2-4-7-7：machine_details / machine_locations の将来設計
+
+**実装状況：2-4-7-5（差異確認・確認リスト）まで実装済み。2-4-7-6 以降は未着手。**
 
 ## 保留・改善候補
 

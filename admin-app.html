@@ -6,6 +6,8 @@
 <title>管理コンソール</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- ZIP生成用ライブラリ（ローカル同梱・外部CDNは使わない）。Phase 2-4-8-2 で vendor/jszip に同梱済み -->
+<script src="vendor/jszip/jszip.min.js"></script>
 <style>
 :root{
   --bg:#0F1117;--surface:#1A1D27;--surface2:#232736;--surface3:#2C3148;
@@ -1717,8 +1719,134 @@ async function downloadMachineDetailsCsv(){
   downloadCsv(data,filename,CSV_COLUMNS.machine_details);
 }
 
+// ===== CSV一式ZIP出力（Phase 2-4-8-4） =====
+// 年月のみの期間指定。個別CSV出力と同じRPC・同じ列定義を再利用し、4CSV＋manifest.jsonを1ZIPにまとめる。
+
+// "2026-04" -> "2026-04-01"
+function monthToStartDate(ym){return ym+'-01';}
+// "2026-06" -> その月の末日 "2026-06-30"（date_to は既存RPCと同じ inclusive 比較を想定）
+function monthToEndDate(ym){
+  const p=ym.split('-');const y=Number(p[0]),m=Number(p[1]);
+  const last=new Date(y,m,0).getDate();
+  return`${y}-${String(m).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+}
+// 単月:「2026年6月分」/ 複数月:「2026年4月〜2026年6月分」
+function formatPeriodLabel(fromM,toM){
+  const f=fromM.split('-'),t=toM.split('-');
+  const fl=`${Number(f[0])}年${Number(f[1])}月`;
+  if(fromM===toM)return fl+'分';
+  return`${fl}〜${Number(t[0])}年${Number(t[1])}月分`;
+}
+// ZIPファイル名用タイムスタンプ YYYYMMDD-HHMM
+function formatZipTimestamp(d){
+  const pad=n=>String(n).padStart(2,'0');
+  return`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+// manifest 用の出力日時（JST相当・既存はローカル時刻運用）
+function formatExportedAtJst(d){
+  const pad=n=>String(n).padStart(2,'0');
+  return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}+09:00`;
+}
+// 当月 "YYYY-MM"
+function currentMonthStr(){
+  const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+// CSV文字列を生成（downloadCsv と同じ整形・BOM付き。ZIP用にアラートは出さない）
+function buildCsvText(rpcResult,columns){
+  const rows=rpcResult?.rows||[];
+  const header=columns.map(escCsvValue).join(',');
+  const body=rows.map(r=>columns.map(k=>escCsvValue(r[k])).join(',')).join('\r\n');
+  const csv=rows.length===0?(header+'\r\n'):(header+'\r\n'+body+'\r\n');
+  return{csv:'﻿'+csv,rows:rows.length};
+}
+
+async function exportCsvZip(){
+  const btn=document.getElementById('zipExportBtn');
+  const fromM=(document.getElementById('zip-from')?.value)||'';
+  const toM=(document.getElementById('zip-to')?.value)||'';
+  // バリデーション
+  if(!fromM){alert('開始年月を指定してください。');return;}
+  if(!toM){alert('終了年月を指定してください。');return;}
+  if(fromM>toM){alert('開始年月は終了年月以前を指定してください。');return;}
+  if(typeof JSZip==='undefined'){alert('ZIPライブラリ(JSZip)が読み込めていません。お手数ですが個別CSV出力をご利用ください。');return;}
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+
+  const dateFrom=monthToStartDate(fromM);
+  const dateTo=monthToEndDate(toM);
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='ZIP作成中...';}
+  try{
+    // 既存と同じRPC・同じ列定義を再利用（machine_details は期間指定なし）
+    const specs=[
+      {type:'projects_summary',name:'projects_summary.csv',rpc:'export_projects_summary_secure',cols:CSV_COLUMNS.projects_summary,period:true},
+      {type:'attendance_details',name:'attendance_details.csv',rpc:'export_attendance_details_secure',cols:CSV_COLUMNS.attendance_details,period:true},
+      {type:'project_cost_details',name:'project_cost_details.csv',rpc:'export_project_cost_details_secure',cols:CSV_COLUMNS.project_cost_details,period:true},
+      {type:'machine_details',name:'machine_details.csv',rpc:'export_machine_details_secure',cols:CSV_COLUMNS.machine_details,period:false}
+    ];
+    const zip=new JSZip();
+    const files=[];
+    for(const s of specs){
+      const params=s.period
+        ?{session_token_input:token,date_from_input:dateFrom,date_to_input:dateTo}
+        :{session_token_input:token};
+      const{data,error}=await sb.rpc(s.rpc,params);
+      if(error)throw new Error(s.name+' の取得に失敗しました：'+error.message);
+      const built=buildCsvText(data,s.cols);
+      zip.file(s.name,built.csv);
+      files.push({type:s.type,name:s.name,rows:built.rows});
+    }
+    const now=new Date();
+    const manifest={
+      format_version:'1.0',
+      system:'okaigumi-internal-system',
+      exported_at:formatExportedAtJst(now),
+      period:{from_month:fromM,to_month:toM,granularity:'month',label:formatPeriodLabel(fromM,toM)},
+      files:files
+    };
+    zip.file('manifest.json',JSON.stringify(manifest,null,2));
+
+    const blob=await zip.generateAsync({type:'blob'});
+    const zipName=`okaigumi-csv-export_${fromM.replace('-','')}-${toM.replace('-','')}_${formatZipTimestamp(now)}.zip`;
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=zipName;a.style.display='none';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(err){
+    alert('ZIP出力に失敗しました：'+(err&&err.message?err.message:String(err))+'\nお手数ですが個別CSV出力をご利用ください。');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=orig||'⬇ CSV一式をZIPで出力（推奨）';}
+  }
+}
+
 async function pageCsv(){
   document.getElementById('pageContent').innerHTML=`
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">📦 CSV一式をZIPで出力（推奨）</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">開始年月</label>
+            <input type="month" id="zip-from" class="form-input" style="width:150px;">
+          </div>
+          <div class="form-group" style="flex:0 0 auto;">
+            <label class="form-label">終了年月</label>
+            <input type="month" id="zip-to" class="form-input" style="width:150px;">
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-primary" id="zipExportBtn">⬇ CSV一式をZIPで出力（推奨）</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">4つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。ローカルCSVビューアーでは、このZIPを1つ読み込むだけで複数CSV統合ビューを利用できる予定です。対象期間は年月で指定します（重機台帳は全期間が対象です）。</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><div class="card-title">🗂 個別CSV出力（詳細・予備）</div></div>
+      <div class="card-body">
+        <div style="font-size:12px;color:var(--text3);">個別CSV出力は検証・トラブル対応・一部CSV確認用です。通常は上の「CSV一式をZIPで出力（推奨）」をご利用ください。</div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:16px;">
       <div class="card-header"><div class="card-title">📊 工事別サマリー（projects_summary.csv）</div></div>
       <div class="card-body">
@@ -1788,6 +1916,11 @@ async function pageCsv(){
       </div>
     </div>
   `;
+  // ZIP出力UIの初期化（inline onclick は使わず addEventListener で配線）
+  const cm=currentMonthStr();
+  const zf=document.getElementById('zip-from');if(zf&&!zf.value)zf.value=cm;
+  const zt=document.getElementById('zip-to');if(zt&&!zt.value)zt.value=cm;
+  const zb=document.getElementById('zipExportBtn');if(zb)zb.addEventListener('click',exportCsvZip);
 }
 </script>
 </body>

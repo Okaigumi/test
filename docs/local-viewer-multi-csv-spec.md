@@ -1028,3 +1028,7 @@ Phase 2-4-9-8-e で、工事一覧・原価概要および月次チェック内�
 Phase 2-4-9-8-f で、管理コンソール側のCSV出力導線を「CSV一式をZIPで出力」に一本化し、帳票確認画面との文言整合を取った。ZIP以外の個別CSV出力導線は通常画面から非表示にした（実装コミット 512f72e）。
 
 統合モードの集計・月次チェック内部処理・ZIP読込/出力本体は無変更。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §32〜§35 を参照。
+
+## Phase 2-4-9-8-c：月次チェック横長表の印刷最適化
+
+Phase 2-4-9-8-c で、月次チェック・差異確認の簡易工事一覧について、印刷/PDF保存時のレイアウトを最適化した。project-summary 系ブロックを印刷時は工事ごとの罫線ブロックとして扱い、工事名を上段見出し、属性・数値をラベル付き4列グリッドで表示する。これにより、横長表の右端見切れや工事名の1文字縦折れを避ける（実装コミット fe80fbc）。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §36 を参照。

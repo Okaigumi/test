@@ -836,3 +836,5 @@ Phase 2-4-9-8-e で、工事名が1文字ずつ縦折れする問題を解消し
 Phase 2-4-9-8-f で、管理コンソール側のCSV出力導線をZIP出力へ一本化した。「CSV一式をZIPで出力（推奨）」から「（推奨）」を削除し、ZIP以外の出力導線を通常画面から非表示にした（実装コミット 512f72e）。
 
 CSV解析・ZIP読込本体・ZIP出力本体・集計・月次チェック内部処理・window.print()・@media print は無変更。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §32〜§35 を参照。
+
+Phase 2-4-9-8-c で、月次チェック・差異確認の印刷/PDF保存時に簡易工事一覧が紙面で読みやすくなるよう、印刷専用CSSを追加した。工事名を上段見出し、数値・属性をラベル付き4列グリッドとして印刷し、右端列の見切れや工事名の縦折れを防止した。画面表示CSS、CSV解析、ZIP読込、集計ロジックは変更していない（実装コミット fe80fbc）。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §36 を参照。

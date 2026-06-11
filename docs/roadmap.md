@@ -2464,11 +2464,31 @@ Phase 2-5：運用開始準備・試運用
 - 月次チェック診断文・深いサブページ注記にはCSV名が一部残る。
 - 月次チェック横長表の印刷最適化は別フェーズ候補。
 
+#### Phase 2-4-9-8-c：月次チェック横長表の印刷最適化（完了）
+
+- 詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §36。
+
+**記録内容：**
+
+- 実装コミット：fe80fbc Optimize monthly check print layout
+- 月次チェック・差異確認の印刷/PDF保存時に、簡易工事一覧が紙面で読みやすくなるよう調整。
+- @media print 内に project-summary 系カード/ブロック用の印刷CSSを追加。
+- 工事ごとのブロックが改ページで割れにくいよう break-inside / page-break-inside を設定。
+- 工事名を上段見出しとして印刷。
+- 数値・属性をラベル付き4列グリッドで印刷。
+- 薄ブルー罫線を印刷時は黒罫線へ置換し、背景グラフィック印刷OFFでも成立するよう調整。
+- 右端列の見切れを構造的に回避。
+- 工事名の1文字縦折れを防止。
+- 画面表示CSSは変更なし。
+- window.print() 呼び出しは変更なし。
+- CSV解析・ZIP読込・集計ロジックは変更なし。
+- SQL実行・DB変更なし。
+
 **次フェーズ候補：**
 
 ```text
-Phase 2-4-9-8-c：月次チェック横長表の印刷最適化
 Phase 2-5：運用開始準備・試運用
+別系統：4c77c20 Add invoice PDF registration prototype の内容把握
 ```
 
 ## 保留・改善候補

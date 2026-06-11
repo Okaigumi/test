@@ -902,6 +902,14 @@ ZIP由来単体ビュー接続方針：
 - 帳票選択メニューは保存対象ではないため、ボタン配置対象外とする。
 - PDFライブラリは追加せず、ブラウザ標準の `window.print()` を使う。
 
+### ZIP由来単体ビューへの印刷・PDF保存ボタン追加 実装済み（Phase 2-4-9-5-a）
+
+実装コミット：`55f9c0f Add print PDF button to ZIP single viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §26。
+
+- ZIP由来単体ビューの `#zipSingleBack` 内に `#zipSinglePrintBtn` を追加した。`#zipSingleBack` の `hidden` 制御を継承するため、ZIP由来単体ビューでのみ表示され、帳票選択メニューへ戻ると非表示になる。
+- click時は `window.print()` を実行。`addEventListener` を使用。PDFライブラリ・外部CDN追加なし。
+- 月次チェック・差異確認側への追加は次フェーズ（Phase 2-4-9-5-b）予定。
+
 ---
 
 ## 12. MVP範囲

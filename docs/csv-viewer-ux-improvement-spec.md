@@ -1999,3 +1999,87 @@ Phase 2-4-9-5-a：ZIP由来単体ビューへの印刷・PDF保存ボタン追�
 Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボタン追加
 Phase 2-4-9-5-c：印刷時CSSの最小調整
 ```
+
+## 26. Phase 2-4-9-5-a：ZIP由来単体ビューへの印刷・PDF保存ボタン追加 実装結果
+
+### 26.1 実装コミット
+
+```text
+55f9c0f Add print PDF button to ZIP single viewer
+```
+
+### 26.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 26.3 実装目的
+
+ZIP由来単体ビューで表示中の帳票を、ブラウザ標準の印刷機能から印刷・PDF保存できるようにする。
+
+### 26.4 実装内容
+
+```text
+- #zipSingleBack 内に #zipSinglePrintBtn を追加
+- ボタン文言は「印刷・PDF保存」
+- #zipSinglePrintBtn は #zipSingleBack の子要素として配置
+- #zipSingleBack の hidden 制御をそのまま継承
+- click時は window.print() を実行
+- addEventListener を使用
+- inline onclick は使用しない
+- PDFライブラリは追加しない
+- 外部CDNは追加しない
+```
+
+### 26.5 表示対象
+
+```text
+- projects_summary：工事一覧・原価概要
+- attendance_details：日報・労務費
+- project_cost_details：請求書費用
+- machine_details：重機台帳
+```
+
+### 26.6 表示しない対象
+
+```text
+- 帳票選択メニュー
+- ZIP読込ホーム
+- 初期折りたたみの個別CSV読込エリア
+- 個別CSV読込由来の単体ビュー
+- 月次チェック・差異確認
+```
+
+### 26.7 変更しなかったもの
+
+```text
+- CSV解析処理
+- 集計ロジック
+- ZIP出力ロジック
+- ZIP読込ロジック
+- openMultiReport
+- openZipSingleReport の帳票切替ロジック
+- buildSingleStateAndRender
+- 個別CSV読込エリア
+- 月次チェック・差異確認
+- 印刷CSSの本格調整
+```
+
+### 26.8 回帰確認結果
+
+```text
+- 4帳票すべてで「印刷・PDF保存」ボタン表示OK
+- window.print() 呼び出しOK
+- 帳票選択メニューへ戻るとボタン非表示OK
+- 個別CSV読込時はボタン非表示OK
+- 月次チェック側には今回の新ボタンなし
+- NaNなし
+- Console重大エラーなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 26.9 最終判定
+
+ZIP由来単体ビューで、外部PDFライブラリなしに印刷・PDF保存導線を追加できた。既存の帳票表示・集計・ZIP読込・個別CSV読込・月次チェックへの影響はない。

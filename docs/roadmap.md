@@ -2171,6 +2171,37 @@ Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボ�
 Phase 2-4-9-5-c：印刷時CSSの最小調整
 ```
 
+#### Phase 2-4-9-5-a：ZIP由来単体ビューへの印刷・PDF保存ボタン追加（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §26。
+
+**記録内容：**
+
+- 実装コミット：`55f9c0f Add print PDF button to ZIP single viewer`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- ZIP由来単体ビューに「印刷・PDF保存」ボタンを追加。
+- `#zipSingleBack` 内に `#zipSinglePrintBtn` を追加。
+- `#zipSinglePrintBtn` は `#zipSingleBack` の `hidden` 制御を継承。
+- ZIP由来単体ビューでのみ表示。
+- 帳票選択メニューに戻ると非表示。
+- 個別CSV読込由来の単体ビューでは非表示。
+- click時は `window.print()` のみ実行。
+- PDFライブラリは追加しない。
+- `inline onclick` は使用しない。`addEventListener` を使用。
+- CSV解析・集計ロジックは無変更。
+- 月次チェック・差異確認側には今回は追加していない。
+- 4帳票すべてで表示確認済み。
+- `window.print()` 呼び出し確認済み。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボタン追加
+Phase 2-4-9-5-c：印刷時CSSの最小調整
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

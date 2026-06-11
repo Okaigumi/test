@@ -14,60 +14,61 @@
 -->
 <style>
 :root{
-  --bg:#ffffff;--ink:#1a1d23;--muted:#5b6270;--faint:#8a909c;
-  --line:#e1e4ea;--head:#f3f5f7;--accent:#1f3a8a;--accent-bg:#eaf0ff;
+  /* 高齢者向け可読性のため muted / faint のコントラストを底上げ（旧 #5b6270 / #8a909c）。Phase 1 */
+  --bg:#ffffff;--ink:#16191f;--muted:#454b57;--faint:#596070;
+  --line:#d8dce4;--head:#f3f5f7;--accent:#1f3a8a;--accent-bg:#eaf0ff;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--ink);line-height:1.55;
+body{background:var(--bg);color:var(--ink);line-height:1.6;font-size:16px;
   font-family:"Yu Gothic","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;}
 
 /* ===== ファイルパネル ===== */
 .file-panel{border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-.file-panel h1{font-size:17px;font-weight:700;}
+.file-panel h1{font-size:18px;font-weight:700;}
 .file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-input[type=file]{font:inherit;font-size:13px;}
-.file-name{font-size:12px;color:var(--muted);}
-.preload{padding:40px 24px;color:var(--muted);font-size:14px;}
+input[type=file]{font:inherit;font-size:14px;}
+.file-name{font-size:13px;color:var(--muted);}
+.preload{padding:40px 24px;color:var(--ink);font-size:16px;max-width:640px;}
 
 /* ===== レイアウト ===== */
 .app{display:flex;align-items:flex-start;}
 .viewer-nav{width:220px;flex-shrink:0;border-right:1px solid var(--line);
   padding:16px 10px;position:sticky;top:0;height:100vh;overflow-y:auto;}
-.nav-title{font-size:12px;font-weight:700;color:var(--faint);letter-spacing:.05em;padding:4px 10px 12px;}
-.nav-btn{display:block;width:100%;text-align:left;border:none;background:none;font:inherit;font-size:13px;
-  color:var(--muted);padding:9px 12px;border-radius:6px;cursor:pointer;margin-bottom:2px;}
+.nav-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.05em;padding:4px 10px 12px;}
+.nav-btn{display:block;width:100%;text-align:left;border:none;background:none;font:inherit;font-size:15px;
+  color:var(--ink);padding:11px 12px;border-radius:6px;cursor:pointer;margin-bottom:3px;min-height:42px;}
 .nav-btn:hover{background:var(--head);color:var(--ink);}
 .nav-btn.active{background:var(--accent-bg);color:var(--accent);font-weight:700;}
 .main{flex:1;min-width:0;padding:22px 28px;max-width:1080px;}
 
 /* ===== 帳票ヘッダ ===== */
 .report-header{margin-bottom:14px;}
-.report-header h1{font-size:20px;font-weight:700;margin-bottom:4px;}
-.rh-meta{font-size:12px;color:var(--muted);}
+.report-header h1{font-size:22px;font-weight:700;margin-bottom:4px;}
+.rh-meta{font-size:15px;color:var(--muted);line-height:1.65;}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
-.chip{border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted);}
+.chip{border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;color:var(--muted);}
 .chip b{color:var(--ink);font-weight:700;}
 
 /* ===== カード/汎用 ===== */
 .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 20px;margin-bottom:18px;box-shadow:none;}
-.card-title{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px;}
-.note{font-size:12px;color:var(--muted);margin-top:8px;}
+.card-title{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:12px;}
+.note{font-size:14px;color:var(--muted);margin-top:8px;line-height:1.6;}
 .hidden{display:none;}
 
 /* ===== サマリーグリッド ===== */
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
 .summary-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
-.summary-label{font-size:11px;color:var(--faint);}
-.summary-val{font-size:16px;font-weight:600;margin-top:4px;word-break:break-all;font-variant-numeric:tabular-nums;}
+.summary-label{font-size:13px;color:var(--muted);}
+.summary-val{font-size:18px;font-weight:700;margin-top:4px;word-break:break-all;font-variant-numeric:tabular-nums;}
 
 /* ===== メッセージ ===== */
-.msg{font-size:13px;padding:8px 12px;border-radius:6px;margin-bottom:6px;border:1px solid;}
+.msg{font-size:14px;padding:8px 12px;border-radius:6px;margin-bottom:6px;border:1px solid;}
 .msg-warn{background:#fff8ee;color:#9a5b00;border-color:#f0d9b5;}
 .msg-error{background:#fdecec;color:#a32020;border-color:#f0c2c2;}
 
 /* ===== テーブル ===== */
 .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
-table{border-collapse:collapse;width:100%;font-size:12px;}
+table{border-collapse:collapse;width:100%;font-size:13px;}
 th{background:var(--head);color:var(--ink);text-align:left;padding:8px 10px;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--line);}
 td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;white-space:pre-wrap;word-break:break-word;max-width:340px;}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
@@ -75,58 +76,58 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 
 /* ===== 出勤簿ブロック ===== */
 .emp-block{margin-bottom:26px;}
-.emp-head{font-size:15px;font-weight:700;margin-bottom:4px;}
-.emp-meta{font-size:12px;color:var(--muted);margin-bottom:8px;}
+.emp-head{font-size:16px;font-weight:700;margin-bottom:4px;}
+.emp-meta{font-size:14px;color:var(--muted);margin-bottom:8px;}
 
 /* ===== ボタン ===== */
-.link-btn{border:none;background:none;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;padding:0;}
-.back-btn{border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;margin-bottom:14px;}
+.link-btn{border:none;background:none;color:var(--accent);font:inherit;font-size:15px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 2px;}
+.back-btn{border:1px solid var(--line);background:#fff;font:inherit;font-size:15px;padding:9px 16px;border-radius:6px;cursor:pointer;margin-bottom:14px;min-height:42px;}
 .back-btn:hover{background:var(--head);}
 
 /* ===== 原価率バッジ（控えめ） ===== */
-.cr-badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;margin-left:6px;vertical-align:middle;}
+.cr-badge{display:inline-block;font-size:12px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;margin-left:6px;vertical-align:middle;}
 .cr-normal{color:var(--muted);border-color:var(--line);background:#f7f8fa;}
 .cr-caution{color:#7a5a00;border-color:#ecdcb3;background:#fcf6e8;}
 .cr-warn{color:#9a5b00;border-color:#f0d9b5;background:#fff8ee;}
 .cr-danger{color:#a32020;border-color:#f0c2c2;background:#fdecec;}
 
 /* ===== 基本情報の定義リスト ===== */
-.kv-list{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px;}
-.kv-list dt{color:var(--faint);}
+.kv-list{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px;}
+.kv-list dt{color:var(--muted);}
 .kv-list dd{color:var(--ink);}
 
 /* ===== 複数CSV統合モード ===== */
 .mode-tabs{display:flex;gap:6px;}
-.mode-tab{border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--muted);}
+.mode-tab{border:1px solid var(--line);background:#fff;font:inherit;font-size:15px;padding:9px 16px;border-radius:6px;cursor:pointer;color:var(--muted);}
 .mode-tab:hover{background:var(--head);color:var(--ink);}
 .mode-tab.active{background:var(--accent-bg);color:var(--accent);font-weight:700;border-color:var(--accent-bg);}
 .multi-slot{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
 .multi-slot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
-.multi-slot-title{font-size:13px;font-weight:700;}
-.req-badge{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;}
+.multi-slot-title{font-size:14px;font-weight:700;}
+.req-badge{font-size:12px;font-weight:700;padding:1px 6px;border-radius:4px;border:1px solid;}
 .req-required{color:#a32020;border-color:#f0c2c2;background:#fdecec;}
 .req-optional{color:var(--muted);border-color:var(--line);background:#f7f8fa;}
 .multi-slot-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.multi-slot-status{font-size:12px;color:var(--muted);}
-.multi-slot-note{font-size:12px;margin-top:6px;}
-.multi-slot-note.ok{color:#2a7a2a;}
-.multi-slot-note.warn{color:#9a5b00;}
+.multi-slot-status{font-size:14px;color:var(--muted);}
+.multi-slot-note{font-size:14px;margin-top:6px;}
+.multi-slot-note.ok{color:#1f7a1f;}
+.multi-slot-note.warn{color:#8a5200;}
 .multi-slot-note.error{color:#a32020;}
 
 /* 帳票選択メニュー（Phase 2-4-9-1） */
-.menu-intro{font-size:13px;color:var(--ink);margin:4px 0 10px;}
+.menu-intro{font-size:15px;color:var(--ink);margin:4px 0 10px;line-height:1.65;}
 .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px;}
 .menu-card{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;display:flex;flex-direction:column;}
-.menu-card-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:2px;}
-.menu-card-file{font-size:11px;color:var(--faint);margin-bottom:6px;}
-.menu-card-count{font-size:13px;color:var(--accent);font-weight:700;margin-bottom:6px;}
-.menu-card-desc{font-size:12px;color:var(--muted);margin-bottom:10px;}
-.menu-card-zeronote{font-size:11px;color:#9a5b00;margin-bottom:10px;}
+.menu-card-title{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+.menu-card-file{font-size:13px;color:var(--muted);margin-bottom:6px;}
+.menu-card-count{font-size:14px;color:var(--accent);font-weight:700;margin-bottom:6px;}
+.menu-card-desc{font-size:14px;color:var(--muted);margin-bottom:10px;line-height:1.6;}
+.menu-card-zeronote{font-size:13px;color:#8a5200;margin-bottom:10px;}
 .menu-card .back-btn{margin:auto 0 0;align-self:flex-start;}
 .menu-card-check{border-color:var(--accent-bg);background:var(--accent-bg);}
 .menu-section{margin-top:18px;}
-.menu-section-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:2px;}
-.menu-section-desc{font-size:12px;color:var(--muted);margin-bottom:4px;}
+.menu-section-title{font-size:17px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+.menu-section-desc{font-size:14px;color:var(--muted);margin-bottom:4px;}
 
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
@@ -180,17 +181,18 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 <!-- ファイルパネル（印刷時は非表示） -->
 <div class="file-panel no-print">
   <h1>岡井組 CSVビューア</h1>
-  <div class="mode-tabs">
+  <!-- モード切替タブと単体CSV選択は通常運用では使わないため画面から隠す（要素はJS互換のため残置）。Phase 1 -->
+  <div class="mode-tabs hidden">
     <button type="button" id="modeSingleBtn" class="mode-tab active">単体CSV</button>
     <button type="button" id="modeMultiBtn" class="mode-tab">複数CSV統合</button>
   </div>
-  <div class="file-row" id="singleFileRow">
+  <div class="file-row hidden" id="singleFileRow">
     <input type="file" id="fileInput" accept=".csv,text/csv">
     <span id="fileName" class="file-name"></span>
   </div>
 </div>
 
-<div id="preLoad" class="preload">CSVファイルを選択してください。admin画面から出力したCSVをローカルで確認できます（Supabaseには接続しません）。</div>
+<div id="preLoad" class="preload">CSV一式ZIPを読み込んでください。通常はこちらを使います。管理コンソールで出力したCSV一式ZIPをローカルで確認できます（Supabaseには接続しません）。</div>
 
 <div id="viewerBody" class="hidden">
   <div class="app">
@@ -324,7 +326,7 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       </div>
 
       <div class="card">
-        <div class="card-title">CSV出力パッケージZIPを読み込む（推奨）</div>
+        <div class="card-title">CSV一式ZIPを読み込む（通常はこちら）</div>
         <div class="note no-print" style="margin-top:0;margin-bottom:10px;">管理コンソールで出力したCSV一式ZIPを選択してください。4つのCSVとmanifest.jsonを自動で読み込み、読込後に帳票選択メニューを表示します。</div>
         <div class="multi-slot-row no-print" style="margin-bottom:8px;">
           <input type="file" id="multiZipInput" accept=".zip,application/zip">
@@ -376,9 +378,9 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       </div>
 
       <div class="card no-print" id="multiIndividualCard">
-        <div class="card-title">詳細・トラブル対応用：個別CSV読込</div>
-        <div class="note" style="margin-top:0;margin-bottom:10px;">通常は上のZIP読込を使ってください。個別CSVを確認したい場合だけ開きます。</div>
-        <button type="button" id="multiIndividualToggle" class="back-btn" style="margin:0 0 10px;" aria-expanded="false" aria-controls="multiIndividualBody">個別CSV読込を開く</button>
+        <div class="card-title">トラブル対応用：個別CSV読込（通常は開きません）</div>
+        <div class="note" style="margin-top:0;margin-bottom:10px;">通常は使いません。いつもは上の「CSV一式ZIPを読み込む」をお使いください。個別CSVを1つずつ確認する必要があるとき（トラブル対応・検証）だけ開きます。</div>
+        <button type="button" id="multiIndividualToggle" class="back-btn" style="margin:0 0 10px;" aria-expanded="false" aria-controls="multiIndividualBody">個別CSV読込を開く（通常は不要）</button>
         <div id="multiIndividualBody" class="hidden">
           <div class="note" style="margin-top:0;margin-bottom:10px;">個別CSV読込は、検証・トラブル対応・一部CSVのみ確認したい場合に使用します。projects_summary.csv は必須です。各枠で選択したCSVは種別判定を行い、枠と異なる種別の場合は警告して読み込みません。</div>
           <div id="multiLoadArea"></div>
@@ -3192,7 +3194,7 @@ function renderMultiMessages(){
 }
 
 // ===== 単体 / 統合 モード切替 =====
-let currentMode='single';
+let currentMode='multi';
 function setMode(mode){
   currentMode=mode;
   const single=(mode==='single');
@@ -3230,6 +3232,8 @@ function setMode(mode){
 }
 document.getElementById('modeSingleBtn').addEventListener('click',()=>setMode('single'));
 document.getElementById('modeMultiBtn').addEventListener('click',()=>setMode('multi'));
+// 初期表示は CSV一式ZIP読込（multi）に固定。単体CSV導線は画面から隠してあり、通常運用では使わない。Phase 1
+setMode('multi');
 document.getElementById('multiDetailBack').addEventListener('click',()=>showMultiIntegrated());
 document.getElementById('multiIntegratedBack').addEventListener('click',()=>showMultiMenu());
 // ZIP由来単体ビュー → 帳票選択メニューに戻る（Phase 2-4-9-2-c）
@@ -3246,7 +3250,7 @@ document.getElementById('multiIndividualToggle').addEventListener('click',functi
   const open=body.classList.contains('hidden');
   body.classList.toggle('hidden',!open);
   this.setAttribute('aria-expanded',open?'true':'false');
-  this.textContent=open?'個別CSV読込を閉じる':'個別CSV読込を開く';
+  this.textContent=open?'個別CSV読込を閉じる':'個別CSV読込を開く（通常は不要）';
 });
 
 // ===== 印刷（ZIP由来単体ビュー。Phase 2-4-9-5-a） =====

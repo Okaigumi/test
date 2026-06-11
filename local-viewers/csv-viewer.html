@@ -185,6 +185,30 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   #multiBody th,#multiBody td,#multiDetailBody th,#multiDetailBody td{padding:4px 5px;word-break:break-word;overflow-wrap:anywhere;}
   #multiBody td.num,#multiDetailBody td.num{white-space:nowrap;}
 
+  /* 月次チェック「簡易工事一覧」・工事一覧の簡易工事一覧（カード/ブロック型）の印刷最適化（Phase 2-4-9-8-c）。
+     画面表示はそのまま。印刷時のみ：工事ごとのまとまりを改ページで割らず、薄ブルー罫線を黒系に置換し、
+     工事名の1文字折れ・右端見切れを防ぎ、ラベル付きで読める誌面型にする。背景グラフィック印刷オフでも罫線で成立。 */
+  .project-list{gap:9px;}
+  .project-summary-block{
+    border:1px solid #000;border-radius:0;background:#fff;
+    padding:7px 9px;margin-bottom:0;
+    break-inside:avoid;page-break-inside:avoid;
+  }
+  .project-name-title{
+    font-size:14px;line-height:1.4;margin-bottom:5px;
+    padding-bottom:4px;border-bottom:1px solid #888;
+    word-break:keep-all;overflow-wrap:anywhere;
+  }
+  .project-name-title .link-btn{font-size:14px;color:#000;font-weight:700;}
+  .project-summary-grid{grid-template-columns:repeat(4,1fr);gap:3px 12px;}
+  .project-summary-item{
+    min-width:0;padding:2px 0;
+    border-bottom:1px dotted #bbb;
+    break-inside:avoid;page-break-inside:avoid;
+  }
+  .project-summary-item .psi-label{font-size:10px;color:#333;}
+  .project-summary-item .psi-val{font-size:12px;color:#000;line-height:1.35;}
+
   /* 行・要素が改ページで不自然に分断されないように */
   tr{break-inside:avoid;page-break-inside:avoid;}
   .summary-item,.kv-list,.multi-slot-note,.note,.msg{break-inside:avoid;}

@@ -98,6 +98,8 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 
 /* ===== 複数CSV統合モード ===== */
 .mode-tabs{display:flex;gap:6px;}
+/* .mode-tabs は .hidden より後で display:flex を指定しているため、hidden 付与時も targeted 指定で確実に隠す（Phase 2-4-9-8-a） */
+.mode-tabs.hidden{display:none!important;}
 .mode-tab{border:1px solid var(--line);background:#fff;font:inherit;font-size:15px;padding:9px 16px;border-radius:6px;cursor:pointer;color:var(--muted);}
 .mode-tab:hover{background:var(--head);color:var(--ink);}
 .mode-tab.active{background:var(--accent-bg);color:var(--accent);font-weight:700;border-color:var(--accent-bg);}

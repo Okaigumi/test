@@ -137,8 +137,9 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   .no-print,.viewer-nav,.file-panel{display:none!important;}
   body{background:#fff;color:#000;}
   .app{display:block;}
-  .main{max-width:none;padding:0;}
-  .card{border:none;box-shadow:none;padding:0;margin-bottom:14px;}
+  .main{max-width:none;width:100%;padding:0;}
+  .card{border:none;box-shadow:none;padding:0;margin-bottom:14px;break-inside:avoid;page-break-inside:avoid;}
+  table{page-break-inside:auto;}
   thead{display:table-header-group;}
   .emp-block{break-inside:avoid;}
   .viewer-page.hidden{display:none!important;}
@@ -163,7 +164,7 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   #multiBody td.num,#multiDetailBody td.num{white-space:nowrap;}
 
   /* 行・要素が改ページで不自然に分断されないように */
-  tr{break-inside:avoid;}
+  tr{break-inside:avoid;page-break-inside:avoid;}
   .summary-item,.kv-list,.multi-slot-note,.note,.msg{break-inside:avoid;}
 
   /* バッジは背景グラフィック印刷オフでも読めるよう罫線＋黒文字で表現 */

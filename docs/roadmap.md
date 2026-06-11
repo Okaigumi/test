@@ -2231,6 +2231,35 @@ Phase 2-4-9-5-c：印刷時CSSの最小調整
 Phase 2-4-9-5-c：印刷時CSSの最小調整
 ```
 
+#### Phase 2-4-9-5-c：印刷時CSSの最小調整（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §28。
+
+**記録内容：**
+
+- 実装コミット：`b1584c0 Refine print stylesheet for CSV viewer`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- 既存の `@media print` ブロックを最小調整。
+- `.main` に `width:100%` を追加。
+- `.card` に `break-inside:avoid` / `page-break-inside:avoid` を追加。
+- `table` に `page-break-inside:auto` を追加。
+- `tr` に `page-break-inside:avoid` を追加。
+- `.no-print` の `display:none!important` は既存維持。
+- 操作ボタン類は既存 `no-print` 指定により印刷時非表示。
+- ZIP由来単体ビューの帳票本体は印刷対象として維持。
+- 月次チェック・差異確認の確認結果は印刷対象として維持。
+- 工事詳細表示の内容は印刷対象として維持。
+- JS変更なし。HTML構造変更なし。`window.print()` 処理変更なし。
+- CSV解析・集計ロジック変更なし。ZIP読込・ZIP出力ロジック変更なし。月次チェック内部処理変更なし。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-6：CSVビューアー運用前最終確認
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

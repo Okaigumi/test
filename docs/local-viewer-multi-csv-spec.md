@@ -918,6 +918,13 @@ ZIP由来単体ビュー接続方針：
 - `multiDetailPrintBtn` の文言も「印刷・PDF保存」に統一。既存の `addEventListener` は ID 不変のためそのまま有効。
 - `zipSinglePrintBtn`・CSV解析・集計ロジック・月次チェック内部処理は無変更。
 
+### 印刷時CSSの最小調整 実装済み（Phase 2-4-9-5-c）
+
+実装コミット：`b1584c0 Refine print stylesheet for CSV viewer`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §28。
+
+- 既存の `@media print` を最小調整した。`.card` の改ページ分断抑制、`table` / `tr` の改ページ制御、`.main` の印刷幅調整を行い、月次チェック・差異確認と工事詳細表示を印刷しやすくした。
+- 操作ボタン類（`multiIntegratedBack` / `multiPrintBtn` / `multiDetailBack` / `multiDetailPrintBtn` など）は既存 `no-print` 指定により印刷時非表示。JS・HTML構造・集計ロジックは無変更。
+
 ---
 
 ## 12. MVP範囲

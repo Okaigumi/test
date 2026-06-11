@@ -2171,3 +2171,97 @@ local-viewers/csv-viewer.html のみ
 ### 27.9 最終判定
 
 月次チェック・差異確認画面で、外部PDFライブラリなしに印刷・PDF保存導線を利用できるようになった。帳票選択メニューやZIP読込ホームでは表示されず、既存のZIP由来単体ビュー・個別CSV読込・集計処理への影響はない。
+
+## 28. Phase 2-4-9-5-c：印刷時CSSの最小調整 実装結果
+
+### 28.1 実装コミット
+
+```text
+b1584c0 Refine print stylesheet for CSV viewer
+```
+
+### 28.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 28.3 実装目的
+
+印刷・PDF保存時に戻るボタンや印刷ボタンなどの操作UIを出さず、帳票本体・月次チェック結果・工事詳細内容を印刷しやすくする。
+
+### 28.4 実装内容
+
+```text
+- 既存の @media print ブロックを最小調整
+- .main に width:100% を追加
+- .card に break-inside:avoid / page-break-inside:avoid を追加
+- table に page-break-inside:auto を追加
+- tr に page-break-inside:avoid を追加
+- .no-print の display:none!important は既存維持
+```
+
+### 28.5 印刷時に非表示となるもの
+
+```text
+- zipSingleBack
+- zipSinglePrintBtn
+- multiIntegratedBack
+- multiPrintBtn
+- multiDetailBack
+- multiDetailPrintBtn
+- viewer-nav
+- file-panel
+```
+
+### 28.6 印刷対象として残すもの
+
+```text
+- ZIP由来単体ビューの帳票ヘッダ
+- ZIP由来単体ビューの上部情報
+- ZIP由来単体ビューの帳票本体
+- 月次チェック・差異確認の確認リスト
+- 差異確認
+- 工事別まとめ
+- 工事詳細表示の工事概要
+- 工事詳細表示の月別原価
+- 工事詳細表示の明細
+- テーブル本体
+```
+
+### 28.7 変更しなかったもの
+
+```text
+- window.print() の処理
+- zipSinglePrintBtn の意味
+- multiPrintBtn の意味
+- multiDetailPrintBtn の意味
+- CSV解析処理
+- 集計ロジック
+- ZIP読込ロジック
+- ZIP出力ロジック
+- 月次チェック内部処理
+- 帳票選択メニュー構造
+- 個別CSV読込エリア構造
+```
+
+### 28.8 回帰確認結果
+
+```text
+- @media print 存在OK
+- .no-print display:none!important 維持OK
+- zipSinglePrintBtn / multiPrintBtn / multiDetailPrintBtn は no-print 対象OK
+- ZIP由来単体ビューの帳票本体は印刷対象として残る
+- 月次チェック・差異確認の確認結果は印刷対象として残る
+- 工事詳細表示の内容は印刷対象として残る
+- window.print() 呼び出しOK
+- 個別CSV読込への影響なし
+- NaNなし
+- Console重大エラーなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 28.9 最終判定
+
+外部PDFライブラリを使わず、ブラウザ標準の `window.print()` を前提とした印刷・PDF保存導線の見え方を最小限のCSS調整で整えた。操作UIは印刷時に非表示となり、帳票本体・月次チェック結果・工事詳細は印刷対象として維持される。

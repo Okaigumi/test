@@ -124,10 +124,13 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .menu-card-desc{font-size:14px;color:var(--muted);margin-bottom:10px;line-height:1.6;}
 .menu-card-zeronote{font-size:13px;color:#8a5200;margin-bottom:10px;}
 .menu-card .back-btn{margin:auto 0 0;align-self:flex-start;}
-.menu-card-check{border-color:var(--accent-bg);background:var(--accent-bg);}
-.menu-section{margin-top:18px;}
+/* 横断チェックのカードは個別帳票カードと同じ見た目に統一（色付き強調をやめ、警告色に見えないようにする）。Phase 1 追加修正 */
+.menu-card-check{border-color:var(--line);background:#fff;}
+.menu-section{margin-top:22px;}
 .menu-section-title{font-size:17px;font-weight:700;color:var(--ink);margin-bottom:2px;}
 .menu-section-desc{font-size:14px;color:var(--muted);margin-bottom:4px;}
+/* ZIP読込後は帳票選択メニューを主役にするため、見出しを大きく・濃くする。Phase 1 追加修正 */
+#multiMenuCard>.card-title{font-size:20px;color:var(--ink);margin-bottom:6px;}
 
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
@@ -183,8 +186,8 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
   <h1>岡井組 CSVビューア</h1>
   <!-- モード切替タブと単体CSV選択は通常運用では使わないため画面から隠す（要素はJS互換のため残置）。Phase 1 -->
   <div class="mode-tabs hidden">
-    <button type="button" id="modeSingleBtn" class="mode-tab active">単体CSV</button>
-    <button type="button" id="modeMultiBtn" class="mode-tab">複数CSV統合</button>
+    <button type="button" id="modeSingleBtn" class="mode-tab active">単体CSV読込</button>
+    <button type="button" id="modeMultiBtn" class="mode-tab">CSV一式ZIP読込</button>
   </div>
   <div class="file-row hidden" id="singleFileRow">
     <input type="file" id="fileInput" accept=".csv,text/csv">
@@ -377,7 +380,8 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         </div>
       </div>
 
-      <div class="card no-print" id="multiIndividualCard">
+      <!-- 個別CSV読込は通常運用では使わないため通常画面から非表示（DOM・JSは互換のため残置）。Phase 1 追加修正 -->
+      <div class="card no-print hidden" id="multiIndividualCard">
         <div class="card-title">トラブル対応用：個別CSV読込（通常は開きません）</div>
         <div class="note" style="margin-top:0;margin-bottom:10px;">通常は使いません。いつもは上の「CSV一式ZIPを読み込む」をお使いください。個別CSVを1つずつ確認する必要があるとき（トラブル対応・検証）だけ開きます。</div>
         <button type="button" id="multiIndividualToggle" class="back-btn" style="margin:0 0 10px;" aria-expanded="false" aria-controls="multiIndividualBody">個別CSV読込を開く（通常は不要）</button>
@@ -1215,7 +1219,7 @@ function renderProjectDetail(projectKey){
   // 警告・メモ
   const wTitle=document.createElement('div');wTitle.className='card-title';wTitle.style.marginTop='14px';wTitle.textContent='警告・メモ';area.appendChild(wTitle);
   area.appendChild(noteEl('projects_summary.csv には工事ごとの warnings / notes 列はありません。'));
-  area.appendChild(noteEl('月別費用ビューは、複数CSV統合モードで実装予定です。'));
+  area.appendChild(noteEl('月別費用ビューは今後対応予定です。'));
 }
 
 // ===== 集計ページ共通：金額＋原価率列を描画 =====
@@ -1568,7 +1572,7 @@ function renderMachineMonthPage(){
   if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
   area.appendChild(noteEl('日付列がないため月別集計はできません。machine_details.csv は重機台帳（1行＝1重機）で、稼働日を持ちません。'));
   area.appendChild(noteEl('リース期間（lease_start / lease_end）は台帳項目で稼働日ではないため、月別集計には使用していません。'));
-  area.appendChild(noteEl('生データページで内容を確認してください。月別の重機稼働・原価は今後の複数CSV統合モードで検討します。'));
+  area.appendChild(noteEl('生データページで内容を確認してください。月別の重機稼働・原価は今後検討します。'));
 }
 
 // ===== 現場別集計ページ（工事名/現場列がないため不可） =====
@@ -1577,7 +1581,7 @@ function renderMachineProjectPage(){
   if(state.csvType!=='machine_details'){area.appendChild(noteEl('このページは重機台帳CSV（machine_details.csv）で利用できます。'));return;}
   area.appendChild(noteEl('工事名・現場の列がないため現場別集計はできません。machine_details.csv は重機台帳で、現場への紐付けを持ちません。'));
   area.appendChild(noteEl('注記：machine_locations は移動記録で稼働時間・使用日数を持たず、現場別の重機費は本CSV単体では正確に算出できません。'));
-  area.appendChild(noteEl('生データページで内容を確認してください。現場別の重機費は今後の複数CSV統合モードで検討します。'));
+  area.appendChild(noteEl('生データページで内容を確認してください。現場別の重機費は今後検討します。'));
 }
 
 // ===== 確認リストページ（データ品質） =====
@@ -2834,15 +2838,17 @@ function renderMultiMenu(){
   clear(area);
   const pkg=multiState.package;
   const intro=document.createElement('div');intro.className='menu-intro';
-  intro.textContent='確認したい帳票を選んでください。通常は4つの個別帳票で内容を確認し、最後に「月次チェック・差異確認」で全体の違和感を確認します。';
+  intro.textContent='見たい帳票のカードを選んで「開く」を押してください。';
   area.appendChild(intro);
+  // 読込結果の細かい情報（対象期間・出力日時・ZIPファイル）は、押すカードを優先するためメニュー末尾に回す。Phase 1 追加修正
+  let pkgInfo=null;
   if(pkg&&(pkg.periodLabel||pkg.exportedAt||pkg.fileName)){
     const dl=document.createElement('dl');dl.className='kv-list';
     const add=(k,v)=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.appendChild(dt);dl.appendChild(dd);};
     if(pkg.periodLabel)add('対象期間',pkg.periodLabel);
     if(pkg.exportedAt)add('出力日時',pkg.exportedAt);
     if(pkg.fileName)add('ZIPファイル',pkg.fileName);
-    area.appendChild(dl);
+    pkgInfo=dl;
   }
   // 個別帳票セクション（4帳票）
   const indivSec=document.createElement('div');indivSec.className='menu-section';
@@ -2887,6 +2893,13 @@ function renderMultiMenu(){
   crossGrid.appendChild(mc);
   crossSec.appendChild(crossGrid);
   area.appendChild(crossSec);
+  // 読込結果の細かい情報はメニュー末尾に控えめに表示
+  if(pkgInfo){
+    const infoSec=document.createElement('div');infoSec.className='menu-section';
+    const infoTitle=document.createElement('div');infoTitle.className='menu-section-desc';infoTitle.textContent='読み込んだCSV一式の情報';infoSec.appendChild(infoTitle);
+    infoSec.appendChild(pkgInfo);
+    area.appendChild(infoSec);
+  }
 }
 // 帳票カードの「開く」。4カード（projects_summary 2-4-9-2-c / attendance_details 2-4-9-2-d /
 // project_cost_details 2-4-9-2-e / machine_details 2-4-9-2-f）すべてZIP由来単体ビューへ実接続済み。

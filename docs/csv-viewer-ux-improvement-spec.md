@@ -2265,3 +2265,114 @@ local-viewers/csv-viewer.html のみ
 ### 28.9 最終判定
 
 外部PDFライブラリを使わず、ブラウザ標準の `window.print()` を前提とした印刷・PDF保存導線の見え方を最小限のCSS調整で整えた。操作UIは印刷時に非表示となり、帳票本体・月次チェック結果・工事詳細は印刷対象として維持される。
+
+## 29. Phase 2-4-9-6：CSVビューアー運用前最終確認 結果
+
+### 29.1 確認対象
+
+```text
+local-viewers/csv-viewer.html
+```
+
+### 29.2 確認目的
+
+Phase 2-4-9 のCSVビューアー関連改善を運用前に総点検し、通常運用に進められる状態か確認する。
+
+### 29.3 確認対象フェーズ
+
+```text
+- Phase 2-4-9-2：ZIP内CSVを単体CSVビューで表示
+- Phase 2-4-9-3-a：ZIP読込後メニュー文言・分類整理
+- Phase 2-4-9-3-b：個別CSV読込エリアの初期折りたたみ
+- Phase 2-4-9-3-c：ZIP由来単体ビュー上部情報の整理
+- Phase 2-4-9-5-a：ZIP由来単体ビューへの印刷・PDF保存ボタン追加
+- Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボタン追加
+- Phase 2-4-9-5-c：印刷時CSSの最小調整
+```
+
+### 29.4 確認結果
+
+```text
+- git status clean
+- git diff なし
+- JS構文チェック OK
+- セキュリティ確認 OK
+- ZIP読込・帳票選択メニュー OK
+- ZIP由来単体ビュー4帳票 OK
+- 月次チェック・差異確認 OK
+- 工事詳細表示 OK
+- 個別CSV読込 OK
+- 印刷CSS OK
+- docs整合性 OK
+- 一時ファイル削除済み
+```
+
+### 29.5 ZIP由来単体ビュー確認
+
+4帳票すべてで以下を確認した。
+
+```text
+- 帳票選択メニューに戻る導線
+- 印刷・PDF保存ボタン
+- ZIP内CSVを単体ビューで確認中
+- 帳票名
+- 読込元
+- 対象期間
+- 表・集計・主要カード
+- NaNなし
+- window.print() 呼び出し
+- 戻り後の multiState.loaded 維持
+- 戻り後の rows 保持
+```
+
+### 29.6 月次チェック・差異確認確認
+
+```text
+- 月次チェック・差異確認を開ける
+- multiPrintBtn 表示
+- multiIntegratedBack 表示
+- 確認リスト・差異確認・工事別まとめを確認
+- NaNなし
+- window.print() 呼び出し
+- 帳票選択メニューへ戻れる
+- 戻り後は親セクション hidden で非表示
+- multiState.loaded 維持
+- rows 保持
+```
+
+### 29.7 工事詳細表示確認
+
+```text
+- multiDetailBody 表示
+- multiDetailPrintBtn 文言「印刷・PDF保存」
+- multiDetailPrintBtn は no-print
+- 工事概要 NaNなし
+- window.print() 呼び出し
+```
+
+### 29.8 個別CSV読込確認
+
+```text
+- 初期折りたたみ
+- 開閉動作 OK
+- file読込時に zipSingleBack hidden
+- state.loaded=true
+- csvType 設定 OK
+- ZIP由来表示との混同なし
+```
+
+### 29.9 印刷CSS確認
+
+```text
+- @media print 存在
+- .no-print display:none!important
+- .card break-inside / page-break-inside
+- table page-break-inside:auto
+- tr break-inside / page-break-inside
+- 操作ボタン類は no-print 対象
+- 帳票本体・月次チェック結果・工事詳細は印刷対象として残る
+```
+
+### 29.10 最終判定
+
+重大な問題は確認されなかった。CSVビューアーは運用開始可能な状態と判定する。

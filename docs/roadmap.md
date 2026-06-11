@@ -2260,6 +2260,36 @@ Phase 2-4-9-5-c：印刷時CSSの最小調整
 Phase 2-4-9-6：CSVビューアー運用前最終確認
 ```
 
+#### Phase 2-4-9-6：CSVビューアー運用前最終確認（完了）
+
+- 確認結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §29。
+
+**記録内容：**
+
+- 確認のみ。実装変更なし。
+- 対象：`local-viewers/csv-viewer.html`。
+- Phase 2-4-9-2 / 2-4-9-3-a / 2-4-9-3-b / 2-4-9-3-c / 2-4-9-5-a / 2-4-9-5-b / 2-4-9-5-c の累積確認を実施。
+- git status clean。
+- JS構文チェック OK。
+- セキュリティ確認 OK。
+- ZIP読込・帳票選択メニュー OK。
+- ZIP由来単体ビュー4帳票 OK。
+- 月次チェック・差異確認 OK。
+- 工事詳細表示 OK。
+- 個別CSV読込 OK。
+- 印刷CSS OK。
+- docs整合性 OK。
+- 一時ファイル削除済み。
+- SQL実行・DB変更なし。
+- 運用前判定：問題なし。CSVビューアーは運用開始可能。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-5：運用開始準備・試運用
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

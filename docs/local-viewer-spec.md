@@ -35,6 +35,8 @@
 > **Phase 2-4-9-5-b（実装済み）**：月次チェック・差異確認画面に「印刷・PDF保存」導線を追加した。`multiPrintBtn` を `#multiIntegratedSection` 内へ移動し、帳票選択メニューやZIP読込ホームでは表示されないようにした（コミット `7a495ce`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §27 を参照。
 >
 > **Phase 2-4-9-5-c（実装済み）**：印刷時CSSを最小調整した。操作ボタン類は `no-print` により印刷時非表示とし、帳票本体・月次チェック結果・工事詳細表示は印刷対象として残す（コミット `b1584c0`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §28 を参照。
+>
+> **Phase 2-4-9-6（確認完了）**：CSVビューアーの運用前最終確認を実施した。ZIP読込、4帳票単体ビュー、月次チェック・差異確認、工事詳細表示、個別CSV読込、印刷CSS、セキュリティ確認、JS構文チェックを確認し、運用開始可能と判定した。確認結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §29 を参照。
 
 ## 1. 目的
 

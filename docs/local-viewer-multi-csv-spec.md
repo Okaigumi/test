@@ -925,6 +925,12 @@ ZIP由来単体ビュー接続方針：
 - 既存の `@media print` を最小調整した。`.card` の改ページ分断抑制、`table` / `tr` の改ページ制御、`.main` の印刷幅調整を行い、月次チェック・差異確認と工事詳細表示を印刷しやすくした。
 - 操作ボタン類（`multiIntegratedBack` / `multiPrintBtn` / `multiDetailBack` / `multiDetailPrintBtn` など）は既存 `no-print` 指定により印刷時非表示。JS・HTML構造・集計ロジックは無変更。
 
+### 運用前最終確認 完了（Phase 2-4-9-6）
+
+確認結果の詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §29。
+
+- CSV一式ZIP読込後の帳票選択メニュー、ZIP由来単体ビュー4帳票、月次チェック・差異確認、工事詳細表示、印刷・PDF保存導線、個別CSV読込補助導線の運用前最終確認を実施し、重大な問題なしと判定した。
+
 ---
 
 ## 12. MVP範囲

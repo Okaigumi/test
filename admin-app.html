@@ -215,6 +215,7 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
       <button class="nav-item" onclick="showPage('machines')" id="nav-machines"><span class="nav-icon">🚜</span>重機管理</button>
       <div class="nav-section">財務</div>
       <button class="nav-item" onclick="showPage('invoices')" id="nav-invoices"><span class="nav-icon">📄</span>請求書</button>
+      <button class="nav-item" onclick="showPage('invoicePdf')" id="nav-invoicePdf"><span class="nav-icon">🧾</span>請求書PDF</button>
       <button class="nav-item" onclick="showPage('rates')" id="nav-rates"><span class="nav-icon">💴</span>単価設定</button>
       <button class="nav-item" onclick="showPage('budgets')" id="nav-budgets"><span class="nav-icon">📋</span>実行予算</button>
       <div class="nav-section">集計出力</div>
@@ -346,11 +347,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理',csv:'CSV出力'};
+  const titles={sites:'現場一覧',invoices:'請求書',invoicePdf:'請求書PDF',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理',csv:'CSV出力'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices,csv:pageCsv};
+  const pages={sites:pageSites,invoices:pageInvoices,invoicePdf:pageInvoicePdf,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices,csv:pageCsv};
   if(pages[name]) await pages[name]();
 }
 
@@ -733,6 +734,423 @@ async function restoreInvoice(id){
   const{error}=await sb.rpc('restore_invoice_secure',{session_token_input:token,id_input:id});
   if(error){alert('復元に失敗しました：'+error.message);return;}
   await pageInvoices();
+}
+
+// ===== 請求書PDF管理・原価登録候補（試作品） =====
+const COST_CATEGORIES=['材料費','外注費','重機費','燃料費','処分費','運搬費','安全費','消耗品費','共通経費','その他','未分類'];
+const INV_DOC_STATUS={
+  unprocessed:{label:'未処理',style:'background:var(--surface2);color:var(--text3);'},
+  editing:{label:'入力中',cls:'badge-blue'},
+  amount_mismatch:{label:'差額あり',cls:'badge-orange'},
+  confirmed:{label:'確認済み',cls:'badge-green'},
+  queued:{label:'候補作成済み',cls:'badge-purple'},
+  excluded:{label:'除外',style:'background:var(--surface2);color:var(--text3);'},
+  error:{label:'エラー',cls:'badge-red'}
+};
+let _invDocId=null,_invDocStatus=null,_invDocLines=[],_invPdfTab='list';
+
+function invDocBadge(status){
+  const s=INV_DOC_STATUS[status]||{label:status||'-',style:'background:var(--surface2);color:var(--text3);'};
+  return s.cls?`<span class="badge ${s.cls}">${s.label}</span>`:`<span class="badge" style="${s.style}">${s.label}</span>`;
+}
+function invProjectOptions(selId,selName){
+  let opts='<option value="">指定なし</option>';
+  let found=false;
+  opts+=_sites.map(s=>{const sel=s.id===selId;if(sel)found=true;return `<option value="${s.id}" ${sel?'selected':''}>${escapeHtml(s.name)}</option>`;}).join('');
+  if(selId&&!found)opts+=`<option value="${selId}" selected>${escapeHtml(selName||'(無効な工事)')}</option>`;
+  return opts;
+}
+function costCategoryOptions(sel){
+  return '<option value="">未選択</option>'+COST_CATEGORIES.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c}</option>`).join('');
+}
+
+async function invPdfSignedUrl(path){
+  if(!path)return null;
+  const{data,error}=await sb.storage.from('invoice-pdfs').createSignedUrl(path,3600);
+  if(error){console.error('署名URL生成エラー:',error.message);return null;}
+  return data?.signedUrl||null;
+}
+async function openInvoicePdf(path){
+  const u=await invPdfSignedUrl(path);
+  if(u)window.open(u,'_blank');else alert('PDFを開けませんでした');
+}
+
+// ---- PDFアップロード ----
+async function uploadInvoicePdf(input){
+  const file=input.files?.[0];
+  if(!file)return;
+  // PDF以外はアップロード不可
+  if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf')){
+    alert('PDFファイルのみアップロードできます');input.value='';return;
+  }
+  if(file.size>10*1024*1024){alert('PDFは10MBまでです');input.value='';return;}
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  input.disabled=true;
+  document.getElementById('pageContent').innerHTML='<div class="card"><div class="card-body">アップロード中…</div></div>';
+  try{
+    const now=new Date();
+    const yyyy=now.getFullYear();
+    const mm=String(now.getMonth()+1).padStart(2,'0');
+    const uuid=(crypto.randomUUID?crypto.randomUUID():(Date.now()+'-'+Math.random().toString(16).slice(2)));
+    const path=`original/${yyyy}/${mm}/${uuid}.pdf`;
+    const{error:upErr}=await sb.storage.from('invoice-pdfs').upload(path,file,{contentType:'application/pdf'});
+    if(upErr){alert('アップロードに失敗しました：'+upErr.message);await pageInvoicePdf('list');return;}
+    const{data,error}=await sb.rpc('create_invoice_document_secure',{
+      session_token_input:token,
+      file_path_input:path,
+      original_file_name_input:file.name,
+      uploaded_by_input:currentUser.name
+    });
+    if(error){alert('請求書レコードの作成に失敗しました：'+error.message);await pageInvoicePdf('list');return;}
+    const newId=Array.isArray(data)?data[0]?.id:data?.id;
+    if(newId){await openInvoiceDocDetail(newId);}else{await pageInvoicePdf('list');}
+  }catch(e){
+    alert('アップロード処理でエラーが発生しました：'+(e?.message||e));
+    await pageInvoicePdf('list');
+  }
+}
+
+// ---- 一覧画面 ----
+async function pageInvoicePdf(tab){
+  if(tab)_invPdfTab=tab;
+  const token=currentUser?.session_token;
+  if(!token){document.getElementById('pageContent').innerHTML='<div class="card"><div class="card-body">セッションが無効です。再ログインしてください。</div></div>';return;}
+  document.getElementById('topbarActions').innerHTML=`<label class="btn btn-primary" style="cursor:pointer;">＋ 請求書PDFをアップロード<input type="file" accept="application/pdf,.pdf" style="display:none;" onchange="uploadInvoicePdf(this)"></label>`;
+  const tabBar=`<div style="display:flex;gap:8px;margin-bottom:16px;">
+    <button class="btn ${_invPdfTab==='list'?'btn-primary':'btn-secondary'}" onclick="pageInvoicePdf('list')">請求書一覧</button>
+    <button class="btn ${_invPdfTab==='queue'?'btn-primary':'btn-secondary'}" onclick="pageInvoicePdf('queue')">原価登録候補</button>
+  </div>`;
+
+  if(_invPdfTab==='queue'){
+    const{data,error}=await sb.rpc('list_cost_registration_queue_secure',{session_token_input:token});
+    if(error){document.getElementById('pageContent').innerHTML=tabBar+`<div class="card"><div class="card-body">読み込みに失敗しました：${escapeHtml(error.message)}</div></div>`;return;}
+    const rows=data||[];
+    const qStatus={pending:{label:'登録待ち',cls:'badge-blue'},registered:{label:'登録済み',cls:'badge-green'},excluded:{label:'除外',cls:'badge-orange'}};
+    document.getElementById('pageContent').innerHTML=tabBar+`
+      <div class="card">
+        <div class="card-header"><div class="card-title">原価登録候補（${rows.length}件）</div></div>
+        <table class="data-table">
+          <thead><tr><th>請求日</th><th>請求月</th><th>取引先</th><th>工事</th><th>原価区分</th><th>摘要</th><th>金額</th><th>ステータス</th><th>元PDF</th></tr></thead>
+          <tbody>${rows.map(r=>{
+            const st=qStatus[r.status]||{label:r.status,cls:'badge-orange'};
+            const proj=_sites.find(s=>s.id===r.project_id);
+            return `<tr>
+              <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(r.invoice_date||'-')}</td>
+              <td style="font-size:12px;">${escapeHtml(r.billing_month||'-')}</td>
+              <td>${escapeHtml(r.vendor_name||'-')}</td>
+              <td style="font-size:12px;color:var(--text2);">${escapeHtml(proj?.name||'指定なし')}</td>
+              <td><span class="badge badge-blue">${escapeHtml(r.cost_category||'未分類')}</span></td>
+              <td style="font-size:12px;">${escapeHtml(r.description||'')}</td>
+              <td class="money" style="font-weight:600;">${fmt(r.amount)}</td>
+              <td><span class="badge ${st.cls}">${st.label}</span></td>
+              <td>${r.pdf_path?`<button class="btn btn-secondary btn-sm" onclick="openInvoicePdf('${escapeHtml(r.pdf_path)}')">PDF</button>`:'-'}</td>
+            </tr>`;}).join('')}
+          </tbody>
+        </table>
+        ${rows.length===0?'<div class="card-body" style="color:var(--text3);">登録候補はまだありません。</div>':''}
+      </div>`;
+    return;
+  }
+
+  const{data,error}=await sb.rpc('list_invoice_documents_secure',{session_token_input:token});
+  if(error){document.getElementById('pageContent').innerHTML=tabBar+`<div class="card"><div class="card-body">読み込みに失敗しました：${escapeHtml(error.message)}</div></div>`;return;}
+  const docs=data||[];
+  document.getElementById('pageContent').innerHTML=tabBar+`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">請求書件数</div><div class="stat-val blue">${docs.length}</div></div>
+      <div class="stat-card"><div class="stat-label">未処理/入力中</div><div class="stat-val orange">${docs.filter(d=>['unprocessed','editing','amount_mismatch'].includes(d.status)).length}</div></div>
+      <div class="stat-card"><div class="stat-label">候補作成済み</div><div class="stat-val green">${docs.filter(d=>d.status==='queued').length}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">請求書一覧</div></div>
+      <table class="data-table">
+        <thead><tr><th>アップロード日</th><th>取引先</th><th>請求日</th><th>請求月</th><th>請求書合計</th><th>明細合計</th><th>差額</th><th>明細数</th><th>ステータス</th><th>PDF</th><th>詳細</th></tr></thead>
+        <tbody>${docs.map(d=>{
+          const lineTotal=Number(d.line_total)||0;
+          const total=d.total_amount==null?null:Number(d.total_amount);
+          const diff=total==null?null:(total-lineTotal);
+          const diffHtml=diff==null?'<span style="color:var(--text3);">-</span>':(diff===0?'<span style="color:var(--green);font-weight:600;">¥0</span>':`<span style="color:var(--red);font-weight:600;">${fmt(diff)}</span>`);
+          const upd=d.uploaded_at?String(d.uploaded_at).slice(0,10):'-';
+          return `<tr>
+            <td style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(upd)}</td>
+            <td><div style="font-weight:500;">${escapeHtml(d.vendor_name||'(未入力)')}</div><div style="font-size:11px;color:var(--text3);">${escapeHtml(d.original_file_name||'')}</div></td>
+            <td style="font-size:12px;">${escapeHtml(d.invoice_date||'-')}</td>
+            <td style="font-size:12px;">${escapeHtml(d.billing_month||'-')}</td>
+            <td class="money" style="font-weight:600;">${total==null?'-':fmt(total)}</td>
+            <td class="money">${fmt(lineTotal)}</td>
+            <td class="money">${diffHtml}</td>
+            <td style="text-align:center;">${d.line_count||0}</td>
+            <td>${invDocBadge(d.status)}</td>
+            <td>${d.file_path?`<button class="btn btn-secondary btn-sm" onclick="openInvoicePdf('${escapeHtml(d.file_path)}')">PDF</button>`:'-'}</td>
+            <td><button class="btn btn-primary btn-sm" onclick="openInvoiceDocDetail('${d.id}')">詳細</button></td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>
+      ${docs.length===0?'<div class="card-body" style="color:var(--text3);">請求書PDFはまだありません。右上からアップロードしてください。</div>':''}
+    </div>`;
+}
+
+// ---- 詳細画面（左：PDF / 右：入力フォーム） ----
+async function openInvoiceDocDetail(id){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data:doc,error}=await sb.rpc('get_invoice_document_secure',{session_token_input:token,id_input:id});
+  if(error||!doc){alert('請求書の取得に失敗しました：'+(error?.message||'not found'));return;}
+  const{data:lines}=await sb.rpc('list_invoice_document_lines_secure',{session_token_input:token,invoice_document_id_input:id});
+  _invDocId=id;
+  _invDocStatus=doc.status;
+  _invDocLines=(lines||[]).map(l=>({
+    project_id:l.project_id||'',project_name:l.project_name||'',
+    cost_category:l.cost_category||'',description:l.description||'',
+    amount:l.amount==null?'':l.amount,tax_amount:l.tax_amount==null?'':l.tax_amount,
+    memo:l.memo||''
+  }));
+  renderInvoiceDocDetail(doc);
+  const url=await invPdfSignedUrl(doc.file_path);
+  const frame=document.getElementById('invDocPdfFrame');
+  if(frame){if(url)frame.src=url;else frame.outerHTML='<div style="padding:40px;text-align:center;color:var(--text3);">PDFを表示できませんでした</div>';}
+}
+
+function renderInvoiceDocDetail(doc){
+  const ro=(doc.status==='confirmed'||doc.status==='queued'); // 確認済み後は編集不可
+  const dis=ro?'disabled':'';
+  document.getElementById('pageTitle').textContent='請求書PDF / 詳細';
+  document.getElementById('pageSub').textContent=doc.original_file_name||'';
+  document.getElementById('topbarActions').innerHTML=`<button class="btn btn-secondary" onclick="pageInvoicePdf('list')">← 一覧へ戻る</button>`;
+
+  let footerBtns='';
+  if(ro){
+    footerBtns=`
+      <button class="btn btn-secondary" onclick="unconfirmInvDoc()">確認解除して編集</button>
+      <button class="btn btn-primary" onclick="createInvDocQueue()">${doc.status==='queued'?'原価登録候補を再作成':'原価登録候補を作成'}</button>
+      <button class="btn btn-danger" onclick="excludeInvDoc()">除外</button>`;
+  }else{
+    footerBtns=`
+      <button class="btn btn-secondary" onclick="saveInvDoc()">保存</button>
+      <button class="btn btn-success" id="invDocConfirmBtn" onclick="confirmInvDoc()">確認済みにする</button>
+      <button class="btn btn-danger" onclick="excludeInvDoc()">除外</button>`;
+  }
+
+  const html=`
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+    <div style="flex:1 1 420px;min-width:320px;position:sticky;top:16px;">
+      <div class="card" style="padding:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div class="card-title">PDFプレビュー</div>
+          <button class="btn btn-secondary btn-sm" onclick="openInvoicePdf('${escapeHtml(doc.file_path)}')">別タブで開く</button>
+        </div>
+        <iframe id="invDocPdfFrame" src="" style="width:100%;height:calc(100vh - 220px);min-height:400px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"></iframe>
+      </div>
+    </div>
+    <div style="flex:1 1 480px;min-width:340px;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">請求書基本情報</div><div>${invDocBadge(doc.status)}</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group form-full">
+              <label class="form-label">取引先名</label>
+              <input class="form-input" id="id-vendor" value="${escapeHtml(doc.vendor_name||'')}" placeholder="例：岡井重機" ${dis}>
+            </div>
+            <div class="form-group">
+              <label class="form-label">請求日</label>
+              <input type="date" class="form-input" id="id-date" value="${escapeHtml(doc.invoice_date||'')}" ${dis}>
+            </div>
+            <div class="form-group">
+              <label class="form-label">請求月</label>
+              <input type="month" class="form-input" id="id-month" value="${escapeHtml(doc.billing_month||'')}" ${dis}>
+            </div>
+            <div class="form-group">
+              <label class="form-label">請求書合計金額</label>
+              <input type="number" class="form-input" id="id-total" value="${doc.total_amount==null?'':doc.total_amount}" step="1" placeholder="0" oninput="recalcInvDoc()" ${dis}>
+            </div>
+            <div class="form-group">
+              <label class="form-label">税額</label>
+              <input type="number" class="form-input" id="id-tax" value="${doc.tax_amount==null?'':doc.tax_amount}" step="1" placeholder="0" ${dis}>
+            </div>
+            <div class="form-group form-full">
+              <label class="form-label">メモ</label>
+              <input class="form-input" id="id-memo" value="${escapeHtml(doc.memo||'')}" placeholder="任意" ${dis}>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header">
+          <div class="card-title">明細行</div>
+          ${ro?'':'<button class="btn btn-secondary btn-sm" onclick="addInvDocLine()">＋ 行を追加</button>'}
+        </div>
+        <table class="data-table" style="font-size:12px;">
+          <thead><tr><th style="min-width:120px;">工事</th><th style="min-width:110px;">原価区分</th><th>摘要</th><th style="min-width:100px;">金額</th><th style="min-width:90px;">税額</th><th>メモ</th>${ro?'':'<th></th>'}</tr></thead>
+          <tbody id="invDocLinesBody"></tbody>
+        </table>
+        <div class="card-body" style="border-top:1px solid var(--border);">
+          <div style="display:flex;justify-content:flex-end;gap:24px;font-size:14px;">
+            <div>請求書合計：<span id="invDocSumTotal" class="money" style="font-weight:600;"></span></div>
+            <div>明細合計：<span id="invDocSumLines" class="money" style="font-weight:600;"></span></div>
+            <div>差額：<span id="invDocSumDiff" class="money" style="font-weight:700;"></span></div>
+          </div>
+          <div id="invDocHint" style="text-align:right;font-size:12px;margin-top:6px;color:var(--text3);"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;"><div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        ${footerBtns}
+      </div></div>
+    </div>
+  </div>`;
+  document.getElementById('pageContent').innerHTML=html;
+  renderInvDocLinesTable();
+}
+
+function renderInvDocLinesTable(){
+  const ro=(_invDocStatus==='confirmed'||_invDocStatus==='queued');
+  const dis=ro?'disabled':'';
+  const body=document.getElementById('invDocLinesBody');
+  if(!body)return;
+  body.innerHTML=_invDocLines.map((l,i)=>`
+    <tr>
+      <td><select class="form-input" style="font-size:12px;padding:6px;" onchange="updateInvDocLine(${i},'project_id',this.value)" ${dis}>${invProjectOptions(l.project_id,l.project_name)}</select></td>
+      <td><select class="form-input" style="font-size:12px;padding:6px;" onchange="updateInvDocLine(${i},'cost_category',this.value)" ${dis}>${costCategoryOptions(l.cost_category)}</select></td>
+      <td><input class="form-input" style="font-size:12px;padding:6px;" value="${escapeHtml(l.description||'')}" oninput="updateInvDocLine(${i},'description',this.value)" placeholder="摘要" ${dis}></td>
+      <td><input type="number" class="form-input" style="font-size:12px;padding:6px;text-align:right;" value="${l.amount===''?'':l.amount}" oninput="updateInvDocLine(${i},'amount',this.value)" placeholder="0" ${dis}></td>
+      <td><input type="number" class="form-input" style="font-size:12px;padding:6px;text-align:right;" value="${l.tax_amount===''?'':l.tax_amount}" oninput="updateInvDocLine(${i},'tax_amount',this.value)" placeholder="0" ${dis}></td>
+      <td><input class="form-input" style="font-size:12px;padding:6px;" value="${escapeHtml(l.memo||'')}" oninput="updateInvDocLine(${i},'memo',this.value)" placeholder="任意" ${dis}></td>
+      ${ro?'':`<td><button class="btn btn-danger btn-sm" onclick="removeInvDocLine(${i})">削除</button></td>`}
+    </tr>`).join('');
+  if(_invDocLines.length===0)body.innerHTML=`<tr><td colspan="${ro?6:7}" style="color:var(--text3);text-align:center;padding:16px;">明細行がありません。${ro?'':'「＋ 行を追加」で追加してください。'}</td></tr>`;
+  recalcInvDoc();
+}
+
+function updateInvDocLine(i,field,value){
+  if(!_invDocLines[i])return;
+  if(field==='project_id'){
+    _invDocLines[i].project_id=value;
+    const s=_sites.find(s=>s.id===value);
+    _invDocLines[i].project_name=s?s.name:'';
+  }else{
+    _invDocLines[i][field]=value;
+  }
+  if(field==='amount')recalcInvDoc();
+}
+function addInvDocLine(){
+  _invDocLines.push({project_id:'',project_name:'',cost_category:'',description:'',amount:'',tax_amount:'',memo:''});
+  renderInvDocLinesTable();
+}
+function removeInvDocLine(i){
+  _invDocLines.splice(i,1);
+  renderInvDocLinesTable();
+}
+
+function recalcInvDoc(){
+  const totalEl=document.getElementById('id-total');
+  const total=totalEl&&totalEl.value!==''?parseInt(totalEl.value):null;
+  const lineTotal=_invDocLines.reduce((s,l)=>s+(l.amount===''||l.amount==null?0:(parseInt(l.amount)||0)),0);
+  const diff=total==null?null:(total-lineTotal);
+  const tEl=document.getElementById('invDocSumTotal');
+  const lEl=document.getElementById('invDocSumLines');
+  const dEl=document.getElementById('invDocSumDiff');
+  if(tEl)tEl.textContent=total==null?'(未入力)':fmt(total);
+  if(lEl)lEl.textContent=fmt(lineTotal);
+  if(dEl){dEl.textContent=diff==null?'-':fmt(diff);dEl.style.color=(diff===0)?'var(--green)':'var(--red)';}
+  const okToConfirm=(diff===0&&_invDocLines.length>0);
+  const cbtn=document.getElementById('invDocConfirmBtn');
+  const hint=document.getElementById('invDocHint');
+  if(cbtn){
+    cbtn.disabled=!okToConfirm;
+    cbtn.style.opacity=okToConfirm?'1':'0.5';
+    cbtn.style.cursor=okToConfirm?'pointer':'not-allowed';
+  }
+  if(hint){
+    if(_invDocLines.length===0)hint.textContent='※ 明細が1行もないため確認済みにできません';
+    else if(total==null)hint.textContent='※ 請求書合計金額を入力してください';
+    else if(diff!==0)hint.textContent='※ 差額が0円でないため確認済みにできません';
+    else hint.textContent='✓ 差額0円・明細あり：確認済みにできます';
+  }
+}
+
+function collectInvDocPayload(){
+  return {
+    vendor:document.getElementById('id-vendor').value.trim()||null,
+    date:document.getElementById('id-date').value||null,
+    month:document.getElementById('id-month').value||null,
+    total:document.getElementById('id-total').value===''?null:parseInt(document.getElementById('id-total').value),
+    tax:document.getElementById('id-tax').value===''?null:parseInt(document.getElementById('id-tax').value),
+    memo:document.getElementById('id-memo').value||null,
+    lines:_invDocLines.map((l,i)=>({
+      line_no:i+1,
+      project_id:l.project_id||null,
+      project_name:l.project_name||null,
+      cost_category:l.cost_category||null,
+      description:l.description||null,
+      amount:l.amount===''||l.amount==null?null:parseInt(l.amount),
+      tax_amount:l.tax_amount===''||l.tax_amount==null?null:parseInt(l.tax_amount),
+      tax_type:null,
+      memo:l.memo||null
+    }))
+  };
+}
+
+async function saveInvDoc(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const p=collectInvDocPayload();
+  const{error}=await sb.rpc('save_invoice_document_secure',{
+    session_token_input:token,
+    id_input:_invDocId,
+    vendor_name_input:p.vendor,
+    invoice_date_input:p.date,
+    billing_month_input:p.month,
+    total_amount_input:p.total,
+    tax_amount_input:p.tax,
+    memo_input:p.memo,
+    lines_json:p.lines
+  });
+  if(error){alert('保存に失敗しました：'+error.message);return false;}
+  return true;
+}
+
+async function confirmInvDoc(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  // 確認前に最新状態を保存
+  const saved=await saveInvDoc();
+  if(!saved)return;
+  const{error}=await sb.rpc('confirm_invoice_document_secure',{
+    session_token_input:token,id_input:_invDocId,confirmed_by_input:currentUser.name
+  });
+  if(error){alert('確認済みにできませんでした：'+error.message);return;}
+  await openInvoiceDocDetail(_invDocId);
+}
+
+async function unconfirmInvDoc(){
+  if(!confirm('確認を解除して編集可能な状態に戻しますか？\n（未登録の原価登録候補があれば削除されます）'))return;
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('unconfirm_invoice_document_secure',{session_token_input:token,id_input:_invDocId});
+  if(error){alert('確認解除に失敗しました：'+error.message);return;}
+  await openInvoiceDocDetail(_invDocId);
+}
+
+async function createInvDocQueue(){
+  if(!confirm('明細ごとに原価登録候補を作成します。よろしいですか？\n（原価管理本体への登録はまだ行いません）'))return;
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data,error}=await sb.rpc('create_cost_registration_queue_secure',{session_token_input:token,id_input:_invDocId});
+  if(error){alert('原価登録候補の作成に失敗しました：'+error.message);return;}
+  const cnt=Array.isArray(data)?data.length:0;
+  alert(`原価登録候補を${cnt}件作成しました。「原価登録候補」タブで確認できます。`);
+  await openInvoiceDocDetail(_invDocId);
+}
+
+async function excludeInvDoc(){
+  if(!confirm('この請求書を除外しますか？\n（一覧に表示されなくなります）'))return;
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{error}=await sb.rpc('exclude_invoice_document_secure',{session_token_input:token,id_input:_invDocId});
+  if(error){alert('除外に失敗しました：'+error.message);return;}
+  await pageInvoicePdf('list');
 }
 
 // ===== RATES PAGE =====

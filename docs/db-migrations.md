@@ -1383,3 +1383,83 @@ WHERE tablename = 'cost_entries';
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/roadmap.md`（集計出力機能 Phase 2-3 完了を追記）
 - docs/sql / scripts / backups / `.env.backup.local` は変更なし
+
+---
+
+## 2026-06-11 請求書PDF管理・原価登録候補作成（試作品）
+
+### 概要
+
+人間がPDFを見ながら 1枚の請求書を複数明細に分解し、明細ごとに「原価登録候補」を作る試作機能。
+OCR・AI自動判定・メール取り込み・フォルダ監視は **未実装**。
+PDF原本は請求書単位で 1つだけ Storage に保存（工事別に物理移動しない）、工事別の見え方はDB明細＋PDFリンクで実現。
+
+**既存の原価管理本体（`invoices` / `report_summary` 等）には一切触れていない。**
+削除済みの `public.cost_entries` は復活させていない（独立した3テーブルを新規作成）。
+
+### DB変更（`docs/sql/invoice-pdf-secure-rpc.sql` を Supabase SQL Editor で実行）
+
+**新規テーブル（3つ）**
+
+| テーブル | 用途 |
+|---|---|
+| `invoice_documents` | 請求書本体（PDF 1枚 = 1レコード） |
+| `invoice_document_lines` | 請求書明細行（複数工事・複数原価区分に対応） |
+| `invoice_cost_registration_queue` | 原価登録候補（明細ごと・pending/registered/excluded） |
+
+- 3テーブルとも `anon`/`authenticated` は INSERT/UPDATE/DELETE を REVOKE、SELECT のみ GRANT
+- 書き込みは全て secure RPC 経由
+- `invoice_documents.status` CHECK：`unprocessed / editing / amount_mismatch / confirmed / queued / excluded / error`
+- `invoice_cost_registration_queue.status` CHECK：`pending / registered / excluded`
+- `project_id` / `vendor_id` は疎結合のため FK を張らず uuid 列のみ（`sites` 等の構造変更なし）
+
+**新規RPC（10件・全て admin セッション検証つき / SECURITY DEFINER）**
+
+| RPC名 | 用途 |
+|---|---|
+| `create_invoice_document_secure` | Storage アップロード後にレコード作成（unprocessed） |
+| `list_invoice_documents_secure` | 一覧（明細数・明細合計を集計） |
+| `get_invoice_document_secure` | 1件取得 |
+| `list_invoice_document_lines_secure` | 明細行一覧 |
+| `save_invoice_document_secure` | 基本情報更新＋明細を全置換＋status再計算（confirmed/queuedは保存拒否） |
+| `confirm_invoice_document_secure` | 確認済み化（明細1行以上・合計一致が必須） |
+| `unconfirm_invoice_document_secure` | 確認解除（pending候補を削除し editing に戻す） |
+| `create_cost_registration_queue_secure` | confirmed の明細ごとに pending 候補を作成→queued |
+| `list_cost_registration_queue_secure` | 候補一覧（元PDFパス含む） |
+| `exclude_invoice_document_secure` | 請求書を除外 |
+
+**Storage（ダッシュボードで作成 → SQL）**
+
+- Bucket：`invoice-pdfs`（★非公開 / Public OFF）
+- Path：`original/{yyyy}/{mm}/{uuid}.pdf`、MIME：application/pdf、Size：10MB
+- RLS：`invoice_pdfs_insert`（`original/` 配下のみ INSERT）／`invoice_pdfs_select`（署名付きURL用 SELECT）
+- 非公開バケットのため、フロントは `createSignedUrl()` でプレビュー表示
+
+### フロント変更
+
+| ファイル | 内容 |
+|---|---|
+| `admin-app.html` | 「🧾 請求書PDF」メニュー・一覧/候補タブ・詳細画面（左PDF・右フォーム）・明細編集・合計チェック・確認/確認解除・原価登録候補作成を追加 |
+
+### 重要な制約（実装済み）
+
+- PDF以外アップロード不可（MIME＋拡張子チェック）
+- 請求書合計 ≠ 明細合計 のとき確認不可（フロント無効化＋RPCでも拒否）
+- 明細0行のとき確認不可（フロント＋RPC両方）
+- 確認済み後は編集不可（フォーム disabled＋RPC `save` 拒否）、「確認解除」で再編集可
+- 原価管理本体への直接登録はせず、`invoice_cost_registration_queue` に候補(pending)を作成するのみ
+
+### 実行手順（本番反映時）
+
+1. Supabase ダッシュボードで `invoice-pdfs` バケットを **非公開** で作成（MIME=application/pdf、10MB）
+2. `docs/sql/invoice-pdf-secure-rpc.sql` をセクションごとに実行
+3. 末尾の確認クエリ [1]〜[4] で テーブル3・RPC10・権限・Storageポリシー2 を確認
+4. `admin-app.html` をデプロイ
+
+### ローカルファイル変更
+
+- `admin-app.html`（請求書PDF UI追加）
+- `docs/sql/invoice-pdf-secure-rpc.sql`（新規）
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/roadmap.md`（試作品の進捗を追記）
+- 既存の invoices / genka-app.html / index.html は変更なし

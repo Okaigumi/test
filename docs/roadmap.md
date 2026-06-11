@@ -245,6 +245,28 @@ Storage 設計：
 - 材料・外注・重機集計
 - スマホUI改善
 
+### 請求書PDF管理・原価登録候補作成（試作品 / 2026-06-11）
+
+状態：試作品実装完了（OCR・AI自動判定・メール取込・フォルダ監視は対象外）
+
+方針：
+
+- PDF原本は請求書単位で1つだけ Storage 保存（工事別に物理移動しない）
+- 1枚の請求書に複数工事・複数原価区分が含まれる前提 → 明細行ごとに分解
+- 人間がPDFを見ながら明細分解し、明細ごとに原価登録候補を作る
+- 原価管理本体への直接登録はまだ行わず、`invoice_cost_registration_queue` に候補(pending)を作るところまで
+
+実装：
+
+- 新規テーブル3つ：`invoice_documents` / `invoice_document_lines` / `invoice_cost_registration_queue`
+- 新規 secure RPC 10件（admin セッション検証つき・SECURITY DEFINER）
+- Storage バケット `invoice-pdfs`（非公開・署名付きURL表示）
+- `admin-app.html` に「🧾 請求書PDF」メニュー（一覧／詳細：左PDF・右フォーム／原価登録候補タブ）
+- 制約：PDF以外不可・合計不一致/明細0行は確認不可・確認後は編集不可（確認解除で再編集）
+- SQL：`docs/sql/invoice-pdf-secure-rpc.sql`、手順：`docs/db-migrations.md`（2026-06-11）
+
+将来：OCR/AI抽出・取引先マスタ正規化（vendor_id）・原価管理本体への反映（registered化）
+
 ### 集計出力機能（CSV出力 + ローカルHTMLビューア）
 
 方針・前提仕様：

@@ -40,6 +40,8 @@
 
 > **Phase 2-4-9-7（実装済み）**：高齢者向けGUI改善としてCSV一式ZIP読込を初期導線に変更した。単体CSV読込タブ、単体CSVファイル選択行、トップ右側の切替ボタン群、個別CSV読込カードは通常画面から非表示とした。ZIP読込後は帳票選択メニューが主役になるようにし、横断チェックカードの強い色付き背景も撤去した。文字サイズ・行間・説明文・見出し・ボタン文字・コントラストを読みやすい方向へ調整した。CSV解析・ZIP読込・集計・印刷処理は変更していない（コミット `b15bb7c` / `31c4986`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §30 を参照。実ブラウザでの目視・印刷プレビュー・実ZIP読込は運用前の手動確認事項として残す。
 
+> **Phase 2-4-9-8（確認完了）/ Phase 2-4-9-8-a（修正済み）**：実ブラウザ・実ZIP・印刷PDF出力による手動確認を実施した。確認中に mode-tabs が実ブラウザで非表示にならない不具合（`.hidden` より後の `.mode-tabs{display:flex}` が後勝ちしていた）を検出し、Phase 2-4-9-8-a で `.mode-tabs.hidden{display:none!important;}` を targeted fix した（コミット `c2f01e3`）。修正後、初期表示・ZIP読込後・単体ビュー表示中のいずれでも mode-tabs は非表示となり、CSV一式ZIP読込を通常導線とする画面方針を確認した。確認・修正結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §31 を参照。
+
 ## 1. 目的
 
 - `admin-app.html` で出力したCSVをローカルHTMLで読み込む

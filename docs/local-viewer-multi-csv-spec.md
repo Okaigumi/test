@@ -939,6 +939,14 @@ ZIP由来単体ビュー接続方針：
 - CSV解析・ZIP読込・集計・月次チェック内部処理・window.print()・@media print は無変更。
 - 実ブラウザでの目視・印刷プレビュー・実ZIP読込は運用前の手動確認事項として残す。
 
+### 実ブラウザ・実ZIP・印刷PDF確認と mode-tabs 修正（Phase 2-4-9-8 / 2-4-9-8-a）
+
+確認・修正結果の詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §31（コミット `080522b` / `c2f01e3`）。
+
+- Phase 2-4-9-8 で、実ブラウザ・実ZIP・印刷PDF出力による確認を行った。ZIP読込、帳票選択メニュー、ZIP由来単体ビュー4帳票、月次チェック・差異確認、工事詳細表示、印刷PDF出力を確認した。
+- 実ブラウザで mode-tabs が非表示にならない不具合は Phase 2-4-9-8-a で `.mode-tabs.hidden{display:none!important;}` により修正した。
+- 残課題（別フェーズ候補）：ZIP読込後に帳票選択メニューをさらに上位へ出す件、月次チェック「簡易工事一覧」の横長表の印刷最適化。
+
 ---
 
 ## 12. MVP範囲

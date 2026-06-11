@@ -2505,3 +2505,83 @@ local-viewers/csv-viewer.html のみ
 ### 30.13 最終判定
 
 CSVビューアーの通常導線をCSV一式ZIP読込に一本化し、単体CSV読込・個別CSV読込など利用者が迷いやすい導線を通常画面から外した。ZIP読込後は帳票選択メニューが主役になるよう整理し、横断チェックの色も通常カードと統一した。既存のZIP由来単体ビュー・月次チェック・工事詳細・印刷導線は維持されている。実ブラウザでの目視・印刷プレビュー・実ZIP読込は運用前の手動確認事項として残す。
+
+## 31. Phase 2-4-9-8：実ブラウザ・実ZIP・印刷プレビューでの手動確認と mode-tabs 修正
+
+### 31.1 確認目的
+
+Phase 2-4-9-7 で実装した高齢者向けGUI改善について、jsdomではなく実ブラウザ・実ZIP・印刷PDF出力で確認する。
+
+### 31.2 確認環境
+
+- Playwright 経由の実 Chromium
+- ローカルHTTP配信
+- リポジトリ外の一時フォルダに生成したCSV一式ZIP
+- 4CSV＋manifest.json
+- emulateMedia('print') + PDF出力で印刷確認
+
+### 31.3 実ブラウザ確認結果
+
+- 初期表示 OK
+- CSV一式ZIP読込 OK
+- 帳票選択メニュー表示 OK
+- ZIP由来単体ビュー4帳票 OK
+- 月次チェック・差異確認 OK
+- 工事詳細表示 OK
+- 印刷PDF出力 OK
+- Console重大エラーなし
+
+### 31.4 確認中に見つかった不具合
+
+- トップ右側の切替ボタン「単体CSV読込 / CSV一式ZIP読込」が表示されていた
+- .mode-tabs に hidden クラスは付いていた
+- しかし実ブラウザでは computed display が flex になっていた
+- 原因は .hidden{display:none;} より後ろの .mode-tabs{display:flex;} が勝っていたこと
+
+### 31.5 修正コミット
+
+c2f01e3 Fix hidden CSV mode tabs
+
+### 31.6 修正内容
+
+- .mode-tabs.hidden{display:none!important;} を追加
+- .hidden 全体の !important 化は避けた
+- mode-tabs のみを対象とする targeted fix とした
+
+### 31.7 修正後確認
+
+- 初期表示で .mode-tabs computed display none
+- ZIP読込後も .mode-tabs computed display none
+- 単体ビュー表示中も .mode-tabs computed display none
+- 単体CSV読込切替ボタンは通常画面に出ない
+- CSV一式ZIP読込切替ボタンも通常画面に出ない
+- singleFileRow display none
+- multiIndividualCard display none
+- CSV一式ZIP読込エリア表示 OK
+- ZIP読込後に帳票選択メニュー表示 OK
+- ZIP由来単体ビュー表示 OK
+- 月次チェック・差異確認表示 OK
+- window.print() 発火 OK
+
+### 31.8 変更しなかったもの
+
+- CSV解析処理
+- ZIP読込ロジック
+- ZIP出力ロジック
+- 集計ロジック
+- 月次チェック内部処理
+- ZIP由来単体ビュー描画処理
+- window.print()
+- @media print
+- PDFライブラリ
+- 外部CDN
+- DB / SQL
+
+### 31.9 残課題
+
+- ZIP読込後に帳票選択メニューをさらに上位へ出す件
+- 月次チェック「簡易工事一覧」の横長表の印刷最適化
+
+### 31.10 最終判定
+
+実ブラウザ・実ZIP・印刷PDF出力で中核機能を確認した。確認中に見つかった mode-tabs 非表示不具合は c2f01e3 で修正済み。単体CSV読込・個別CSV読込を通常画面から外し、CSV一式ZIP読込を通常導線とする高齢者向けGUI方針は実ブラウザでも成立する。

@@ -2332,6 +2332,45 @@ Phase 2-4-9-8：実ブラウザ・実ZIP・印刷プレビューでの手動確�
 Phase 2-5：運用開始準備・試運用
 ```
 
+#### Phase 2-4-9-8：実ブラウザ・実ZIP・印刷プレビューでの手動確認（完了） / Phase 2-4-9-8-a：mode-tabs 非表示不具合の修正（完了）
+
+- 確認・修正結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §31。
+
+**対象コミット：**
+
+- 080522b Document ZIP-first senior-friendly viewer interface
+- c2f01e3 Fix hidden CSV mode tabs
+
+**記録内容：**
+
+- 実ブラウザ Chromium でCSVビューアーを確認。
+- 実運用相当のCSV一式ZIP（4CSV＋manifest.json）を読み込んで確認。
+- 初期表示、ZIP読込、帳票選択メニュー、ZIP由来単体ビュー4帳票、月次チェック・差異確認、工事詳細表示、印刷PDF出力を確認。
+- Console重大エラーなし。
+- Phase 2-4-9-8 で mode-tabs が実ブラウザで非表示にならない不具合を検出。
+- 原因は .hidden より後の .mode-tabs{display:flex} が勝っていたこと（同一詳細度で後勝ち）。jsdom確認では classList のみ見ており computed display を見ていなかったため検出できなかった。
+- 重大度は中（印刷出力には影響しないが、通常画面で単体CSV読込へ入れてしまうため運用前に修正すべき）。
+- Phase 2-4-9-8-a で .mode-tabs.hidden{display:none!important;} を追加。
+- .hidden 全体ではなく .mode-tabs.hidden の targeted fix とした。
+- 修正後、実ブラウザで .mode-tabs computed display none を確認（初期表示・ZIP読込後・単体ビュー表示中のいずれでも none）。
+- CSV解析・ZIP読込・集計・月次チェック内部処理は無変更。
+- window.print() と @media print は無変更。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**残課題（別フェーズ候補）：**
+
+- 観察②：ZIP読込後、ZIP読込カード内のパッケージ詳細＋ZIP内ファイル一覧が上部を占め、帳票選択メニューは下に表示される。メニューをさらに上位へ出す。
+- 観察③：月次チェック「簡易工事一覧」の横長表が印刷時に工事名列縦折れ・右端見切れ気味。印刷最適化。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-8-b：ZIP読込後に帳票選択メニューをさらに上位へ表示
+Phase 2-4-9-8-c：月次チェック横長表の印刷最適化
+Phase 2-5：運用開始準備・試運用
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

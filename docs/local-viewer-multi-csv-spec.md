@@ -908,7 +908,15 @@ ZIP由来単体ビュー接続方針：
 
 - ZIP由来単体ビューの `#zipSingleBack` 内に `#zipSinglePrintBtn` を追加した。`#zipSingleBack` の `hidden` 制御を継承するため、ZIP由来単体ビューでのみ表示され、帳票選択メニューへ戻ると非表示になる。
 - click時は `window.print()` を実行。`addEventListener` を使用。PDFライブラリ・外部CDN追加なし。
-- 月次チェック・差異確認側への追加は次フェーズ（Phase 2-4-9-5-b）予定。
+- 月次チェック・差異確認側への追加は Phase 2-4-9-5-b で実施済み。
+
+### 月次チェック・差異確認への印刷・PDF保存ボタン追加 実装済み（Phase 2-4-9-5-b）
+
+実装コミット：`7a495ce Move print PDF button to monthly check view`。詳細は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §27。
+
+- 月次チェック・差異確認画面の `multiPrintBtn` を `#multiIntegratedSection` 内へ移動した。`#multiIntegratedSection` の `hidden` 制御を継承するため、月次チェック・差異確認画面でのみ表示され、帳票選択メニューへ戻ると非表示になる。
+- `multiDetailPrintBtn` の文言も「印刷・PDF保存」に統一。既存の `addEventListener` は ID 不変のためそのまま有効。
+- `zipSinglePrintBtn`・CSV解析・集計ロジック・月次チェック内部処理は無変更。
 
 ---
 

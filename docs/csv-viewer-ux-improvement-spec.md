@@ -2083,3 +2083,91 @@ ZIP由来単体ビューで表示中の帳票を、ブラウザ標準の印刷�
 ### 26.9 最終判定
 
 ZIP由来単体ビューで、外部PDFライブラリなしに印刷・PDF保存導線を追加できた。既存の帳票表示・集計・ZIP読込・個別CSV読込・月次チェックへの影響はない。
+
+## 27. Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボタン追加 実装結果
+
+### 27.1 実装コミット
+
+```text
+7a495ce Move print PDF button to monthly check view
+```
+
+### 27.2 変更範囲
+
+```text
+local-viewers/csv-viewer.html のみ
+```
+
+### 27.3 実装目的
+
+月次チェック・差異確認画面で、横断チェック結果をブラウザ標準の印刷機能から印刷・PDF保存できるようにする。
+
+### 27.4 実装内容
+
+```text
+- multiPrintBtn を #multiBody 外側ヘッダから #multiIntegratedSection 内へ移動
+- multiPrintBtn を multiIntegratedBack の右横に配置
+- multiPrintBtn の文言を「印刷・PDF保存」に統一
+- multiDetailPrintBtn の文言も「印刷・PDF保存」に統一
+- multiPrintBtn は #multiIntegratedSection の hidden 制御を継承
+- 既存の window.print() addEventListener は ID 不変のためそのまま有効
+- 新しいPDFライブラリは追加しない
+- 外部CDNは追加しない
+- inline onclick は使用しない
+```
+
+### 27.5 表示対象
+
+```text
+- 月次チェック・差異確認
+- 確認リスト
+- 差異確認
+- 工事別まとめ
+- 工事詳細表示
+```
+
+### 27.6 表示しない対象
+
+```text
+- ZIP読込ホーム
+- 帳票選択メニュー
+- 初期折りたたみの個別CSV読込エリア
+- 個別CSV読込由来の単体ビュー
+```
+
+### 27.7 変更しなかったもの
+
+```text
+- ZIP由来単体ビュー用 zipSinglePrintBtn
+- CSV解析処理
+- 集計ロジック
+- ZIP出力ロジック
+- ZIP読込ロジック
+- openMultiReport
+- openZipSingleReport
+- showMultiIntegrated の内部集計処理
+- 個別CSV読込エリア
+- 印刷CSSの本格調整
+```
+
+### 27.8 回帰確認結果
+
+```text
+- 月次チェック・差異確認画面で multiPrintBtn 表示OK
+- multiPrintBtn 文言「印刷・PDF保存」OK
+- multiPrintBtn 押下で window.print() 呼び出しOK
+- 帳票選択メニューへ戻ると親セクション hidden により非表示OK
+- multiState.loaded 維持OK
+- 4帳票 rows 保持OK
+- zipSinglePrintBtn は変更なし・動作OK
+- 個別CSV読込への影響なし
+- 月次チェック内部処理への影響なし
+- NaNなし
+- Console重大エラーなし
+- JS構文チェックOK
+- git diff --check OK
+```
+
+### 27.9 最終判定
+
+月次チェック・差異確認画面で、外部PDFライブラリなしに印刷・PDF保存導線を利用できるようになった。帳票選択メニューやZIP読込ホームでは表示されず、既存のZIP由来単体ビュー・個別CSV読込・集計処理への影響はない。

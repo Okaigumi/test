@@ -2202,6 +2202,35 @@ Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボ�
 Phase 2-4-9-5-c：印刷時CSSの最小調整
 ```
 
+#### Phase 2-4-9-5-b：月次チェック・差異確認への印刷・PDF保存ボタン追加（完了）
+
+- 実装結果の詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §27。
+
+**記録内容：**
+
+- 実装コミット：`7a495ce Move print PDF button to monthly check view`。
+- `local-viewers/csv-viewer.html` のみ変更。
+- `multiPrintBtn` を `#multiBody` 外側ヘッダから `#multiIntegratedSection` 内へ移動。
+- `multiPrintBtn` を `multiIntegratedBack` の右横に配置。
+- `multiPrintBtn` の文言を「印刷・PDF保存」に統一。
+- `multiDetailPrintBtn` の文言も「印刷・PDF保存」に統一。
+- `multiPrintBtn` は `#multiIntegratedSection` の `hidden` 制御を継承。
+- 月次チェック・差異確認画面でのみ表示。
+- 帳票選択メニュー・ZIP読込ホームでは非表示。
+- 既存の `window.print()` `addEventListener` は ID 不変のためそのまま有効。
+- ZIP由来単体ビュー用 `zipSinglePrintBtn` は変更なし。
+- CSV解析・集計ロジックは無変更。
+- 月次チェック内部処理は無変更。
+- `window.print()` 呼び出し確認済み。
+- SQL実行・DB変更なし。
+- docs記録は本コミット。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-5-c：印刷時CSSの最小調整
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

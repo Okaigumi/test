@@ -31,6 +31,8 @@
 > **Phase 2-4-9-5（設計）**：帳票確認後に保存・共有しやすくするため、印刷・PDF保存導線を整備する。PDFライブラリは追加せず、ブラウザ標準の `window.print()` を使う方針とする。設計は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §25 を参照。
 >
 > **Phase 2-4-9-5-a（実装済み）**：ZIP由来単体ビューに「印刷・PDF保存」ボタンを追加した。ボタンは `window.print()` を呼ぶだけの軽い実装で、PDFライブラリは追加しない（コミット `55f9c0f`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §26 を参照。
+>
+> **Phase 2-4-9-5-b（実装済み）**：月次チェック・差異確認画面に「印刷・PDF保存」導線を追加した。`multiPrintBtn` を `#multiIntegratedSection` 内へ移動し、帳票選択メニューやZIP読込ホームでは表示されないようにした（コミット `7a495ce`）。実装結果は [`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §27 を参照。
 
 ## 1. 目的
 

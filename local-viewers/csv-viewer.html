@@ -201,8 +201,10 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 
     <main class="main">
       <!-- ZIP由来単体ビュー用の戻る導線（個別file読込時は非表示。Phase 2-4-9-2-c） -->
+      <!-- #zipSinglePrintBtn は #zipSingleBack と同じ hidden 制御を受ける（Phase 2-4-9-5-a） -->
       <div id="zipSingleBack" class="no-print hidden" style="margin-bottom:14px;">
         <button type="button" id="zipSingleBackBtn" class="back-btn" style="margin:0;">← 帳票選択メニューに戻る</button>
+        <button type="button" id="zipSinglePrintBtn" class="back-btn" style="margin:0 0 0 8px;">印刷・PDF保存</button>
         <div id="zipSingleSource" class="note" style="margin-top:6px;"></div>
       </div>
       <!-- 帳票ヘッダ（印刷時も残す） -->
@@ -3245,6 +3247,9 @@ document.getElementById('multiIndividualToggle').addEventListener('click',functi
   this.textContent=open?'個別CSV読込を閉じる':'個別CSV読込を開く';
 });
 
+// ===== 印刷（ZIP由来単体ビュー。Phase 2-4-9-5-a） =====
+// #zipSinglePrintBtn は #zipSingleBack と同じ hidden 制御を受けるため、ZIP由来時のみ表示される。
+document.getElementById('zipSinglePrintBtn').addEventListener('click',()=>window.print());
 // ===== 印刷（複数CSV統合ビュー） =====
 // 印刷ボタンは window.print() を呼ぶのみ。表示中の内容（home または detail）が印刷対象。
 document.getElementById('multiPrintBtn').addEventListener('click',()=>window.print());

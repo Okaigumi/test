@@ -320,7 +320,6 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       <div class="report-header">
         <h1>CSV確認ビューアー</h1>
         <div class="rh-meta">CSV一式ZIPを読み込み、帳票を選んで確認します。必要なときだけ「月次チェック・差異確認」で工事別に突き合わせます（Supabaseには接続しません）。</div>
-        <button type="button" id="multiPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
       </div>
 
       <div class="card">
@@ -344,8 +343,10 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       </div>
 
       <!-- 月次チェック・差異確認（旧：複数CSV統合ビュー）。メニューから開く -->
+      <!-- #multiPrintBtn は #multiIntegratedSection と同じ hidden 制御を受ける（Phase 2-4-9-5-b） -->
       <div class="hidden" id="multiIntegratedSection">
         <button type="button" id="multiIntegratedBack" class="back-btn no-print">← 帳票選択メニューに戻る</button>
+        <button type="button" id="multiPrintBtn" class="back-btn no-print" style="margin:0 0 0 8px;">印刷・PDF保存</button>
         <div class="report-header">
           <h1>月次チェック・差異確認</h1>
           <div class="rh-meta">4CSVを工事別に突き合わせて、差異・未登録・確認事項を確認します。通常の帳票確認は、帳票選択メニューの各帳票を使用してください。</div>
@@ -400,7 +401,7 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
       <div class="report-header">
         <h1>工事別 原価詳細</h1>
         <div class="rh-meta" id="multiDetailMeta"></div>
-        <button type="button" id="multiDetailPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷 / PDF保存</button>
+        <button type="button" id="multiDetailPrintBtn" class="back-btn no-print" style="margin-top:8px;">印刷・PDF保存</button>
       </div>
       <div class="card"><div class="card-title">工事概要</div><div id="multiDetailOverview"></div></div>
       <div class="card"><div class="card-title">工事別月別原価</div><div id="multiDetailCostMonthly"></div></div>

@@ -1768,7 +1768,7 @@ async function exportCsvZip(){
   if(!fromM){alert('開始年月を指定してください。');return;}
   if(!toM){alert('終了年月を指定してください。');return;}
   if(fromM>toM){alert('開始年月は終了年月以前を指定してください。');return;}
-  if(typeof JSZip==='undefined'){alert('ZIPライブラリ(JSZip)が読み込めていません。お手数ですが個別CSV出力をご利用ください。');return;}
+  if(typeof JSZip==='undefined'){alert('ZIPライブラリ(JSZip)が読み込めていません。ページを再読み込みして再度お試しください。改善しない場合は管理者に連絡してください。');return;}
   const token=currentUser?.session_token;
   if(!token){alert('セッションが無効です。再ログインしてください。');return;}
 
@@ -1814,16 +1814,16 @@ async function exportCsvZip(){
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(err){
-    alert('ZIP出力に失敗しました：'+(err&&err.message?err.message:String(err))+'\nお手数ですが個別CSV出力をご利用ください。');
+    alert('CSV一式ZIPの出力に失敗しました：'+(err&&err.message?err.message:String(err))+'\n時間をおいて再度お試しください。改善しない場合は管理者に連絡してください。');
   }finally{
-    if(btn){btn.disabled=false;btn.textContent=orig||'⬇ CSV一式をZIPで出力（推奨）';}
+    if(btn){btn.disabled=false;btn.textContent=orig||'⬇ CSV一式をZIPで出力';}
   }
 }
 
 async function pageCsv(){
   document.getElementById('pageContent').innerHTML=`
     <div class="card" style="margin-bottom:16px;">
-      <div class="card-header"><div class="card-title">📦 CSV一式をZIPで出力（推奨）</div></div>
+      <div class="card-header"><div class="card-title">📦 CSV一式をZIPで出力</div></div>
       <div class="card-body">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <div class="form-group" style="flex:0 0 auto;">
@@ -1835,16 +1835,18 @@ async function pageCsv(){
             <input type="month" id="zip-to" class="form-input" style="width:150px;">
           </div>
           <div style="margin-top:18px;">
-            <button class="btn btn-primary" id="zipExportBtn">⬇ CSV一式をZIPで出力（推奨）</button>
+            <button class="btn btn-primary" id="zipExportBtn">⬇ CSV一式をZIPで出力</button>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--text3);">4つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。ローカルCSVビューアーでは、このZIPを1つ読み込むだけで複数CSV統合ビューを利用できる予定です。対象期間は年月で指定します（重機台帳は全期間が対象です）。</div>
+        <div style="font-size:12px;color:var(--text3);">4つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。帳票確認画面では、このZIPを選ぶだけで各帳票を確認できます。対象期間は年月で指定します（重機台帳は全期間が対象です）。</div>
       </div>
     </div>
+    <!-- ZIP以外の出力導線（個別CSV出力）は通常画面から非表示。内部関数・DOMは互換のため残置。Phase 2-4-9-8-f -->
+    <div hidden>
     <div class="card" style="margin-bottom:16px;">
       <div class="card-header"><div class="card-title">🗂 個別CSV出力（詳細・予備）</div></div>
       <div class="card-body">
-        <div style="font-size:12px;color:var(--text3);">個別CSV出力は検証・トラブル対応・一部CSV確認用です。通常は上の「CSV一式をZIPで出力（推奨）」をご利用ください。</div>
+        <div style="font-size:12px;color:var(--text3);">個別CSV出力は検証・トラブル対応・一部CSV確認用です。通常は上の「CSV一式をZIPで出力」をご利用ください。</div>
       </div>
     </div>
     <div class="card" style="margin-bottom:16px;">
@@ -1915,6 +1917,7 @@ async function pageCsv(){
         <div style="font-size:12px;color:var(--text3);">重機の台帳・リース情報です。期間指定はありません。</div>
       </div>
     </div>
+    </div><!-- /ZIP以外の出力導線（非表示） -->
   `;
   // ZIP出力UIの初期化（inline onclick は使わず addEventListener で配線）
   const cm=currentMonthStr();

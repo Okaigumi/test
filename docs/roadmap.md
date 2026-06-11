@@ -2371,6 +2371,84 @@ Phase 2-4-9-8-c：月次チェック横長表の印刷最適化
 Phase 2-5：運用開始準備・試運用
 ```
 
+#### Phase 2-4-9-8-b：ZIP読込後に帳票選択メニューをさらに上位へ表示（完了）
+
+- 詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §32。
+
+**記録内容：**
+
+- 実装コミット：6ec1ea3 Prioritize report menu after ZIP load
+- ZIP読込後に帳票選択メニューがより早く目に入るよう表示順を調整。
+- `#multiPackageArea` を帳票選択メニューの後ろへ移設。
+- ZIP読込カードを読込後もコンパクト表示。
+- パッケージ詳細・ZIP内ファイル一覧・manifest・警告情報を折りたたみ表示へ変更。
+- 通常は折りたたみ、警告・エラー時のみ自動展開。
+- 実ブラウザで menu top=383px、package details top=1392px を確認。
+- CSV解析・ZIP読込・集計・月次チェック内部処理は無変更。
+- window.print() と @media print は無変更。
+
+#### Phase 2-4-9-8-d：帳票確認画面の文言・自動読込・配色整理（完了）
+
+- 詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §33。
+
+**記録内容：**
+
+- 実装コミット：512f72e Refine ZIP-first report viewer and admin export flow
+- 画面名を「帳票確認」へ整理。
+- TOP説明文を「管理コンソールで出力したZIPを選択すると、工事一覧・日報・請求書・重機台帳を確認できます。」へ変更。
+- ZIP読込カードを「管理コンソールで出力したZIPを選択」へ変更。
+- ZIP選択後に自動読込。
+- ZIP読込ボタンを通常画面から非表示。
+- 帳票選択メニュー見出しに対象期間を表示。
+- raw CSVファイル名、ZIPファイル名、出力日時、ZIP内ファイル一覧を通常画面から非表示。
+- 正常時の「読み込んだCSV一式の情報」を通常画面から撤去。
+- 警告・エラー時のみ確認事項を表示。
+- フォントを BIZ UDPGothic / Yu Gothic UI / Meiryo 系へ調整。
+- 薄いブルー系＋白の配色へ調整。
+
+#### Phase 2-4-9-8-e：工事名縦折れ改善（完了）
+
+- 詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §34。
+
+**記録内容：**
+
+- 実装コミット：512f72e Refine ZIP-first report viewer and admin export flow
+- 工事名が1文字ずつ縦折れする問題を改善。
+- 横スクロール対応や文字縮小ではなく、工事名を上段見出しとして分離。
+- 工事一覧・原価概要と月次チェック内の簡易工事一覧をカード/グリッド型に整理。
+- 工事名リンクは維持。
+- 数値・属性はラベル付きグリッドで表示。
+- 実ブラウザで長い工事名が縦折れしないことを確認。
+- CSV解析・集計ロジックは無変更。
+
+#### Phase 2-4-9-8-f：管理コンソールCSV出力導線のZIP一本化（完了）
+
+- 詳細：[`docs/csv-viewer-ux-improvement-spec.md`](csv-viewer-ux-improvement-spec.md) §35。
+
+**記録内容：**
+
+- 実装コミット：512f72e Refine ZIP-first report viewer and admin export flow
+- 管理コンソール側のCSV出力を「CSV一式をZIPで出力」に一本化。
+- 「CSV一式をZIPで出力（推奨）」から「（推奨）」を削除。
+- ZIP以外の個別CSV出力導線を通常画面から非表示。
+- ZIP出力失敗時の案内から「個別CSV出力をご利用ください」を削除。
+- 管理コンソール「CSV一式をZIPで出力」→帳票確認「管理コンソールで出力したZIPを選択」の流れに文言を統一。
+- ZIP出力処理本体・CSV生成ロジック・DB処理・Supabase処理は無変更。
+
+**残課題（別フェーズ候補）：**
+
+- `#preLoad` の非表示文言に「管理コンソールから出力したZIPを読み込んでください。通常はこちらを使います。」が残る。通常画面には出ないため軽微。
+- 非表示領域内には個別CSV出力等の内部向け文言が一部残る。
+- 月次チェック診断文・深いサブページ注記にはCSV名が一部残る。
+- 月次チェック横長表の印刷最適化は別フェーズ候補。
+
+**次フェーズ候補：**
+
+```text
+Phase 2-4-9-8-c：月次チェック横長表の印刷最適化
+Phase 2-5：運用開始準備・試運用
+```
+
 ## 保留・改善候補
 
 - favicon.ico 追加

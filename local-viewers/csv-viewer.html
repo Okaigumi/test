@@ -133,6 +133,10 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .menu-section-desc{font-size:14px;color:var(--muted);margin-bottom:4px;}
 /* ZIP読込後は帳票選択メニューを主役にするため、見出しを大きく・濃くする。Phase 1 追加修正 */
 #multiMenuCard>.card-title{font-size:20px;color:var(--ink);margin-bottom:6px;}
+/* 読込詳細（ZIP内ファイル一覧・manifest・警告）は帳票選択メニューの後ろへ控えめに折りたたむ。Phase 2-4-9-8-b */
+#multiPackageDetails{padding-top:12px;padding-bottom:12px;}
+#multiPackageDetails>summary{font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;list-style:revert;}
+#multiPackageDetails[open]>summary{margin-bottom:10px;color:var(--ink);}
 
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
@@ -340,7 +344,6 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
           <button type="button" id="multiZipClearBtn" class="back-btn" style="margin:0;">クリア</button>
         </div>
         <div id="multiZipStatus" class="multi-slot-note"></div>
-        <div id="multiPackageArea"></div>
       </div>
 
       <!-- 帳票選択メニュー（ZIP読込後に表示）。Phase 2-4-9-1 -->
@@ -349,6 +352,13 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
         <div id="multiMenuMsg" class="note no-print" style="display:none;"></div>
         <div id="multiMenuArea"></div>
       </div>
+
+      <!-- 読込詳細（ZIP内ファイル一覧・manifest・警告）。帳票選択メニューの後ろへ控えめに折りたたみ表示。Phase 2-4-9-8-b -->
+      <!-- 警告・エラーがあるときは renderMultiPackageInfo 側で open にする。multiPackageArea の id は移設のみで描画処理は不変 -->
+      <details class="card no-print hidden" id="multiPackageDetails">
+        <summary>読み込んだCSV一式の詳細（ZIP内ファイル一覧・manifest・警告）</summary>
+        <div id="multiPackageArea"></div>
+      </details>
 
       <!-- 月次チェック・差異確認（旧：複数CSV統合ビュー）。メニューから開く -->
       <!-- #multiPrintBtn は #multiIntegratedSection と同じ hidden 制御を受ける（Phase 2-4-9-5-b） -->
@@ -2164,6 +2174,9 @@ function renderMultiPackageInfo(){
     const h=document.createElement('div');h.className='card-title';h.style.marginTop='12px';h.textContent='パッケージ 警告（'+pkg.warnings.length+'件）';area.appendChild(h);
     pkg.warnings.forEach(w=>addMsg(area,'msg-warn',w));
   }
+  // 警告・エラーがあるときだけ詳細を自動展開（通常は折りたたみのまま帳票選択メニューを主役にする）。Phase 2-4-9-8-b
+  const det=document.getElementById('multiPackageDetails');
+  if(det)det.open=!!((pkg.errors&&pkg.errors.length)||(pkg.warnings&&pkg.warnings.length));
 }
 
 // インデックス再構築 → 派生集計 → メッセージ再計算 → 再描画
@@ -2989,6 +3002,7 @@ function showMultiHome(){
   }
   renderMultiMenu();
   const menu=document.getElementById('multiMenuCard');if(menu)menu.classList.toggle('hidden',!multiState.loaded);
+  const pkgDet=document.getElementById('multiPackageDetails');if(pkgDet)pkgDet.classList.toggle('hidden',!multiState.loaded);
   const msg=document.getElementById('multiMenuMsg');if(msg){msg.style.display='none';msg.textContent='';}
   if(currentMode==='multi')document.getElementById('multiBody').classList.remove('hidden');
 }
@@ -2997,12 +3011,14 @@ function showMultiMenu(){
   const sec=document.getElementById('multiIntegratedSection');if(sec)sec.classList.add('hidden');
   document.getElementById('multiDetailBody').classList.add('hidden');
   const menu=document.getElementById('multiMenuCard');if(menu&&multiState.loaded)menu.classList.remove('hidden');
+  const pkgDet=document.getElementById('multiPackageDetails');if(pkgDet)pkgDet.classList.toggle('hidden',!multiState.loaded);
   document.getElementById('multiBody').classList.remove('hidden');
   window.scrollTo(0,0);
 }
 // 月次チェック・差異確認（既存の統合ビュー）を開く
 function showMultiIntegrated(){
   const menu=document.getElementById('multiMenuCard');if(menu)menu.classList.add('hidden');
+  const pkgDet=document.getElementById('multiPackageDetails');if(pkgDet)pkgDet.classList.add('hidden');
   document.getElementById('multiIntegratedSection').classList.remove('hidden');
   document.getElementById('multiDetailBody').classList.add('hidden');
   document.getElementById('multiBody').classList.remove('hidden');
@@ -3241,6 +3257,7 @@ function setMode(mode){
     // ZIP読込後は帳票選択メニューをホームにする（統合ビューはメニューから開く）
     renderMultiMenu();
     document.getElementById('multiMenuCard').classList.toggle('hidden',!multiState.loaded);
+    document.getElementById('multiPackageDetails').classList.toggle('hidden',!multiState.loaded);
     document.getElementById('multiIntegratedSection').classList.add('hidden');
     const _m=document.getElementById('multiMenuMsg');if(_m){_m.style.display='none';_m.textContent='';}
   }

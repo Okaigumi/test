@@ -1630,31 +1630,46 @@ async function openSiteSetting(siteId){
 }
 
 async function saveSitePeriod(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const sd=document.getElementById('siteStartDate').value||null;
   const ed=document.getElementById('siteEndDate').value||null;
   const loc=document.getElementById('siteLocation').value||null;
-  await sb.from('sites').update({start_date:sd,end_date:ed,location:loc}).eq('id',editingSiteId);
   const s=state.sites.find(s=>s.id===editingSiteId);
-  if(s){s.start_date=sd;s.end_date=ed;s.location=loc;}
+  if(!s){alert('現場が見つかりません');return;}
+  const{error}=await sb.rpc('update_site_secure',{
+    session_token_input:token,
+    id_input:editingSiteId,
+    name_input:s.name,
+    location_input:loc,
+    start_date_input:sd,
+    end_date_input:ed,
+    company_id_input:s.company_id||null
+  });
+  if(error){alert('保存エラー：'+error.message);return;}
+  s.start_date=sd;s.end_date=ed;s.location=loc;
   renderMaster();renderSiteChips();
   alert('保存しました');
 }
 
 async function toggleAssign(siteId,empId,btn){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const isOn=btn.classList.contains('on');
-  if(isOn){
-    await sb.from('site_assignments').update({is_active:false}).eq('site_id',siteId).eq('employee_id',empId);
-    btn.className='assign-toggle off';
-  }else{
-    await sb.from('site_assignments').upsert({site_id:siteId,employee_id:empId,is_active:true},{onConflict:'site_id,employee_id'});
-    btn.className='assign-toggle on';
-  }
+  const{error}=await sb.rpc('set_site_assignment_secure',{
+    session_token_input:token,
+    site_id_input:siteId,
+    employee_id_input:empId,
+    is_active_input:!isOn
+  });
+  if(error){alert('配属の更新に失敗しました：'+error.message);return;}
+  btn.className=isOn?'assign-toggle off':'assign-toggle on';
   await loadSiteAssignments();
   renderMaster();
 }
 
-async function addSite(){const v=document.getElementById('newSiteInput').value.trim();if(!v)return;await sb.from('sites').insert({name:v});document.getElementById('newSiteInput').value='';await loadSites();}
-async function deleteSite(id){const s=state.sites.find(x=>x.id===id);if(!confirm(`「${s?.name||id}」を無効化しますか？\n無効化すると、通常の現場一覧には表示されなくなります。`))return;await sb.from('sites').update({is_active:false}).eq('id',id);await loadSites();}
+async function addSite(){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const v=document.getElementById('newSiteInput').value.trim();if(!v)return;const{error}=await sb.rpc('create_site_secure',{session_token_input:token,name_input:v,location_input:null,start_date_input:null,end_date_input:null,company_id_input:null});if(error){alert('保存エラー：'+error.message);return;}document.getElementById('newSiteInput').value='';await loadSites();}
+async function deleteSite(id){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const s=state.sites.find(x=>x.id===id);if(!confirm(`「${s?.name||id}」を無効化しますか？\n無効化すると、通常の現場一覧には表示されなくなります。`))return;const{error}=await sb.rpc('deactivate_site_secure',{session_token_input:token,id_input:id});if(error){alert('無効化に失敗しました：'+error.message);return;}await loadSites();}
 async function addMaterial(){const v=document.getElementById('newMaterialInput').value.trim();if(!v)return;await sb.from('materials').insert({name:v});document.getElementById('newMaterialInput').value='';await loadMaterials();}
 async function deleteMaterial(id){const m=state.materials.find(x=>x.id===id);if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の外注マスタには表示されなくなります。`))return;await sb.from('materials').update({is_active:false}).eq('id',id);await loadMaterials();}
 

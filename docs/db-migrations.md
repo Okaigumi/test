@@ -1463,3 +1463,55 @@ PDF原本は請求書単位で 1つだけ Storage に保存（工事別に物理
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/roadmap.md`（試作品の進捗を追記）
 - 既存の invoices / genka-app.html / index.html は変更なし
+
+---
+
+## 2026-06-13 Phase 3-1 sites / site_assignments secure RPC 適用
+
+### 概要
+
+`sites` / `site_assignments` の書き込みを secure RPC 化するための関数群を追加した。
+今回は **RPC追加のみ**（additive-only）で、既存テーブル・既存RLS・既存POLICY・既存GRANT には一切触れていない。
+フロント（`admin-app.html` / `index.html`）はまだ `sites` / `site_assignments` を直接書き込んでいるため、
+`anon` の INSERT / UPDATE の REVOKE は今回は行わない。
+
+### DB変更（`docs/sql/sites-site-assignments-secure-rpc.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+**作成された関数（6件・全て SECURITY DEFINER / SET search_path = public, extensions）**
+
+| 関数名 | 種別 | 用途 |
+|---|---|---|
+| `public._verify_management_session` | 内部ヘルパー | セッション検証（admin_sessions または employee_sessions role=admin）。クライアント非公開 |
+| `public.create_site_secure` | 公開RPC | 現場の新規作成 |
+| `public.update_site_secure` | 公開RPC | 現場の更新（is_active / category_id / contract_amount は対象外） |
+| `public.deactivate_site_secure` | 公開RPC | 現場の論理削除＋配属の一括無効化 |
+| `public.set_site_assignment_secure` | 公開RPC | 配属の単一トグル（ON=upsert / OFF=update） |
+| `public.replace_site_assignments_secure` | 公開RPC | 配属の一括洗い替え（原子的） |
+
+**認可方針（デュアルセッション）**
+
+- 有効な `admin_sessions` ＋ `genka_admins.is_active = true`
+- または、有効な `employee_sessions` ＋ `employees.role = 'admin'` ＋ `employees.is_active = true`
+
+### 適用後確認
+
+- 6関数の存在確認：OK
+- 全6関数が SECURITY DEFINER：OK
+- 全6関数が SET search_path = public, extensions：OK
+- 公開RPC 5本に `anon` / `authenticated` の EXECUTE あり：OK
+- 内部ヘルパー `_verify_management_session` は `anon` / `authenticated` の EXECUTE = false：OK
+
+### 注意
+
+- 今回はRPC追加のみ。既存テーブル・既存RLS・既存POLICY・既存GRANT には触れていない
+- まだフロントは直接 `sites` / `site_assignments` を書き込んでいる
+- したがって `anon` の INSERT / UPDATE の REVOKE はまだ行わない
+- 次フェーズは `admin-app.html` / `index.html` の RPC 移行
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/sites-site-assignments-secure-rpc.sql` は PR #2（merge commit e9cea5b）で追加済み・本エントリでは変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

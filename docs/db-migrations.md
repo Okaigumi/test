@@ -1515,3 +1515,51 @@ PDF原本は請求書単位で 1つだけ Storage に保存（工事別に物理
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/sites-site-assignments-secure-rpc.sql` は PR #2（merge commit e9cea5b）で追加済み・本エントリでは変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-13 Phase 3-3 sites / site_assignments direct write REVOKE 適用
+
+### 概要
+
+`sites` / `site_assignments` への `anon` / `authenticated` の直接 INSERT / UPDATE 権限を剥奪した。
+Phase 3-2 で admin-app.html / index.html の書き込みが全て secure RPC 経由に移行され、本番動作確認も
+完了したため、直接書き込み経路を遮断する。SELECT は維持（一覧・配属表示に必要）、DELETE は対象外
+（論理削除運用・物理 DELETE ポリシーは過去フェーズで削除済み）。
+
+### DB変更（`docs/sql/revoke-sites-site-assignments-direct-write.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+```sql
+REVOKE INSERT ON public.sites            FROM anon, authenticated;
+REVOKE UPDATE ON public.sites            FROM anon, authenticated;
+REVOKE INSERT ON public.site_assignments FROM anon, authenticated;
+REVOKE UPDATE ON public.site_assignments FROM anon, authenticated;
+```
+
+### 適用後確認
+
+- `public.sites` の anon / authenticated：SELECT=true / INSERT=false / UPDATE=false / DELETE=false
+- `public.site_assignments` の anon / authenticated：SELECT=true / INSERT=false / UPDATE=false / DELETE=false
+- secure RPC 5本（`create_site_secure` / `update_site_secure` / `deactivate_site_secure` /
+  `set_site_assignment_secure` / `replace_site_assignments_secure`）の anon / authenticated EXECUTE=true
+
+### 本番再確認
+
+- `admin-app.html`：現場作成 / 配属保存 / 現場編集 / 配属変更 / 無効化 OK
+- `index.html`：マスタ管理タブ表示 / 現場追加 / 期間・場所更新 / 配属ON/OFF / 無効化 OK
+
+### 注意
+
+- SELECT は維持
+- DELETE は対象外
+- RPC EXECUTE は維持
+- 既存RLSポリシー・既存RPC・既存テーブル定義には触れていない
+- これにより `sites` / `site_assignments` の直接 INSERT / UPDATE 経路は遮断済み
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/revoke-sites-site-assignments-direct-write.sql` は PR #6（merge commit 86b2b6a）で追加済み・本エントリでは変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

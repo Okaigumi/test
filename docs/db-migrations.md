@@ -1563,3 +1563,80 @@ REVOKE UPDATE ON public.site_assignments FROM anon, authenticated;
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/revoke-sites-site-assignments-direct-write.sql` は PR #6（merge commit 86b2b6a）で追加済み・本エントリでは変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-18 Phase 3 優先順位2 materials / machines secure RPC 追加
+
+### 概要
+
+`materials` / `machines`（マスタ）の書き込みを secure RPC 化するための関数群を追加した。
+今回は **RPC追加のみ**（additive-only）で、既存テーブル・既存RLS・既存POLICY・既存テーブルGRANT には一切触れていない。
+フロント（`admin-app.html` / `index.html`）はまだ `materials` / `machines` を直接書き込んでいるため、
+`anon` / `authenticated` の直接 INSERT / UPDATE は今回 **REVOKE しない**。
+認可は Phase 3-1 で作成済みの既存ヘルパー `public._verify_management_session(text)` を **再利用**し、新規ヘルパーは作成していない。
+`machine_locations` は対象外（書き込みは既に `create_machine_location_secure` で RPC 化済み）。
+
+### DB変更（`docs/sql/materials-machines-secure-rpc.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+**作成された関数（5件・全て SECURITY DEFINER / SET search_path = public, extensions）**
+
+| 関数名 | 種別 | 用途 |
+|---|---|---|
+| `public.create_material_secure` | 公開RPC | 材料（外注マスタ用途）の新規作成 |
+| `public.deactivate_material_secure` | 公開RPC | 材料の論理削除（is_active=false） |
+| `public.create_machine_secure` | 公開RPC | 重機の新規作成（company_id は触らない） |
+| `public.update_machine_secure` | 公開RPC | 重機の更新（is_active / company_id / created_at は対象外） |
+| `public.deactivate_machine_secure` | 公開RPC | 重機の論理削除（is_active=false） |
+
+**認可方針（デュアルセッション・既存ヘルパー再利用）**
+
+- 各RPC先頭で `PERFORM public._verify_management_session(session_token_input)` を呼ぶ
+- 有効な `admin_sessions` ＋ `genka_admins.is_active = true`
+- または、有効な `employee_sessions` ＋ `employees.role = 'admin'` ＋ `employees.is_active = true`
+- 新規ヘルパーは作成していない（Phase 3-1 の `_verify_management_session` を再利用）
+
+**設計メモ**
+
+- `is_active` はクライアント入力を受けず、create時は true 固定、deactivate は false の論理削除
+- `name` は `btrim` して空文字を拒否
+- machines の `ownership` は NULL/空文字なら 'owned' 扱い、許可値は 'owned' / 'lease'（既存フロント準拠）、それ以外は例外
+- machines の `ownership = 'owned'` 時は lease_company / lease_start / lease_end / lease_monthly を NULL 化（自社所有機にリース情報を残さない／既存フロント挙動と一致）
+- `lease_monthly` は NULL または 0以上、`lease_start` / `lease_end` 両方ある場合は start <= end を検証
+- machines の `company_id` は nullable のため、create / update いずれでも触らない（既存UI互換）
+- materials は `company_id` 列を持たないため対象外
+- UPDATE / deactivate は対象id不在時に例外（`Material not found` / `Machine not found`）、各RPCは `RETURNING id` を返す
+
+### 適用後確認
+
+- 5関数の存在確認：OK
+- 全5関数が SECURITY DEFINER = true：OK
+- 全5関数が SET search_path = public, extensions：OK
+- 5関数に `anon` / `authenticated` の EXECUTE あり：OK
+- 内部ヘルパー `_verify_management_session` は `anon` / `authenticated` / `public` から EXECUTE 不可のまま維持：OK
+- `materials` / `machines` のテーブル権限は適用前と同一（direct INSERT / UPDATE 残存）：OK
+- `materials` / `machines` の RLS 状態は適用前と同一：OK
+- `materials` / `machines` の POLICY 内容は適用前と同一：OK
+- additive-only の副作用なし：OK
+
+**新規5関数の PUBLIC EXECUTE について（記録）**
+
+- 新規5関数は `GRANT EXECUTE ... TO anon, authenticated` を付与しており、関数作成時のデフォルトにより **PUBLIC EXECUTE も true** である。
+- これらは公開RPCであり、内部で必ず `_verify_management_session` を通すため、未認証ロールが呼んでもセッション検証で弾かれる。よって現時点では進行可とする。
+- ただし「公開RPCの PUBLIC EXECUTE = true」である点は記録対象として残す（将来、最小権限化として PUBLIC からの REVOKE ＋ anon/authenticated への明示 GRANT に整理する余地あり）。
+
+### 注意
+
+- 今回はRPC追加のみ。既存テーブル・既存RLS・既存POLICY・既存テーブルGRANT・REVOKE には触れていない
+- まだフロントは直接 `materials` / `machines` を書き込んでいる（direct INSERT / UPDATE 権限は残存）
+- したがって `anon` / `authenticated` の直接 INSERT / UPDATE の REVOKE はまだ行わない
+- 次工程は Phase 3-2：`admin-app.html`（machines 新規/編集）・`index.html`（materials 追加/無効化・machines 追加/無効化/編集）の RPC 移行
+- REVOKE は Phase 3-2 のフロント移行・本番動作確認が完了してから（Phase 3-3 相当）行う
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/materials-machines-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

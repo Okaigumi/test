@@ -1491,6 +1491,8 @@ function toggleMachineOwnership(type){
 }
 
 async function saveMachine(){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const machineId=_editMachineId;
   const name=document.getElementById('fm-name').value.trim();
   if(!name){alert('重機名を入力してください');return;}
@@ -1509,8 +1511,34 @@ async function saveMachine(){
     lease_monthly:isLease?parseInt(document.getElementById('fm-lease-monthly').value)||null:null
   };
   let error;
-  if(machineId){const res=await sb.from('machines').update(payload).eq('id',machineId);error=res.error;}
-  else{const res=await sb.from('machines').insert(payload);error=res.error;}
+  if(machineId){
+    const res=await sb.rpc('update_machine_admin_secure',{
+      session_token_input:token,
+      machine_id_input:machineId,
+      name_input:payload.name,
+      company_id_input:payload.company_id,
+      is_active_input:payload.is_active,
+      ownership_input:payload.ownership,
+      lease_company_input:payload.lease_company,
+      lease_start_input:payload.lease_start,
+      lease_end_input:payload.lease_end,
+      lease_monthly_input:payload.lease_monthly
+    });
+    error=res.error;
+  }else{
+    const res=await sb.rpc('create_machine_admin_secure',{
+      session_token_input:token,
+      name_input:payload.name,
+      company_id_input:payload.company_id,
+      is_active_input:payload.is_active,
+      ownership_input:payload.ownership,
+      lease_company_input:payload.lease_company,
+      lease_start_input:payload.lease_start,
+      lease_end_input:payload.lease_end,
+      lease_monthly_input:payload.lease_monthly
+    });
+    error=res.error;
+  }
   if(error){alert('保存に失敗しました：'+error.message);return;}
   closeModal();await pageMachines();
 }

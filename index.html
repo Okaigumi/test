@@ -1670,21 +1670,27 @@ async function toggleAssign(siteId,empId,btn){
 
 async function addSite(){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const v=document.getElementById('newSiteInput').value.trim();if(!v)return;const{error}=await sb.rpc('create_site_secure',{session_token_input:token,name_input:v,location_input:null,start_date_input:null,end_date_input:null,company_id_input:null});if(error){alert('保存エラー：'+error.message);return;}document.getElementById('newSiteInput').value='';await loadSites();}
 async function deleteSite(id){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const s=state.sites.find(x=>x.id===id);if(!confirm(`「${s?.name||id}」を無効化しますか？\n無効化すると、通常の現場一覧には表示されなくなります。`))return;const{error}=await sb.rpc('deactivate_site_secure',{session_token_input:token,id_input:id});if(error){alert('無効化に失敗しました：'+error.message);return;}await loadSites();}
-async function addMaterial(){const v=document.getElementById('newMaterialInput').value.trim();if(!v)return;await sb.from('materials').insert({name:v});document.getElementById('newMaterialInput').value='';await loadMaterials();}
-async function deleteMaterial(id){const m=state.materials.find(x=>x.id===id);if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の外注マスタには表示されなくなります。`))return;await sb.from('materials').update({is_active:false}).eq('id',id);await loadMaterials();}
+async function addMaterial(){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const v=document.getElementById('newMaterialInput').value.trim();if(!v)return;const{error}=await sb.rpc('create_material_secure',{session_token_input:token,name_input:v});if(error){alert('保存エラー：'+error.message);return;}document.getElementById('newMaterialInput').value='';await loadMaterials();}
+async function deleteMaterial(id){const token=state.currentUser?.session_token;if(!token){alert('セッションが無効です。再ログインしてください。');return;}const m=state.materials.find(x=>x.id===id);if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の外注マスタには表示されなくなります。`))return;const{error}=await sb.rpc('deactivate_material_secure',{session_token_input:token,material_id_input:id});if(error){alert('無効化に失敗しました：'+error.message);return;}await loadMaterials();}
 
 // 重機マスタ管理
 async function addMachine(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const v=document.getElementById('newMachineInput').value.trim();
   if(!v)return;
-  await sb.from('machines').insert({name:v});
+  const{error}=await sb.rpc('create_machine_secure',{session_token_input:token,name_input:v,ownership_input:'owned',lease_company_input:null,lease_start_input:null,lease_end_input:null,lease_monthly_input:null});
+  if(error){alert('保存エラー：'+error.message);return;}
   document.getElementById('newMachineInput').value='';
   await loadMachineLocations();renderMaster();
 }
 async function deleteMachine(id){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const m=machinesData.find(x=>x.id===id);
   if(!confirm(`「${m?.name||id}」を無効化しますか？\n無効化すると、通常の重機一覧には表示されなくなります。`))return;
-  await sb.from('machines').update({is_active:false}).eq('id',id);
+  const{error}=await sb.rpc('deactivate_machine_secure',{session_token_input:token,machine_id_input:id});
+  if(error){alert('無効化に失敗しました：'+error.message);return;}
   await loadMachineLocations();renderMaster();
 }
 
@@ -1711,6 +1717,8 @@ function openMachineSetting(machineId){
 }
 
 async function saveMachineSetting(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const payload={
     ownership:currentMachineOwnership,
     lease_company:currentMachineOwnership==='lease'?document.getElementById('mLeaseCompany').value||null:null,
@@ -1718,9 +1726,11 @@ async function saveMachineSetting(){
     lease_end:currentMachineOwnership==='lease'?document.getElementById('mLeaseEnd').value||null:null,
     lease_monthly:currentMachineOwnership==='lease'?parseInt(document.getElementById('mLeaseMonthly').value)||null:null
   };
-  await sb.from('machines').update(payload).eq('id',editingMachineId);
-  // ローカルデータも更新
   const m=machinesData.find(m=>m.id===editingMachineId);
+  if(!m||!m.name){alert('対象の重機が見つかりません。画面を再読み込みしてから再度お試しください。');return;}
+  const{error}=await sb.rpc('update_machine_secure',{session_token_input:token,machine_id_input:editingMachineId,name_input:m.name,ownership_input:payload.ownership,lease_company_input:payload.lease_company,lease_start_input:payload.lease_start,lease_end_input:payload.lease_end,lease_monthly_input:payload.lease_monthly});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
+  // ローカルデータも更新
   if(m) Object.assign(m,payload);
   document.getElementById('machineSettingModal').classList.remove('show');
   renderMaster();renderMachines();

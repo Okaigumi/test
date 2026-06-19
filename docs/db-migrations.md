@@ -1722,3 +1722,70 @@ update は `is_active` を変更しない）へ単純置換すると、管理画
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/machines-admin-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-19 Phase 3-3 materials / machines direct write REVOKE
+
+### 概要
+
+`materials` / `machines` への `anon` / `authenticated` の直接 INSERT / UPDATE 権限を剥奪した。
+Phase 3-2 で `index.html` / `admin-app.html` の書き込みが secure RPC 7本へ移行され、本番動作確認も
+完了したため、直接書き込み経路を遮断する。SELECT は維持（一覧・参照に必要。`genka-app.html` も
+machines を SELECT 参照）、RPC EXECUTE は維持、RLS / POLICY は変更しない。
+
+### DB変更（`docs/sql/revoke-materials-machines-direct-write.sql` を Supabase SQL Editor で実行）
+
+- 適用済み
+
+```sql
+REVOKE INSERT, UPDATE ON TABLE public.materials FROM anon, authenticated;
+REVOKE INSERT, UPDATE ON TABLE public.machines  FROM anon, authenticated;
+```
+
+**REVOKE対象**
+
+- `public.materials` の `INSERT`, `UPDATE` from `anon`, `authenticated`
+- `public.machines` の `INSERT`, `UPDATE` from `anon`, `authenticated`
+
+**REVOKEしなかったもの（このSQLでは触らない）**
+
+- `SELECT`（維持）
+- secure RPC 7本の `EXECUTE`（維持）
+- `_verify_management_session`（外部非公開のまま維持）
+- RLS（変更なし）
+- POLICY（変更なし）
+- その他テーブル権限（変更なし）
+
+### 適用後確認
+
+- `materials` / `machines` の `anon` / `authenticated` から `INSERT` / `UPDATE` が消滅：OK
+- `materials` / `machines` の `SELECT` は維持：OK
+- secure RPC 7本（`create_material_secure` / `deactivate_material_secure` / `create_machine_secure` /
+  `update_machine_secure` / `deactivate_machine_secure` / `create_machine_admin_secure` /
+  `update_machine_admin_secure`）の `anon` / `authenticated` EXECUTE：**14行維持**：OK
+- `_verify_management_session` は `anon` / `authenticated` / `public` から EXECUTE 不可のまま：OK
+- RLS 状態は変更なし（`machines,true,false` / `materials,true,false`）：OK
+- POLICY 一覧は変更なし：OK
+
+### 本番動作確認
+
+- 従業員画面 `/`：外注追加 / 外注無効化 / 重機追加 / 重機設定保存 / 重機無効化：OK
+- 管理画面 `/admin`：重機新規追加 / 重機編集 / 会社割当 / 有効・無効切替 / 自社・リース設定：OK
+
+### 結論
+
+- Phase 3 優先順位2 materials / machines は、フロントRPC移行と direct write REVOKE が完了
+- `materials` / `machines` への直接 `INSERT` / `UPDATE` は、コード上もDB権限上も廃止
+- 読み取り `SELECT` は従来どおり維持
+
+### 注意
+
+- 今回は権限剥奪（REVOKE）のみ。RPC関数・RLS・POLICY・SELECT・EXECUTE には触れていない
+- `materials` / `machines` の直接 INSERT / UPDATE 経路は遮断済み
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/revoke-materials-machines-direct-write.sql` は別途作成済み・本エントリでは内容変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

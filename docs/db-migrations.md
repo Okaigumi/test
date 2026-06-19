@@ -1640,3 +1640,85 @@ REVOKE UPDATE ON public.site_assignments FROM anon, authenticated;
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/materials-machines-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-19 Phase 3 優先順位2 machines admin向け secure RPC 追加
+
+### 概要
+
+`admin-app.html` の machines 保存処理（新規/更新）は `company_id` と `is_active` を扱うため、
+既存の `create_machine_secure` / `update_machine_secure`（`company_id` を扱わず、create は `is_active=true` 固定、
+update は `is_active` を変更しない）へ単純置換すると、管理画面の「会社割当」と「有効/無効の手動切替」が**機能後退**する。
+そのため admin 画面専用に、`company_id` と `is_active` を受け取る admin 向け RPC 2本を **additive-only** で追加した。
+今回は **RPC追加のみ**で、既存の materials/machines secure RPC 5本（`docs/sql/materials-machines-secure-rpc.sql`）は**変更していない**。
+認可は既存ヘルパー `public._verify_management_session(text)` を**再利用**し、新規ヘルパーは作成していない。
+
+### DB変更（`docs/sql/machines-admin-secure-rpc.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+**作成された関数（2件・全て SECURITY DEFINER / SET search_path = public, extensions）**
+
+| 関数名 | 種別 | 用途 |
+|---|---|---|
+| `public.create_machine_admin_secure` | 公開RPC | 重機の新規作成（admin向け。`company_id` / `is_active` をクライアントから受け取る） |
+| `public.update_machine_admin_secure` | 公開RPC | 重機の更新（admin向け。`company_id` / `is_active` を反映、`created_at` は対象外） |
+
+**認可方針（デュアルセッション・既存ヘルパー再利用）**
+
+- 各RPC先頭で `PERFORM public._verify_management_session(session_token_input)` を呼ぶ
+- 有効な `admin_sessions` ＋ `genka_admins.is_active = true`
+- または、有効な `employee_sessions` ＋ `employees.role = 'admin'` ＋ `employees.is_active = true`
+- 新規ヘルパーは作成していない（既存 `_verify_management_session` を再利用）
+
+**既存5RPCとの差分（admin向けRPC追加の理由）**
+
+- 既存 `create_machine_secure` / `update_machine_secure` は `company_id` を引数に持たず、`is_active` もクライアントから受け取らない
+- `admin-app.html` の保存 payload は `company_id`（所有会社・未設定可）と `is_active`（有効/無効の手動切替）を含む
+- 単純置換では会社割当・有効/無効切替が表現できず機能後退するため、admin専用の追加RPCで対応する方針とした
+
+**設計メモ**
+
+- `name` は `btrim` して空文字を拒否
+- `is_active_input` は NULL を拒否（`is_active is required`）
+- `company_id_input` は NULL 許容。非NULL時は `public.companies` への存在確認を明示的に行い、不在なら例外（`Company not found`）
+- `ownership` は NULL/空文字なら 'owned' 扱い、許可値は 'owned' / 'lease'、それ以外は例外
+- `ownership = 'owned'` 時は lease_company / lease_start / lease_end / lease_monthly を NULL 化
+- `lease_monthly` は NULL または 0以上、`lease_start` / `lease_end` 両方ある場合は start <= end を検証
+- create 時は machines に name / company_id / is_active / ownership / lease_* を INSERT
+- update 時は machines の name / company_id / is_active / ownership / lease_* を UPDATE（`created_at` は触らない）、対象id不在時は例外（`Machine not found`）
+- 各RPCは `RETURNING id` を返す
+
+### 適用後確認
+
+- 2関数（`create_machine_admin_secure` / `update_machine_admin_secure`）の存在確認：OK
+- 両関数が SECURITY DEFINER = true：OK
+- 両関数が SET search_path = public, extensions：OK
+- 両関数に `anon` / `authenticated` の EXECUTE あり：OK
+- 内部ヘルパー `_verify_management_session` は `anon` / `authenticated` / `public` から EXECUTE 不可のまま維持：OK
+- `machines` のテーブル権限は適用前と同一（direct INSERT / UPDATE 残存）：OK
+- `machines` の RLS 状態は適用前と同一：OK
+- `machines` の POLICY 内容は適用前と同一：OK
+- additive-only の副作用なし：OK
+
+**新規2関数の PUBLIC EXECUTE について（記録）**
+
+- 新規2関数は `GRANT EXECUTE ... TO anon, authenticated` を付与しており、関数作成時のデフォルトにより **PUBLIC EXECUTE も true** である。
+- これらは公開RPCであり、内部で必ず `_verify_management_session` を通すため、未認証ロールが呼んでもセッション検証で弾かれる。よって現時点では進行可とする。
+- ただし「公開RPCの PUBLIC EXECUTE = true」である点は記録対象として残す（既存5RPCと同様、将来 PUBLIC からの REVOKE ＋ anon/authenticated への明示 GRANT に整理する余地あり）。
+
+### 注意
+
+- 今回はRPC追加のみ。既存テーブル・既存RLS・既存POLICY・既存テーブルGRANT・REVOKE には触れていない
+- 既存の materials/machines secure RPC 5本は変更していない
+- まだフロントは直接 `machines` を書き込んでいる（direct INSERT / UPDATE 権限は残存）
+- したがって `anon` / `authenticated` の直接 INSERT / UPDATE の REVOKE はまだ行わない
+- 次工程は Phase 3-2：`admin-app.html`（machines 新規/編集 → admin向けRPC）・`index.html`（materials 追加/無効化・machines 追加/無効化/編集 → 既存5RPC）の RPC 移行
+- REVOKE は Phase 3-2 のフロント移行・本番動作確認が完了してから（Phase 3-3 相当）行う
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/machines-admin-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

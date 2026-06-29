@@ -112,13 +112,13 @@
 
 ## Phase 3：残り INSERT / UPDATE のRPC化
 
-状態：進行中（1. sites / site_assignments 完了、2・3 は未着手）
+状態：進行中（1. sites / site_assignments 完了、2. materials / machines 完了、3 は未着手）
 
 ### 優先順位
 
 1. sites / site_assignments ✅ 完了（2026-06-13）
-2. materials / machines
-3. employee_rates / unit_rates
+2. materials / machines ✅ 完了（2026-06-19）
+3. employee_rates / unit_rates（次回対象・未着手）
 
 ### 1. sites / site_assignments（完了）
 
@@ -129,6 +129,20 @@
 - 書き込みは secure RPC 経由に一本化済み
 - REVOKE後の本番動作確認（admin-app / index）OK
 - 詳細は docs/db-migrations.md の Phase 3-1 / Phase 3-3 エントリを参照
+
+### 2. materials / machines（完了）
+
+- secure RPC 追加済み（`docs/sql/materials-machines-secure-rpc.sql` / `docs/sql/machines-admin-secure-rpc.sql`、7関数・デュアルセッション認可）
+- `index.html`（基本5RPC）/ `admin-app.html`（admin向け2RPC）の外注マスタ・機械書き込みを secure RPC へ移行済み
+- `anon` / `authenticated` の直接 INSERT / UPDATE を REVOKE 済み（`docs/sql/revoke-materials-machines-direct-write.sql`）
+- SELECT は維持（一覧表示のため）
+- 書き込みは secure RPC 経由に一本化済み
+- REVOKE後の本番動作確認OK
+- 詳細は docs/db-migrations.md の Phase 3 優先順位2 / Phase 3-3 エントリを参照
+
+### 3. employee_rates / unit_rates（次回対象・未着手）
+
+- 直接 INSERT / UPDATE が残っているため、次フェーズでRPC化予定
 
 ### 方針
 

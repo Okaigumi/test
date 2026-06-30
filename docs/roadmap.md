@@ -112,13 +112,13 @@
 
 ## Phase 3：残り INSERT / UPDATE のRPC化
 
-状態：進行中（1. sites / site_assignments 完了、2. materials / machines 完了、3 は未着手）
+状態：完了（1. sites / site_assignments 完了、2. materials / machines 完了、3. employee_rates / unit_rates 完了）
 
 ### 優先順位
 
 1. sites / site_assignments ✅ 完了（2026-06-13）
 2. materials / machines ✅ 完了（2026-06-19）
-3. employee_rates / unit_rates（次回対象・未着手）
+3. employee_rates / unit_rates ✅ 完了（2026-06-30）
 
 ### 1. sites / site_assignments（完了）
 
@@ -140,9 +140,17 @@
 - REVOKE後の本番動作確認OK
 - 詳細は docs/db-migrations.md の Phase 3 優先順位2 / Phase 3-3 エントリを参照
 
-### 3. employee_rates / unit_rates（次回対象・未着手）
+### 3. employee_rates / unit_rates（完了）
 
-- 直接 INSERT / UPDATE が残っているため、次フェーズでRPC化予定
+- secure RPC 追加済み（`docs/sql/employee-unit-rates-secure-rpc.sql`、2関数・デュアルセッション認可）
+  - `upsert_employee_rate_secure` / `upsert_unit_rate_secure`
+- `admin-app.html` / `genka-app.html` の単価・日当の direct upsert を secure RPC 呼び出しへ移行済み（計4箇所）
+- `anon` / `authenticated` の直接 INSERT / UPDATE を REVOKE 済み（`docs/sql/revoke-employee-unit-rates-direct-write.sql`）
+- SELECT は維持（一覧・単価設定画面の表示のため）
+- 書き込みは secure RPC 経由に一本化済み
+- REVOKE後の本番動作確認OK（/admin 従業員日当保存・/admin 単価保存・/genka 従業員日当保存・/genka 単価保存）
+- RLS / POLICY / RPC EXECUTE / `_verify_management_session` / テーブル定義は変更なし
+- 詳細は docs/db-migrations.md の Phase 3 優先順位3 / Phase 3-3 エントリを参照
 
 ### 方針
 

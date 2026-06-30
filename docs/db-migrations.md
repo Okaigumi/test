@@ -1871,3 +1871,70 @@ materials / machines（優先順位2）が `index.html` ＋ `admin-app.html` だ
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/employee-unit-rates-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-30 Phase 3 優先順位3 employee_rates / unit_rates direct write REVOKE 完了
+
+### 概要
+
+`employee_rates` / `unit_rates` への `anon` / `authenticated` の直接 INSERT / UPDATE 権限を剥奪した。
+フロント（`admin-app.html` / `genka-app.html`）の単価書き込みは既に secure RPC 2本
+（`upsert_employee_rate_secure` / `upsert_unit_rate_secure`）へ移行され、本番動作確認も完了したため、
+直接書き込み経路を遮断する。SELECT は維持（一覧・単価設定画面の表示に必要。`admin-app.html` /
+`genka-app.html` がともに SELECT 参照）、RPC EXECUTE は維持、RLS / POLICY は変更しない。
+
+### DB変更（`docs/sql/revoke-employee-unit-rates-direct-write.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+```sql
+REVOKE INSERT, UPDATE ON TABLE public.employee_rates FROM anon, authenticated;
+REVOKE INSERT, UPDATE ON TABLE public.unit_rates     FROM anon, authenticated;
+```
+
+**REVOKE対象**
+
+- `public.employee_rates` の `INSERT`, `UPDATE` from `anon`, `authenticated`
+- `public.unit_rates` の `INSERT`, `UPDATE` from `anon`, `authenticated`
+
+**REVOKEしなかったもの（このSQLでは触らない）**
+
+- `SELECT`（維持）
+- `REFERENCES` / `TRIGGER` / `TRUNCATE`（今回触っていない）
+- secure RPC 2本の `EXECUTE`（維持）
+- `_verify_management_session`（外部非公開のまま維持）
+- RLS（変更なし）
+- POLICY（変更なし）
+- テーブル定義（変更なし）
+
+### 適用後確認
+
+- table privileges：`employee_rates` / `unit_rates` とも `anon` / `authenticated` から `INSERT` / `UPDATE` が消滅、`SELECT` は残存：OK
+- secure RPC EXECUTE：`upsert_employee_rate_secure` × anon/authenticated、`upsert_unit_rate_secure` × anon/authenticated の **4行維持**：OK
+- `_verify_management_session` は `anon` / `authenticated` / `public` から EXECUTE 不可のまま（0行）：OK
+- RLS 状態：`employee_rates`（rls_enabled = true, rls_forced = false）/ `unit_rates`（rls_enabled = true, rls_forced = false）で変更なし：OK
+- POLICY：`employee_rates`（`er_read` / `er_update` / `er_write`）・`unit_rates`（`ur_read` / `ur_update` / `ur_write`）が残存・変更なし：OK
+
+### 本番動作確認
+
+- 管理画面 `/admin`：従業員日当保存 / 単価保存：OK
+- 原価画面 `/genka`：従業員日当保存 / 単価保存：OK
+
+### 結論
+
+- `employee_rates` / `unit_rates` への直接 `INSERT` / `UPDATE` は、コード上もDB権限上も廃止
+- 単価・日当の保存は secure RPC 経由に一本化され、REVOKE後も本番4項目（/admin・/genka の日当・単価保存）が動作
+- 読み取り `SELECT` は従来どおり維持
+
+### 注意
+
+- 今回は権限剥奪（REVOKE）のみ。RPC関数・RLS・POLICY・SELECT・EXECUTE・テーブル定義には触れていない
+- `employee_rates` / `unit_rates` の直接 INSERT / UPDATE 経路は遮断済み
+- 次工程：`docs/roadmap.md` への反映（Phase 3 優先順位3 完了扱い）、commit、push、PR作成
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/revoke-employee-unit-rates-direct-write.sql` は別途作成済み・本エントリでは内容変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

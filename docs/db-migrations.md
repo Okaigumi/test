@@ -1789,3 +1789,85 @@ REVOKE INSERT, UPDATE ON TABLE public.machines  FROM anon, authenticated;
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/revoke-materials-machines-direct-write.sql` は別途作成済み・本エントリでは内容変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-30 Phase 3 優先順位3 employee_rates / unit_rates secure RPC 追加
+
+### 概要
+
+`employee_rates` / `unit_rates`（単価マスタ）の書き込みを secure RPC 化するための関数群を追加した。
+今回は **RPC追加のみ**（additive-only）で、既存テーブル・既存RLS・既存POLICY・既存テーブルGRANT には一切触れていない。
+フロント（`admin-app.html` / `genka-app.html`）はまだ `employee_rates` / `unit_rates` を直接 upsert しているため、
+`anon` / `authenticated` の直接 INSERT / UPDATE は今回 **REVOKE しない**。
+認可は Phase 3-1 で作成済みの既存ヘルパー `public._verify_management_session(text)` を **再利用**し、新規ヘルパーは作成していない。
+materials / machines（優先順位2）が `index.html` ＋ `admin-app.html` だったのに対し、今回の書き込み元は
+**`admin-app.html` ＋ `genka-app.html`** の2画面である点が差分（`index.html` には単価書き込みなし）。
+
+### DB変更（`docs/sql/employee-unit-rates-secure-rpc.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+**作成された関数（2件・全て SECURITY DEFINER / SET search_path = public, extensions）**
+
+| 関数名 | 種別 | 用途 |
+|---|---|---|
+| `public.upsert_employee_rate_secure(text, uuid, integer, date)` | 公開RPC | 従業員日当の upsert（`employee_id, effective_from` で衝突時は `daily_rate` のみ更新） |
+| `public.upsert_unit_rate_secure(text, text, text, integer, text)` | 公開RPC | 単価（ダンプ/警備/外注等）の upsert（`category, name` で衝突時は `unit_price` / `unit` / `updated_at` を更新） |
+
+**認可方針（デュアルセッション・既存ヘルパー再利用）**
+
+- 各RPC先頭で `PERFORM public._verify_management_session(session_token_input)` を呼ぶ
+- 有効な `admin_sessions` ＋ `genka_admins.is_active = true`
+- または、有効な `employee_sessions` ＋ `employees.role = 'admin'` ＋ `employees.is_active = true`
+- 新規ヘルパーは作成していない（Phase 3-1 の `_verify_management_session` を再利用）
+
+**設計メモ**
+
+- 両RPCとも `RETURNS uuid`。upsert された行の `id` を返す
+- `upsert_employee_rate_secure`
+  - `employee_id_input` が NULL なら例外（`Employee id is required`）
+  - `daily_rate_input` が NULL または負数なら例外（`Daily rate must be zero or positive`）
+  - `effective_from_input` が NULL なら例外（`Effective from date is required`）
+  - `public.employees` に対象 id が存在しなければ例外（`Employee not found`）。`is_active` 等の未確認列は条件に使わない
+  - `ON CONFLICT (employee_id, effective_from) DO UPDATE` で `daily_rate` のみ更新。`hourly_rate` / `created_at` は触らない
+  - employee_rates は effective-dated 履歴テーブルのため、同日 upsert は当日レートの更新になる（既存フロント挙動と一致）
+- `upsert_unit_rate_secure`
+  - `category_input` / `name_input` / `unit_input` は `btrim` して空文字を拒否
+  - `unit_price_input` は NULL または負数なら例外（`Unit price must be zero or positive`）
+  - `ON CONFLICT (category, name) DO UPDATE` で `unit_price` / `unit` / `updated_at` を更新
+  - `updated_at` はクライアント入力を信頼せず、INSERT / UPDATE いずれも **サーバ側 `now()`** を使う
+  - `company_id` は触らない（既存UI互換）
+
+### 適用後確認
+
+- 2関数の存在確認：OK
+- 全2関数が SECURITY DEFINER = true：OK
+- 全2関数が SET search_path = public, extensions：OK
+- 2関数に `anon` / `authenticated` の EXECUTE あり（`upsert_employee_rate_secure` × anon/authenticated、`upsert_unit_rate_secure` × anon/authenticated）：OK
+- 内部ヘルパー `_verify_management_session` は `anon` / `authenticated` / `public` から EXECUTE 不可のまま維持（0行）：OK
+- `employee_rates` / `unit_rates` のテーブル定義は変更なし：OK
+- `employee_rates` / `unit_rates` の RLS 状態は変更なし：OK
+- `employee_rates` / `unit_rates` の POLICY 内容は変更なし：OK
+- REVOKE なし・direct INSERT / UPDATE 権限は残存：OK
+- additive-only の副作用なし：OK
+
+**新規2関数の PUBLIC EXECUTE について（記録）**
+
+- 新規2関数は `GRANT EXECUTE ... TO anon, authenticated` を付与しており、関数作成時のデフォルトにより **PUBLIC EXECUTE も true** である。
+- これらは公開RPCであり、内部で必ず `_verify_management_session` を通すため、未認証ロールが呼んでもセッション検証で弾かれる。よって現時点では進行可とする。
+- 「公開RPCの PUBLIC EXECUTE = true」である点は記録対象として残す（優先順位2と同じ整理。将来 PUBLIC からの REVOKE ＋ anon/authenticated への明示 GRANT に整理する余地あり）。
+
+### 注意
+
+- 今回はRPC追加のみ。既存テーブル・既存RLS・既存POLICY・既存テーブルGRANT・REVOKE には触れていない
+- まだフロントは直接 `employee_rates` / `unit_rates` を upsert している（direct INSERT / UPDATE 権限は残存）
+- したがって `anon` / `authenticated` の直接 INSERT / UPDATE の REVOKE はまだ行わない
+- 次工程：`admin-app.html`（`saveEmpRate` / `saveUnitRate`）・`genka-app.html`（`saveEmpRate` / `saveUnitRate`）の RPC 移行（計4箇所）
+- REVOKE はフロント移行・本番動作確認が完了してから（Phase 3-3 相当）行う
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/employee-unit-rates-secure-rpc.sql` は別途追加済み・本エントリでは変更なし
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

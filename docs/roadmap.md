@@ -2,8 +2,9 @@
 
 ## 現在地
 
-- 最新実装コミット：8a0e811 Add notice attachment support
-- 現在フェーズ：運用開始前チェック
+- 最新実装コミット：a0601ae Merge pull request #16（Phase 3 優先順位3 employee_rates / unit_rates direct write REVOKE 記録）
+- 現在フェーズ：Phase 3（残り INSERT / UPDATE のRPC化）優先順位1〜3すべて完了。次の実作業は判断待ち
+- 次に判断すべき作業：「運用開始前チェック → 小規模運用開始」へ進むか、「Phase 4 RLSポリシー整理 → Phase 5 PIN・ログイン強化」へ進むか
 - 運用状態：小規模運用開始直前
 - 作業PC運用：平日は仕事用PC、それ以外は自宅PC。GitHub経由で同期。
 - 作業開始時ルール：git pull --ff-only / git status / git log --oneline -5 を確認
@@ -276,6 +277,11 @@ Storage 設計：
 - 日報集計
 - 材料・外注・重機集計
 - スマホUI改善
+- 日報カレンダーUI改善（候補・未着手）
+  - 現場日報の履歴画面をカレンダー表示にする
+  - 従業員が日ごとの日報提出状況・記入漏れ・有給取得日を確認できるようにする
+  - 目的は日報未入力の早期発見と従業員本人の自己確認
+  - 対象は従業員画面（index.html の日報履歴）。今回は実装しない（着手前の候補）
 
 ### 請求書PDF管理・原価登録候補作成（試作品 / 2026-06-11）
 
@@ -2625,8 +2631,23 @@ pCloud
 
 ## 次にやること
 
-1. 運用開始前チェックを完了する
-2. 小規模運用を開始する
+**完了済み（参考）：**
+
+- Phase 3 残り INSERT / UPDATE のRPC化（優先順位1〜3すべて完了）
+  - sites / site_assignments（完了・2026-06-13）
+  - materials / machines（完了・2026-06-19）
+  - employee_rates / unit_rates（完了・2026-06-30）
+
+**次の実作業は以下の2系統から判断（未着手）：**
+
+A. 運用に出す線
+1. 運用開始前チェックを完了する（Phase 1）
+2. 小規模運用を開始する（Phase 2）
 3. 実際に困った点をメモする
-4. 必要に応じて admin-app.html の改善に進む
-5. セキュリティ継続強化として sites / site_assignments RPC化に進む
+4. 必要に応じて admin-app.html の改善に進む（Phase 6）
+
+B. セキュリティ継続強化の線
+1. Phase 4 RLSポリシー整理（pg_policies 棚卸し・役割整理）
+2. Phase 5 PIN・ログイン強化（PINハッシュ化・ログイン失敗制限・session_token 期限管理）
+
+※ 日報カレンダーUI改善は Phase 8 業務効率化の候補として追加済み（未着手・実装は運用後判断）

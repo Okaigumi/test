@@ -2002,3 +2002,75 @@ DROP POLICY IF EXISTS sub_update ON public.subcontractors;
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/phase4a-1-subcontractors-write-lockdown.sql` は別途作成済み（実行済みSQL案として保持）
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-30 Phase 4-A-2 photos upload 制限 完了
+
+### 概要
+
+public な `photos` バケットは `file_size_limit` / `allowed_mime_types` が未設定で、任意サイズ・
+任意MIMEのアップロードを許す状態だった（ストレージ濫用・非画像投入の穴）。bucket 設定で
+「最大5MB・image/jpeg のみ」に制限し、アップロードを絞る。`public = true`（read）は維持し、
+`storage.objects` の policy（`photos_read` / `photos_upload`）は変更しない。
+フロント（index.html）は upload 時 `contentType:'image/jpeg'` 固定・縮小後JPEG（最大1280x720・
+品質0.7）・最大5枚のため、本制限の範囲内で従来どおり動作する。
+
+### DB変更（`docs/sql/phase4a-2-photos-upload-limits.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success**
+
+```sql
+UPDATE storage.buckets
+SET
+  file_size_limit = 5242880,
+  allowed_mime_types = ARRAY['image/jpeg']
+WHERE id = 'photos';
+```
+
+**対象**
+
+- `storage.buckets` の `id = 'photos'` の `file_size_limit` / `allowed_mime_types` のみ
+
+**触らなかったもの**
+
+- `photos` の `public`（true 維持＝read 維持）
+- `storage.objects` の policy（`photos_read` / `photos_upload` とも変更なし）
+- 他バケット（`notice-attachments` / `invoice-pdfs`）
+- 他テーブル
+
+### 適用後確認
+
+- `photos` の `public = true` 維持：OK
+- `photos` の `file_size_limit = 5242880`（5MB）：OK
+- `photos` の `allowed_mime_types = ["image/jpeg"]`：OK
+- `photos_read` policy 変更なし：OK
+- `photos_upload` policy 変更なし：OK
+
+### 本番動作確認（index.html）
+
+- 既存写真表示（詳細モーダル）：OK
+- 写真クリックで別タブ表示：OK
+- 新規写真アップロード：OK
+- 保存（update_report_photo_secure 経由）：OK
+- 詳細表示：OK
+- Console 重大エラーなし：OK
+
+### 結論
+
+- `photos` への過大・非画像アップロードを bucket 設定で遮断（最大5MB・image/jpeg のみ）
+- `public read` は維持＝`reports.photo_urls` の public URL 保存方式・既存写真表示は影響なし
+- private化・署名URL化は未実施（別フェーズ）、`storage.objects` policy も未変更
+
+### 注意
+
+- 今回は `photos` バケットの設定値（file_size_limit / allowed_mime_types）変更のみ
+- INSERT policy の role 絞り込み・private化・署名URL化は anon 運用前提と保存URL方式に抵触するため対象外
+- 次工程（Phase 4 残）：report_summary / reports / paid_leave_* の読み取り整理、financial系の
+  管理セッション限定読み取り化、管理者向け日報写真確認導線（photos の public維持／将来private化方針と整合）
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/phase4a-2-photos-upload-limits.sql` は別途作成済み（実行済みSQL案として保持）
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

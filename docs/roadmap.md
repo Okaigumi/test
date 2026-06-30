@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown 完了。読み取り整理は未着手）
+状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 完了。読み取り整理は未着手）
 
 ### やること
 
@@ -184,11 +184,24 @@
 - SQL：`docs/sql/phase4a-1-subcontractors-write-lockdown.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-A-1 subcontractors write lockdown 完了」を参照
 
+### 4-A-2 photos upload制限 ✅ 完了（2026-06-30）
+
+- `photos` バケットの upload を制限（過大・非画像アップロードの穴塞ぎ）
+- `file_size_limit = 5242880`（5MB）／`allowed_mime_types = ['image/jpeg']` を設定
+- `public read` は維持（`reports.photo_urls` の public URL 保存方式・既存写真表示を壊さない）
+- `storage.objects` policy（`photos_read` / `photos_upload`）は変更なし
+- 本番動作確認OK（既存写真表示・写真クリック表示・新規アップロード・保存・詳細表示）
+- SQL：`docs/sql/phase4a-2-photos-upload-limits.sql`（実行済み）
+- 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-A-2 photos upload 制限 完了」を参照
+
 ### 次候補（読み取り整理）
 
-- photos Storage の upload 制限（file_size_limit / allowed_mime_types）
 - report_summary（RLSバイパスView）/ reports / paid_leave_requests の読み取り整理（anon SELECT 縮小・読み取りRPC化）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
+- 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
+  reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、
+  photos の public維持／将来の private化・署名URL化方針と整合させる）
+- 将来：photos の private化・署名URL化（保存済み public URL の移行設計が必要・別フェーズ）
 
 ## Phase 5：PIN・ログイン強化
 

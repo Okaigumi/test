@@ -1180,17 +1180,24 @@ function renderRateEditor(){
 }
 
 async function saveEmpRate(empId){
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const val=parseInt(document.getElementById('rate-emp-'+empId).value)||0;
   const today=new Date();
   const d=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  await sb.from('employee_rates').upsert({employee_id:empId,daily_rate:val,effective_from:d},{onConflict:'employee_id,effective_from'});
+  const{error}=await sb.rpc('upsert_employee_rate_secure',{session_token_input:token,employee_id_input:empId,daily_rate_input:val,effective_from_input:d});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   empRates[empId]=val;
   alert('保存しました');
 }
 
 async function saveUnitRate(category,name,inputKey,_unit){
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const val=parseInt(document.getElementById('rate-'+inputKey).value)||0;
-  await sb.from('unit_rates').upsert({category,name,unit_price:val,unit:category==='dump'?'台':category==='guard'?'人':'式',updated_at:new Date().toISOString()},{onConflict:'category,name'});
+  const unit=category==='dump'?'台':category==='guard'?'人':'式';
+  const{error}=await sb.rpc('upsert_unit_rate_secure',{session_token_input:token,category_input:category,name_input:name,unit_price_input:val,unit_input:unit});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   unitRates[`${category}:${name}`]=val;
   alert(`${name} の単価を保存しました`);
 }

@@ -1219,15 +1219,21 @@ async function pageRates(){
 }
 
 async function saveEmpRate(empId){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const val=parseInt(document.getElementById('er-'+empId).value)||0;
   const d=localDate();
-  await sb.from('employee_rates').upsert({employee_id:empId,daily_rate:val,effective_from:d},{onConflict:'employee_id,effective_from'});
+  const{error}=await sb.rpc('upsert_employee_rate_secure',{session_token_input:token,employee_id_input:empId,daily_rate_input:val,effective_from_input:d});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   alert('保存しました');
 }
 
 async function saveUnitRate(cat,name,inputId,unit){
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const val=parseInt(document.getElementById(inputId).value)||0;
-  await sb.from('unit_rates').upsert({category:cat,name,unit_price:val,unit,updated_at:new Date().toISOString()},{onConflict:'category,name'});
+  const{error}=await sb.rpc('upsert_unit_rate_secure',{session_token_input:token,category_input:cat,name_input:name,unit_price_input:val,unit_input:unit});
+  if(error){alert('保存に失敗しました：'+error.message);return;}
   _unitRates[`${cat}:${name}`]={unit_price:val};
   alert('保存しました');
 }

@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 完了。読み取り整理は未着手）
+状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 完了。reports / report_summary 等の読み取り整理は未着手）
 
 ### やること
 
@@ -194,10 +194,22 @@
 - SQL：`docs/sql/phase4a-2-photos-upload-limits.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-A-2 photos upload 制限 完了」を参照
 
+### 4-B paid_leave 読み取りRPC化・SELECT遮断 ✅ 完了（2026-06-30）
+
+- `paid_leave_requests` / `paid_leave_grants` の読み取りを secure RPC 経由へ統一
+- read RPC 2本追加（`list_my_paid_leave_secure` / `list_paid_leave_admin_secure`）
+- フロント移行（index.html `loadLeaveWorker` / `loadLeaveAdmin`、admin-app.html `pageLeave`）→ PR #21 merge済み
+- `anon` / `authenticated` の直接 SELECT を REVOKE、`plr_read` / `plg_read` policy を削除
+- write系 policy（`plr_write` / `plr_update` / `plg_write` / `plg_update`）は今回残存
+- 本番動作確認OK（index 本人/管理・admin-app 管理、エラーなし）
+- SQL：`docs/sql/phase4b-paid-leave-read-rpc.sql` / `docs/sql/phase4b-paid-leave-select-revoke.sql`（実行済み）
+- 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-B paid_leave 読み取りRPC化・SELECT遮断 完了」を参照
+
 ### 次候補（読み取り整理）
 
-- report_summary（RLSバイパスView）/ reports / paid_leave_requests の読み取り整理（anon SELECT 縮小・読み取りRPC化）
+- report_summary（RLSバイパスView）/ reports の読み取り整理（anon SELECT 縮小・読み取りRPC化）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
+- paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
   reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、
   photos の public維持／将来の private化・署名URL化方針と整合させる）

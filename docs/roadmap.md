@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：未着手
+状態：進行中（4-A-1 subcontractors write lockdown 完了。読み取り整理は未着手）
 
 ### やること
 
@@ -170,6 +170,25 @@
 - ALL true の広いポリシー確認
 - SELECT / INSERT / UPDATE / DELETE の役割整理
 - RPC経由に寄せるテーブルの方針整理
+
+### 現状確認（読み取り専用 introspection）
+
+- `docs/sql/phase4-rls-introspection-readonly.sql`（RLS状態・pg_policies・GRANT・View・RPC・Storage の現状把握用・SELECTのみ）
+
+### 4-A-1 subcontractors write lockdown ✅ 完了（2026-06-30）
+
+- Phase 4（RLSポリシー整理）の最初の実施項目。`subcontractors` の orphan write 穴を解消
+- `anon` / `authenticated` の直接 INSERT / UPDATE を REVOKE、緩い write policy `sub_write` / `sub_update` を削除
+- SELECT 権限と `sub_read` policy は維持（フロントは subcontractors を SELECT のみ使用）
+- 本番動作確認OK（index.html / admin-app.html / genka-app.html の業者一覧表示）
+- SQL：`docs/sql/phase4a-1-subcontractors-write-lockdown.sql`（実行済み）
+- 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-A-1 subcontractors write lockdown 完了」を参照
+
+### 次候補（読み取り整理）
+
+- photos Storage の upload 制限（file_size_limit / allowed_mime_types）
+- report_summary（RLSバイパスView）/ reports / paid_leave_requests の読み取り整理（anon SELECT 縮小・読み取りRPC化）
+- invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
 
 ## Phase 5：PIN・ログイン強化
 

@@ -1938,3 +1938,67 @@ REVOKE INSERT, UPDATE ON TABLE public.unit_rates     FROM anon, authenticated;
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/revoke-employee-unit-rates-direct-write.sql` は別途作成済み・本エントリでは内容変更なし
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-30 Phase 4-A-1 subcontractors write lockdown 完了
+
+### 概要
+
+Phase 4（RLSポリシー整理）の最初の実施項目。`subcontractors` はフロント3アプリで SELECT のみ
+使用しているにも関わらず、`anon` / `authenticated` に直接 INSERT / UPDATE の GRANT と、緩い
+write policy（`sub_write` / `sub_update` = public true）が残存していた（フロント未使用の orphan な
+書き込み経路。API直叩きで通る穴）。この write 経路を塞ぐ。SELECT 権限と `sub_read` policy は
+維持（業者一覧の表示に必要）。DELETE は既に public 全テーブルで REVOKE 済みのため対象外。
+
+### DB変更（`docs/sql/phase4a-1-subcontractors-write-lockdown.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**
+
+```sql
+REVOKE INSERT, UPDATE ON TABLE public.subcontractors FROM anon, authenticated;
+DROP POLICY IF EXISTS sub_write  ON public.subcontractors;
+DROP POLICY IF EXISTS sub_update ON public.subcontractors;
+```
+
+**対象**
+
+- `public.subcontractors` の `INSERT`, `UPDATE` を `anon`, `authenticated` から REVOKE
+- 緩い write policy `sub_write` / `sub_update` を削除
+
+**触らなかったもの**
+
+- `SELECT` 権限（維持）
+- `sub_read` policy（維持）
+- `DELETE`（既に public 全テーブルで REVOKE 済みのため対象外）
+- RLS 有効状態・テーブル定義・他テーブル（変更なし）
+
+### 適用後確認
+
+- table privileges：`subcontractors` の `anon` / `authenticated` は `SELECT` のみ。INSERT / UPDATE / DELETE は残存なし：OK
+- policy：`sub_read` は残存、`sub_write` / `sub_update` は削除済み：OK
+- 書き込み権限の明示チェック：`anon` / `authenticated` に INSERT / UPDATE / DELETE なし（0行）：OK
+
+### 本番動作確認
+
+- 従業員画面 `index.html`：外注選択チップ（業者一覧）表示：OK
+- 管理画面 `admin-app.html`：初期ロードの業者一覧取得：OK
+- 原価画面 `genka-app.html`：初期ロードの業者一覧取得：OK
+
+### 結論
+
+- `subcontractors` への直接 INSERT / UPDATE は DB権限・policy 両面で廃止（orphan write 穴を解消）
+- フロントは `subcontractors` を SELECT のみ使用のため画面影響なし
+- 読み取り `SELECT` と `sub_read` policy は従来どおり維持
+
+### 注意
+
+- 今回は subcontractors 限定の write 権限剥奪＋緩い write policy 削除のみ
+- 次工程（Phase 4 残）：photos upload 制限、report_summary / reports / paid_leave_* の読み取り整理
+- 整理用SQL・REVOKE案・POLICY削除案・migration案は別フェーズで個別に扱う
+
+### ローカルファイル変更
+
+- `docs/db-migrations.md`（本エントリ追記）
+- `docs/sql/phase4a-1-subcontractors-write-lockdown.sql` は別途作成済み（実行済みSQL案として保持）
+- 既存の admin-app.html / index.html / genka-app.html は変更なし

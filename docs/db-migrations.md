@@ -2074,3 +2074,83 @@ WHERE id = 'photos';
 - `docs/db-migrations.md`（本エントリ追記）
 - `docs/sql/phase4a-2-photos-upload-limits.sql` は別途作成済み（実行済みSQL案として保持）
 - 既存の admin-app.html / index.html / genka-app.html は変更なし
+
+---
+
+## 2026-06-30 Phase 4-B paid_leave 読み取りRPC化・SELECT遮断 完了
+
+### 目的
+
+- `paid_leave_requests` / `paid_leave_grants` の直接 SELECT を閉じ、読み取りを
+  secure RPC（SECURITY DEFINER）経由へ統一する。既存 write RPC は壊さない。
+
+### 追加済み read RPC
+
+- `list_my_paid_leave_secure(text)`（本人用・employee_sessions 検証）
+- `list_paid_leave_admin_secure(text)`（管理者用・二経路検証）
+- ※SQL記録：`docs/sql/phase4b-paid-leave-read-rpc.sql`（PUBLIC EXECUTE を外し
+  anon/authenticated/service_role に明示 GRANT）
+
+### フロント移行
+
+- `index.html` `loadLeaveWorker` → `list_my_paid_leave_secure`
+- `index.html` `loadLeaveAdmin` → `list_paid_leave_admin_secure`
+- `admin-app.html` `pageLeave` → `list_paid_leave_admin_secure`
+
+### 本番反映
+
+- PR #21 merge 済み（merge commit：`7f67be8`）、本番画面確認 OK
+
+### 実行済み DB 変更（`docs/sql/phase4b-paid-leave-select-revoke.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**（実行日 2026-06-30）
+
+```sql
+REVOKE SELECT ON public.paid_leave_requests FROM anon, authenticated;
+REVOKE SELECT ON public.paid_leave_grants   FROM anon, authenticated;
+DROP POLICY IF EXISTS plr_read ON public.paid_leave_requests;
+DROP POLICY IF EXISTS plg_read ON public.paid_leave_grants;
+```
+
+### 事前確認
+
+- `paid_leave_requests` / `paid_leave_grants` に anon/authenticated SELECT 残存を確認
+- INSERT/UPDATE/DELETE 権限なしを確認
+- `plr_read` / `plg_read` / write系 policy を確認
+- 新 read RPC 2本の存在・EXECUTE 権限を確認
+- 既存 write RPC 3本の存在を確認
+
+### 事後確認
+
+- anon/authenticated SELECT 消滅
+- `plr_read` / `plg_read` 消滅
+- write系 policy 4本は残存（`plr_write` / `plr_update` / `plg_write` / `plg_update`）
+- 新 read RPC 2本の EXECUTE 権限維持（anon/authenticated/service_role、PUBLIC なし）
+- 既存 write RPC 3本維持（security_definer=true）
+  - `create_paid_leave_request_secure`
+  - `review_paid_leave_request_secure`
+  - `save_paid_leave_grant_secure`
+
+### REVOKE 後の本番画面確認
+
+- 本番 index 本人有給：OK
+- 本番 index 管理者有給：OK
+- 本番 admin-app 有給管理：OK
+- エラーなし
+
+### 触らなかったもの
+
+- write系 policy（`plr_write` / `plr_update` / `plg_write` / `plg_update`）は残存
+- `reports` / `report_summary` / `photos` / `invoices` / `site_budgets` 等は未着手
+- paid_leave 以外のテーブルは未変更
+
+### 次工程候補
+
+- write系 policy の整理（別工程候補。write RPC 経由の書き込みに影響しないことを
+  事前確認した上で実施）
+- Phase 4-C 以降で `reports` / `report_summary` の読み取り整理
+
+### SQL記録ファイル
+
+- `docs/sql/phase4b-paid-leave-read-rpc.sql`
+- `docs/sql/phase4b-paid-leave-select-revoke.sql`

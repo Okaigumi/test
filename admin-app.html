@@ -1720,14 +1720,19 @@ async function saveAdmin(){const adminId=_editAdminId;
 let _leaveGrantEmpId=null;
 
 async function pageLeave(){
-  const[grantsRes,approvedRes,pendingRes]=await Promise.all([
-    sb.from('paid_leave_grants').select('*'),
-    sb.from('paid_leave_requests').select('*').eq('status','approved'),
-    sb.from('paid_leave_requests').select('*').eq('status','pending').order('leave_date',{ascending:true})
-  ]);
-  const grants=grantsRes.data||[];
-  const approved=approvedRes.data||[];
-  const pending=pendingRes.data||[];
+  // 全員の付与・使用を RPC（list_paid_leave_admin_secure）で取得。管理者判定は token からサーバー側で行う。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+
+  const{data,error}=await sb.rpc('list_paid_leave_admin_secure',{session_token_input:token});
+  if(error||!data){
+    console.error('list_paid_leave_admin_secure error:',error);
+    document.getElementById('pageContent').innerHTML='<div class="card"><div class="empty">有給情報の取得に失敗しました</div></div>';
+    return;
+  }
+  const grants=data.grants||[];
+  const approved=data.approved||[];
+  const pending=data.pending||[];   // RPC が leave_date ASC で返す
   const workers=_employees.filter(e=>e.role!=='admin');
 
   function leaveTypeLabel(t){return t==='full'?'全日':t==='am'?'午前休':'午後休';}

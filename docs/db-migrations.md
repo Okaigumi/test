@@ -2249,3 +2249,78 @@ REVOKE SELECT ON public.reports FROM anon, authenticated;
 
 - `docs/sql/phase4c-1-my-reports-read-rpc.sql`
 - `docs/sql/phase4c-1-reports-select-revoke.sql`
+
+## 2026-07-01 Phase 4-C-2 index 管理系 report_summary 代替read RPC化 完了
+
+### 目的
+
+- index.html の管理画面系（`loadAdminData` / `loadStats`）が使う `report_summary` の
+  direct read を secure RPC（SECURITY DEFINER）経由へ移行し、View 封鎖（4-C-4）前の段階として
+  index.html から direct read を除去する。`report_summary` View / `reports` 権限は変更しない。
+
+### 追加済み read RPC
+
+- `list_admin_reports_secure(text, date, date)`（管理者用・二経路の管理者セッション検証）
+  - 引数：`session_token_input` / `from_date_input`（DEFAULT NULL）/ `to_date_input`（DEFAULT NULL）
+  - 検証：employee_sessions＋employees（role='admin'／is_active）、または admin_sessions＋genka_admins
+  - `reports` と `employees` を直接 JOIN（`e.name AS employee_name`）するため `report_summary` View に非依存
+    （4-C-4 の View 封鎖後も動作する設計）。日付範囲で WHERE、`report_date DESC, e.name` で返す
+  - from > to は RAISE EXCEPTION、管理者でなければ 'Invalid or expired session' を RAISE
+  - loadAdminData（from=to=当日）と loadStats（from=月初 / to=月末）を1本で兼用
+- ※SQL記録：`docs/sql/phase4c-2-admin-reports-read-rpc.sql`（PUBLIC EXECUTE を外し
+  anon/authenticated/service_role に明示 GRANT）
+
+### 実行済み DB 変更（`docs/sql/phase4c-2-admin-reports-read-rpc.sql` を Supabase SQL Editor で実行・2026-07-01）
+
+- `CREATE OR REPLACE FUNCTION public.list_admin_reports_secure(...)`（SECURITY DEFINER /
+  `SET search_path = public, extensions` / STABLE）
+- `REVOKE EXECUTE ON FUNCTION public.list_admin_reports_secure(...) FROM PUBLIC;`
+- `GRANT EXECUTE ON FUNCTION public.list_admin_reports_secure(...) TO anon, authenticated, service_role;`
+- 危険SQL（DROP / DELETE / TRUNCATE / ALTER / UPDATE / INSERT）なし
+
+### フロント移行
+
+- `index.html` `loadAdminData` → `list_admin_reports_secure`（from_date=to_date=当日）
+- `index.html` `loadStats` → `list_admin_reports_secure`（from_date=月初 / to_date=月末）
+- token ガード（`state.currentUser?.session_token` 未取得時 return）・error ガード追加
+- `showSiteDetail` / `exportCSV` は無改修（`window._statsReports` 経由のため RPC 戻り値の shape が従来と一致）
+- 移行後、`index.html` の `from('report_summary')` は 0 件、`list_admin_reports_secure` は 2 件
+
+### 本番反映
+
+- PR #25 merge 済み（merge commit：`d958fe4`）
+- 本番反映確認：Network に `list_admin_reports_secure`（status 200）あり、`report_summary?select=...` なし
+
+### DB 確認
+
+- `list_admin_reports_secure` の存在・SECURITY DEFINER・`search_path = public, extensions` を確認
+- EXECUTE：anon / authenticated / service_role に付与、PUBLIC EXECUTE なし
+- 管理者 Console から RPC 動作確認 OK（success: true / error: null / data: Array(1) / status: 200）
+- `report_summary` View 未変更
+- `reports` 権限 / policy 未変更
+
+### 本番画面確認
+
+- 管理タブ表示 OK
+- 集計タブ表示 OK
+- 月切替 OK
+- 現場ドリルダウン OK
+- CSV 出力 OK
+- Network で `list_admin_reports_secure` あり（status 200）／`report_summary?select=...` なし
+- Console 赤エラーなし・表示異常なし
+
+### 触らなかったもの
+
+- `report_summary` View（4-C-4 で封鎖・SELECT REVOKE 予定）
+- `reports` 権限 / policy
+- `genka-app.html`（`report_summary` 参照1件は 4-C-3 対象として未変更）
+- `admin-app.html`
+
+### 次工程
+
+- 4-C-3：genka 原価系（genka-app.html `loadData` の `report_summary` 参照移行）
+- 4-C-4：`report_summary` View 封鎖・不要 GRANT 整理（anon/authenticated SELECT の REVOKE）
+
+### SQL記録ファイル
+
+- `docs/sql/phase4c-2-admin-reports-read-rpc.sql`

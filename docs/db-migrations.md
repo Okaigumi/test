@@ -2324,3 +2324,86 @@ REVOKE SELECT ON public.reports FROM anon, authenticated;
 ### SQL記録ファイル
 
 - `docs/sql/phase4c-2-admin-reports-read-rpc.sql`
+
+## 2026-07-06 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了
+
+### 目的
+
+- genka-app.html の原価集計（`loadData`）が使う `report_summary` の
+  direct read を secure RPC（SECURITY DEFINER）経由へ移行し、View 封鎖（4-C-4）前の段階として
+  genka-app.html から direct read を除去する。`report_summary` View / `reports` 権限は変更しない。
+
+### 追加済み read RPC
+
+- `list_genka_reports_secure(text, date, date, uuid)`（原価管理用・二経路の管理者セッション検証）
+  - 引数：`session_token_input` / `from_date_input`（DEFAULT NULL）/ `to_date_input`（DEFAULT NULL）/
+    `site_id_input`（DEFAULT NULL）
+  - 検証：employee_sessions＋employees（role='admin'／is_active）、または admin_sessions＋genka_admins
+    （genka の実利用経路は後者）
+  - 戻り列：report_date / employee_id / normal_mins / overtime_mins / site_ids /
+    subcontractor_ids / dump_count / dump_company / guard_count
+  - `reports` 単独から生成（原価に必要な列はすべて reports 由来のため employees JOIN 不要）。
+    `report_summary` View に非依存で、4-C-4 の View 封鎖後も動作する設計
+  - `site_id_input` があれば `site_ids @> ARRAY[site_id_input]::uuid[]`（genka の
+    `contains('site_ids',[siteId])` と等価）。from > to は RAISE EXCEPTION、
+    管理者でなければ 'Invalid or expired session' を RAISE
+- ※SQL記録：`docs/sql/phase4c-3-genka-reports-read-rpc.sql`（PUBLIC EXECUTE を外し
+  anon/authenticated/service_role に明示 GRANT）
+
+### 実行済み DB 変更（`docs/sql/phase4c-3-genka-reports-read-rpc.sql` を Supabase SQL Editor で実行・2026-07-06）
+
+- `CREATE OR REPLACE FUNCTION public.list_genka_reports_secure(...)`（SECURITY DEFINER /
+  `SET search_path = public, extensions` / STABLE）… Success. No rows returned
+- `REVOKE EXECUTE ON FUNCTION public.list_genka_reports_secure(...) FROM PUBLIC;` … Success. No rows returned
+- `GRANT EXECUTE ON FUNCTION public.list_genka_reports_secure(...) TO anon, authenticated, service_role;` … Success. No rows returned
+- 危険SQL（DROP / DELETE / TRUNCATE / ALTER / UPDATE / INSERT）なし
+
+### フロント移行
+
+- `genka-app.html` `loadData` → `list_genka_reports_secure`（from_date=月初 / to_date=月末 /
+  site_id=`siteId||null`）
+- token ガード（`gCurrentUser?.session_token` 未取得時 return）・error ガード
+  （`console.error('原価日報取得エラー:', reportsError)` → return）追加
+- 後続の原価集計処理（`reps.forEach` の労務/外注/ダンプ/警備の按分・集計、
+  invoices / site_budgets / machines / employee_rates / unit_rates 取得）は無改修
+- 移行後、`genka-app.html` の `from('report_summary')` は 0 件、`list_genka_reports_secure` は 1 件
+
+### 本番反映
+
+- PR #27 merge 済み（merge commit：`d78005d`）
+- 本番反映確認：Network に `list_genka_reports_secure`（status 200）あり、
+  `report_summary` は `[]`（direct read）で出ない
+
+### DB 確認（事後確認 I〜M）
+
+- I：関数存在・SECURITY DEFINER=true・`search_path = public, extensions`・
+  args=(session_token_input text, from_date_input date, to_date_input date, site_id_input uuid)：OK
+- J：EXECUTE = anon / authenticated / service_role：OK ／ J-2：PUBLIC EXECUTE なし（proacl）：OK
+- K：関数定義本文に report_summary 実SQL参照なし（from/join public.report_summary = 0 等）：OK
+- L：reports 権限 未変更（anon / authenticated 直接 SELECT なし）：OK
+- M：report_summary 権限 未変更（anon / authenticated SELECT あり・封鎖は 4-C-4 対象）：OK
+
+### 本番画面確認（動作確認 N）
+
+- 場所：https://system.okaigumi.co.jp/genka（genka 管理者ログイン）
+- 原価画面 OK / 月切替 OK / 現場フィルタ OK / 原価サマリー OK（金額・件数異常なし）
+- Console から `sb.rpc('list_genka_reports_secure', ...)`：success=true / error=null /
+  data=Array(4) / status=200
+- Console 赤エラーは favicon.ico 404 のみ（本 RPC と無関係）
+
+### 触らなかったもの
+
+- `report_summary` View（4-C-4 で封鎖・SELECT REVOKE 予定）
+- `reports` 権限 / policy
+- 既存 `list_admin_reports_secure`（4-C-2）
+- `index.html` / `admin-app.html`
+
+### 次工程
+
+- 4-C-4：`report_summary` View 封鎖・不要 GRANT 整理（anon/authenticated SELECT の REVOKE）。
+  4-C-2 / 4-C-3 の RPC はいずれも View 非依存のため、封鎖後も動作する想定
+- （4-C-4 の直前〜直後で Playwright による動的確認の導入を検討）
+
+### SQL記録ファイル
+
+- `docs/sql/phase4c-3-genka-reports-read-rpc.sql`

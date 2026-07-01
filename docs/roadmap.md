@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 / 4-C-2 index 管理系 report_summary 代替RPC化 完了。report_summary の読み取り整理は 4-C-3（genka 原価系）/ 4-C-4（View 封鎖）が残り）
+状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 / 4-C-2 index 管理系 report_summary 代替RPC化 / 4-C-3 genka 原価系 report_summary 代替RPC化 完了。report_summary の読み取り整理は 4-C-4（View 封鎖・不要 GRANT 整理）が残り）
 
 ### やること
 
@@ -229,9 +229,21 @@
 - SQL：`docs/sql/phase4c-2-admin-reports-read-rpc.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-07-01 Phase 4-C-2 index 管理系 report_summary 代替read RPC化 完了」を参照
 
+### 4-C-3 genka 原価系 report_summary 代替RPC化 ✅ 完了（2026-07-06）
+
+- genka-app.html の原価集計（`loadData`）の `report_summary` direct read を secure RPC 経由へ移行（View 封鎖前の段階として direct read を除去）
+- read RPC 1本追加（`list_genka_reports_secure(text, date, date, uuid)`・二経路の管理者セッション検証／`reports` 単独から原価関連9列を返すため View 非依存・employees JOIN も不要）
+- 戻り列：report_date / employee_id / normal_mins / overtime_mins / site_ids / subcontractor_ids / dump_count / dump_company / guard_count
+- フロント移行（genka-app.html `loadData`）→ PR #27 merge済み（merge commit `d78005d`）、`genka-app.html` の `from('report_summary')` は 0 件・`list_genka_reports_secure` は 1 件
+- token ガード・error ガード追加。`site_id_input` は `siteId||null`（現場フィルタは RPC 内 `site_ids @> ARRAY[...]` で従来の `contains` と等価）。後続の原価集計処理は無改修
+- 本番反映確認：Network に `list_genka_reports_secure`（status 200）あり、`report_summary` は `[]`（直接参照）で出ない
+- 本番確認OK（原価画面/月切替/現場フィルタ/原価サマリー、金額・件数異常なし。Console 赤エラーは favicon.ico 404 のみで本RPCと無関係）
+- `report_summary` View / `reports` 権限 / policy は未変更（View 封鎖・SELECT REVOKE は 4-C-4 対象）
+- SQL：`docs/sql/phase4c-3-genka-reports-read-rpc.sql`（実行済み）
+- 詳細は docs/db-migrations.md の「2026-07-06 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了」を参照
+
 ### 次候補（report_summary 読み取り整理）
 
-- 4-C-3 genka 原価系 report_summary 代替RPC（`loadData`）
 - 4-C-4 report_summary View 封鎖・不要 GRANT 整理（anon/authenticated SELECT の REVOKE）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
 - paid_leave の write系 policy 整理（別工程候補）

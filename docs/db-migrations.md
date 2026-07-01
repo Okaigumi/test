@@ -2154,3 +2154,98 @@ DROP POLICY IF EXISTS plg_read ON public.paid_leave_grants;
 
 - `docs/sql/phase4b-paid-leave-read-rpc.sql`
 - `docs/sql/phase4b-paid-leave-select-revoke.sql`
+
+---
+
+## 2026-07-01 Phase 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 完了
+
+### 目的
+
+- `reports` の本人日報 direct SELECT を secure RPC（SECURITY DEFINER）経由へ移行し、
+  `anon` / `authenticated` の `reports` 直接 SELECT を遮断する。既存 write RPC は壊さない。
+
+### 追加済み read RPC
+
+- `list_my_reports_secure(text, date, integer)`（本人用・employee_sessions 検証、
+  employees を JOIN し is_active=true も確認）
+  - 引数：`session_token_input` / `before_date_input`（DEFAULT NULL）/ `limit_input`（DEFAULT 30・1〜100 に丸め）
+  - loadHistory と copyFromYesterday を1本で兼用（`report_date < before_date_input` の最新分を DESC で返す）
+- ※SQL記録：`docs/sql/phase4c-1-my-reports-read-rpc.sql`（PUBLIC EXECUTE を外し
+  anon/authenticated/service_role に明示 GRANT）
+
+### フロント移行
+
+- `index.html` `loadHistory` → `list_my_reports_secure`（before_date=NULL / limit=30）
+- `index.html` `copyFromYesterday` → `list_my_reports_secure`（before_date=today / limit=1）
+- 移行後、`index.html` 内の `from('reports')` は 0 件
+
+### 本番反映
+
+- PR #23 merge 済み（merge commit：`17d4b7f`）
+- 本番反映確認：Network に `list_my_reports_secure` あり、`reports?select=...` の direct SELECT なし
+
+### 実行済み DB 変更（`docs/sql/phase4c-1-reports-select-revoke.sql` を Supabase SQL Editor で実行）
+
+- 適用結果：**Success. No rows returned**（実行日 2026-07-01）
+
+```sql
+REVOKE SELECT ON public.reports FROM anon, authenticated;
+```
+
+- 経緯：一時REVOKE → 本番旧 direct SELECT が 401 で履歴空表示 → `GRANT SELECT` で復旧 →
+  PR #23 merge・本番 RPC 反映確認後に再REVOKE、という順で最終適用。
+
+### 事前確認（A〜F）
+
+- `reports` に anon/authenticated SELECT 残存・INSERT/UPDATE/DELETE なしを確認
+- `reports_all` policy（ALL / {public} / true / true）を確認
+- `list_my_reports_secure` の存在・SECURITY DEFINER・search_path・EXECUTE 権限を確認
+- 既存 write RPC 3本の存在を確認
+- `report_summary` 未変更を確認
+
+### 事後確認（G〜K）
+
+- `reports` の anon/authenticated SELECT = false
+- `reports_all` policy 未変更（残存）
+- `list_my_reports_secure` EXECUTE 維持（anon/authenticated/service_role、PUBLIC なし）
+- 既存 write RPC 3本維持（security_definer=true）
+  - `create_report_secure`
+  - `update_report_secure`
+  - `update_report_photo_secure`
+- `report_summary` 未変更
+
+### REVOKE 後の本番画面確認（①〜⑦）
+
+- 日報履歴表示 OK
+- 写真バッジ・詳細表示 OK
+- 修正ボタン・編集復元 OK
+- 前日コピー OK
+- 新規保存 OK
+- 修正保存 OK
+- 写真保存 OK
+- Console 赤エラーなし
+
+### 触らなかったもの
+
+- `reports_all` policy（cmd=ALL の単一 policy。整理は別ステップで判断）
+- `report_summary` View（4-C-4 で封鎖予定）
+- `reports` write RPC 3本
+- `genka-app.html` / `admin-app.html`
+
+### 次工程
+
+- Phase 4-C-2 以降で `report_summary` の代替 read RPC 化と View 封鎖を進める
+  - 4-C-2：index 管理系（loadAdminData / loadStats）
+  - 4-C-3：genka 原価系（loadData）
+  - 4-C-4：report_summary View 封鎖・不要 GRANT 整理
+
+### 補足（別課題）
+
+- 同日・同時間の日報を重複入力した場合、画面から削除／取消する手段が未実装。
+  Phase 4-C とは別課題として `docs/roadmap.md` の Phase 8 候補へ記録
+  （本人の当日取消RPC、または管理者取消/削除機能。物理削除より論理取消を優先検討）。
+
+### SQL記録ファイル
+
+- `docs/sql/phase4c-1-my-reports-read-rpc.sql`
+- `docs/sql/phase4c-1-reports-select-revoke.sql`

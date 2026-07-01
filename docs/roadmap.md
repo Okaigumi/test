@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 完了。reports / report_summary 等の読み取り整理は未着手）
+状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 完了。report_summary の読み取り整理（4-C-2/3/4）は未着手）
 
 ### やること
 
@@ -205,9 +205,23 @@
 - SQL：`docs/sql/phase4b-paid-leave-read-rpc.sql` / `docs/sql/phase4b-paid-leave-select-revoke.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-06-30 Phase 4-B paid_leave 読み取りRPC化・SELECT遮断 完了」を参照
 
-### 次候補（読み取り整理）
+### 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 ✅ 完了（2026-07-01）
 
-- report_summary（RLSバイパスView）/ reports の読み取り整理（anon SELECT 縮小・読み取りRPC化）
+- `reports` の本人日報 direct SELECT を secure RPC 経由へ移行し、`anon` / `authenticated` の `reports` 直接 SELECT を遮断
+- read RPC 1本追加（`list_my_reports_secure(text, date, integer)`・employee_sessions 検証・is_active 確認・loadHistory と copyFromYesterday を兼用）
+- フロント移行（index.html `loadHistory` / `copyFromYesterday`）→ PR #23 merge済み（merge commit `17d4b7f`）、`index.html` の `from('reports')` は 0 件
+- 本番反映確認：Network に `list_my_reports_secure` あり、`reports?select=...` なし
+- `anon` / `authenticated` の直接 SELECT を REVOKE（一時REVOKE→GRANT復旧→本番RPC反映確認後に再REVOKE、で最終適用）
+- `reports_all` policy / `report_summary` / reports write RPC 3本は未変更
+- REVOKE後 本番確認①〜⑦ OK（履歴/写真詳細/編集復元/前日コピー/新規保存/修正保存/写真保存、エラーなし）
+- SQL：`docs/sql/phase4c-1-my-reports-read-rpc.sql` / `docs/sql/phase4c-1-reports-select-revoke.sql`（実行済み）
+- 詳細は docs/db-migrations.md の「2026-07-01 Phase 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 完了」を参照
+
+### 次候補（report_summary 読み取り整理）
+
+- 4-C-2 index 管理系 report_summary 代替RPC（`loadAdminData` / `loadStats`）
+- 4-C-3 genka 原価系 report_summary 代替RPC（`loadData`）
+- 4-C-4 report_summary View 封鎖・不要 GRANT 整理（anon/authenticated SELECT の REVOKE）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
@@ -326,6 +340,12 @@ Storage 設計：
   - 従業員が日ごとの日報提出状況・記入漏れ・有給取得日を確認できるようにする
   - 目的は日報未入力の早期発見と従業員本人の自己確認
   - 対象は従業員画面（index.html の日報履歴）。今回は実装しない（着手前の候補）
+- 日報の当日取消/削除機能（候補・未着手 / Phase 4-C-1 で判明した別課題）
+  - 現状、同じ日・同じ時間に日報を重複入力しても、画面から削除/取消する手段がない
+  - 候補設計：本人の当日取消RPC、または管理者取消/削除機能
+  - 物理削除より `status='cancelled'` などの論理取消を優先検討
+  - 本人取消は employee session 検証・当日限定・確認済み日報の扱いなどセキュリティ設計を伴う
+  - 重複入力時の運用改善を目的とする（着手前の候補）
 
 ### 請求書PDF管理・原価登録候補作成（試作品 / 2026-06-11）
 

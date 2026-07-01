@@ -823,9 +823,10 @@ async function loadData(){
   const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
   const siteId=document.getElementById('siteFilter').value;
 
-  let q=sb.from('report_summary').select('*').gte('report_date',from).lte('report_date',to);
-  if(siteId) q=q.contains('site_ids',[siteId]);
-  const{data:reports}=await q;
+  const token=gCurrentUser?.session_token;
+  if(!token)return;
+  const{data:reports,error:reportsError}=await sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to,site_id_input:siteId||null});
+  if(reportsError){console.error('原価日報取得エラー:',reportsError);return;}
   const reps=reports||[];
 
   // 請求書データも取得（confirmed/posted のみ原価に反映）

@@ -1,36 +1,48 @@
 -- ============================================================
 -- Phase 4-C-1：reports direct SELECT 遮断（anon / authenticated）
 -- ============================================================
--- 【実行ステータス】⚠一時実行済み → GRANT復旧済み → 最終未適用⚠
---   - 実行日：2026-07-01
---   - 経緯：
---       1) 一時REVOKE を実行：
---            REVOKE SELECT ON public.reports FROM anon, authenticated;
---            → Success. No rows returned
---       2) 発生事象：本番フロントがまだ旧 direct SELECT 版のままだったため、
---          日報履歴が空表示になった。
---          Console で reports の direct SELECT
---          （reports?select=*&employee_id=...&order=report_date.desc&limit=30 / limit=1）
---          が 401 になっているのを確認。
---       3) 復旧：
---            GRANT SELECT ON public.reports TO anon, authenticated;
---            → Success. No rows returned
---            → 日報履歴 OK・Console 赤エラーなし で復旧確認。
---   - したがって、このファイルの REVOKE は「最終未適用」扱い。
+-- 【実行ステータス】★最終適用済み（2026-07-01）★
+--   - reports の anon / authenticated 直接 SELECT を最終的に REVOKE 済み。
 --
---   【現在のDB状態（2026-07-01 時点）】
---     - reports の SELECT は anon / authenticated に「復旧済み（付与あり）」。
---     - list_my_reports_secure は DB 作成済み（新旧併存状態）。
---     - index.html の RPC 移行はローカルのみ。本番フロントには未反映。
+--   【経緯（2026-07-01）】
+--     1) 一時REVOKE を実行：
+--          REVOKE SELECT ON public.reports FROM anon, authenticated;
+--          → Success. No rows returned
+--     2) 発生事象：本番フロントがまだ旧 direct SELECT 版のままだったため、
+--        日報履歴が空表示になった。
+--        Console で reports の direct SELECT
+--        （reports?select=*&employee_id=...&order=report_date.desc&limit=30 / limit=1）
+--        が 401 になっているのを確認。
+--     3) 復旧：
+--          GRANT SELECT ON public.reports TO anon, authenticated;
+--          → Success. No rows returned
+--          → 日報履歴 OK・Console 赤エラーなし で復旧確認。
+--     4) PR #23 merge（merge commit 17d4b7f）後、本番フロントが RPC 版に
+--        反映されたことを確認：
+--          - Network に list_my_reports_secure あり
+--          - reports?select=... の direct SELECT なし
+--     5) あらためて再REVOKE を実行：
+--          REVOKE SELECT ON public.reports FROM anon, authenticated;
+--          → Success. No rows returned
+--     6) 事後確認 G〜K：OK
+--          - reports の anon/authenticated SELECT = false
+--          - reports_all policy 未変更
+--          - list_my_reports_secure EXECUTE 維持（anon/authenticated/service_role・PUBLICなし）
+--          - reports write RPC 3本 維持
+--          - report_summary 未変更
+--     7) REVOKE後 本番確認 ①〜⑦：OK
+--          日報履歴表示 / 写真バッジ・詳細 / 修正ボタン・編集復元 / 前日コピー /
+--          新規保存 / 修正保存 / 写真保存、Console 赤エラーなし。
 --
---   【再実行条件（重要）】
---     - このブランチ（phase4c-1-my-reports-rpc）を PR / merge し、
---       本番フロントが RPC 版（list_my_reports_secure 使用・from('reports') 0件）に
---       反映されたことを確認してから、あらためて本ファイルの REVOKE を実施する。
---     - 順序を誤って先に REVOKE すると、本番の旧フロントが 401 で空表示になる。
+--   【現在のDB状態（2026-07-01 時点・最終）】
+--     - reports の SELECT は anon / authenticated から REVOKE 済み。
+--     - list_my_reports_secure による本人日報読み取りは正常動作。
+--     - report_summary は未変更（4-C-4 で封鎖予定）。
+--     - reports_all policy は未変更（別ステップで整理判断）。
+--     - reports write RPC 3本は維持。
 --
 --   ※ SQL 本文（REVOKE 文・事前確認 A〜F・事後確認 G〜K）は変更していない。
---     本ファイルは再実行時にそのまま使える。
+--     本ファイルは再実行時にもそのまま使える。
 --
 -- 目的：
 --   本人日報フロント（index.html copyFromYesterday / loadHistory）を

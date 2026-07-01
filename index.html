@@ -1529,8 +1529,11 @@ function closeDetail(e){if(e.target===document.getElementById('detailModal'))doc
 // ===== ADMIN =====
 async function loadAdminData(){
   const today=localToday();
+  const token=state.currentUser?.session_token;
+  if(!token)return;
   const{data:employees}=await sb.from('employees').select('id,name,role,is_active').eq('is_active',true).neq('role','admin');
-  const{data:todayReports}=await sb.from('report_summary').select('*').eq('report_date',today);
+  const{data:todayReports,error:reportsError}=await sb.rpc('list_admin_reports_secure',{session_token_input:token,from_date_input:today,to_date_input:today});
+  if(reportsError){console.error('管理日報取得エラー:',reportsError);return;}
   const submitted=(todayReports||[]).map(r=>r.employee_id);
   document.getElementById('totalStaff').textContent=(employees||[]).length;
   document.getElementById('submittedCount').textContent=submitted.length;
@@ -1751,7 +1754,15 @@ async function loadStats(){
   const from=`${y}-${m}-01`;
   const last=new Date(y,statsMonth.getMonth()+1,0).getDate();
   const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
-  const{data:reports}=await sb.from('report_summary').select('*').gte('report_date',from).lte('report_date',to);
+  const token=state.currentUser?.session_token;
+  if(!token)return;
+  const{data:reports,error:reportsError}=await sb.rpc('list_admin_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to});
+  if(reportsError){
+    console.error('集計日報取得エラー:',reportsError);
+    ['statsEmployeeList','statsSiteList','statsMaterialList'].forEach(id=>document.getElementById(id).innerHTML='<div class="empty-msg">データの取得に失敗しました</div>');
+    ['statsTotalDays','statsTotalHours','statsNormalHours','statsOtHours'].forEach(id=>document.getElementById(id).textContent='0');
+    return;
+  }
 
   if(!reports||reports.length===0){
     ['statsEmployeeList','statsSiteList','statsMaterialList'].forEach(id=>document.getElementById(id).innerHTML='<div class="empty-msg">データがありません</div>');

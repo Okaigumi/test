@@ -1296,17 +1296,17 @@ async function copyFromYesterday(){
 
   // 直近1件の自分の日報を取得（今日より前）
   const today=localToday();
-  const{data}=await sb.from('reports')
-    .select('*')
-    .eq('employee_id',state.currentUser.id)
-    .lt('report_date',today)
-    .order('report_date',{ascending:false})
-    .limit(1);
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_my_reports_secure',{
+    session_token_input:token,
+    before_date_input:today,
+    limit_input:1
+  });
 
   btn.textContent='📋 前日と同じ内容を入力';
   btn.disabled=false;
 
-  if(!data||!data.length){
+  if(error||!data||!data.length){
     alert('前回の日報が見つかりませんでした。');return;
   }
 
@@ -1451,7 +1451,11 @@ function closeSuccess(){document.getElementById('successOverlay').classList.remo
 
 // ===== HISTORY =====
 async function loadHistory(){
-  const{data}=await sb.from('reports').select('*').eq('employee_id',state.currentUser.id).order('report_date',{ascending:false}).limit(30);
+  const token=state.currentUser?.session_token;
+  const{data}=await sb.rpc('list_my_reports_secure',{
+    session_token_input:token,
+    limit_input:30
+  });
   renderHistory(data||[]);
 }
 function renderHistory(data){

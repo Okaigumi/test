@@ -193,6 +193,7 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
 .mrpt-cal-daynum.sat{color:#1560b0;}
 .mrpt-cal-daynum.sun,.mrpt-cal-daynum.hol{color:#b02a2a;}
 .mrpt-cal-site{font-size:9px;color:var(--ink);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mrpt-cal-leave{font-size:9px;color:#1e7a34;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mrpt-cal-none{font-size:11px;color:var(--muted);text-align:center;margin-top:6px;}
 /* 従業員フィルタのボタン群 */
 .mrpt-emp-btns{display:flex;flex-wrap:wrap;gap:6px;}
@@ -274,6 +275,7 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
   #page-monthlyReport .mrpt-total-val{font-size:13px;}
   #page-monthlyReport .mrpt-cal-cell{min-height:46px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   #page-monthlyReport .mrpt-cal-site{font-size:8px;}
+  #page-monthlyReport .mrpt-cal-leave{font-size:8px;}
   /* この帳票のみ A4横（名前付きページ）。既存4ビューの向き（既定）は変えない。 */
   @page mrptLand{size:A4 landscape;margin:10mm;}
   #page-monthlyReport{page:mrptLand;}
@@ -594,6 +596,14 @@ const CSV_TYPES={
   machine_details:{
     label:'重機台帳',
     required:['machine_id','machine_name','ownership','lease_monthly','owned_cost','is_active']
+  },
+  paid_leave_details:{
+    label:'有休明細',
+    required:['employee_id','employee_name','leave_date','fiscal_year','leave_type','status']
+  },
+  paid_leave_balances:{
+    label:'残有給',
+    required:['employee_id','employee_name','granted_total','used_total','remaining']
   }
 };
 
@@ -1551,10 +1561,21 @@ function renderMrptBody(){
   let targetLabel='全員';
   if(mrptEmp!=='ALL'){const e=mrptMonthEmployees().find(x=>x.id===mrptEmp);targetLabel=e?e.name:'(選択従業員)';}
 
+  // ---- 有休データ（ZIP経由でのみ有効。単体file読込・旧ZIP・有休CSVなしZIPでは非表示） ----
+  const zipMode=(state.source==='zip');
+  const plDetails=zipMode?(multiState.rows.paid_leave_details||[]):[];
+  const plBalances=zipMode?(multiState.rows.paid_leave_balances||[]):[];
+
   // ---- 帳票ヘッダ（印刷にも出す・自己完結） ----
   const head=document.createElement('div');head.className='mrpt-head';
   const t=document.createElement('div');t.className='mrpt-title';t.textContent='社内確認用 月次稼働・日報詳細';head.appendChild(t);
   const sub=document.createElement('div');sub.className='mrpt-sub';sub.textContent='対象期間：'+formatMonthLabel(ym)+'　／　対象：'+targetLabel+'　／　出力日時：'+(state.generatedAt||'—');head.appendChild(sub);
+  // 残有給（個人選択かつZIP由来時のみ）。balances に無い従業員は「—（データなし）」で表示し、0日と断定しない。
+  if(mrptEmp!=='ALL'&&zipMode){
+    const bal=plBalances.find(r=>(r['employee_id']||'')===mrptEmp);
+    const remainTxt=bal?(formatLeaveDays(bal['remaining'])+' 日'):'—（データなし）';
+    const balSub=document.createElement('div');balSub.className='mrpt-sub';balSub.textContent='残有給：'+remainTxt;head.appendChild(balSub);
+  }
   area.appendChild(head);
 
   // ---- 月次合計ストリップ（全員選択時のみ表示・全体集計） ----
@@ -1587,7 +1608,18 @@ function renderMrptBody(){
     (byDate[d][sn]=byDate[d][sn]||new Set());
     if(r['employee_id'])byDate[d][sn].add(r['employee_id']);
   });
-  area.appendChild(buildMrptCalendar(ym,byDate,mrptEmp==='ALL'));
+  // 有休カレンダー用 leaveByDate（個人選択かつZIP由来時のみ。全員カレンダーには渡さない＝有休非表示）。
+  let leaveByDate=null;
+  if(mrptEmp!=='ALL'&&plDetails.length){
+    leaveByDate={};
+    plDetails.forEach(r=>{
+      const key=r['employee_id']||('name:'+(r['employee_name']||''));
+      if(key!==mrptEmp)return;
+      const d=r['leave_date'];if(!d||!d.startsWith(prefix))return; // 当月のみ
+      (leaveByDate[d]=leaveByDate[d]||[]).push(r['leave_type']||'');
+    });
+  }
+  area.appendChild(buildMrptCalendar(ym,byDate,mrptEmp==='ALL',leaveByDate));
 
   // 意図的な改ページ
   area.appendChild(Object.assign(document.createElement('div'),{className:'mrpt-page-break'}));
@@ -1663,8 +1695,26 @@ function renderMrptBody(){
     state.showEmptyDays=_savedShowEmpty; // 必ず復元（他ビューへ影響させない）
   }
 }
-function buildMrptCalendar(ym,byDate,showCount){
+// 有休種別（full/am/pm 生値）→ 表示ラベル。想定外値は「有休」にフォールバック。
+function paidLeaveLabel(t){
+  if(t==='full')return '有休';
+  if(t==='am')return '有休（午前）';
+  if(t==='pm')return '有休（午後）';
+  return '有休';
+}
+// 有休種別の表示順（full→am→pm）。同日複数有休を安定順で並べる。
+function paidLeaveRank(t){return t==='full'?0:(t==='am'?1:(t==='pm'?2:3));}
+// 残有給日数の表示整形（整数はそのまま、端数は小数1桁）。
+function formatLeaveDays(v){
+  const n=Number(v);
+  if(!isFinite(n))return String(v);
+  return Number.isInteger(n)?String(n):n.toFixed(1);
+}
+
+// leaveByDate: {日付:'YYYY-MM-DD' -> [leave_type,...]}|null（個人選択かつZIP由来時のみ渡す）。
+function buildMrptCalendar(ym,byDate,showCount,leaveByDate){
   if(showCount===undefined)showCount=true; // 全員=人数表示 / 個人=現場名のみ
+  if(leaveByDate===undefined)leaveByDate=null;
   const wrap=document.createElement('div');wrap.className='mrpt-cal';
   // 曜日ヘッダ
   const head=document.createElement('div');head.className='mrpt-cal-row mrpt-cal-wdrow';
@@ -1683,13 +1733,25 @@ function buildMrptCalendar(ym,byDate,showCount){
     dnum.textContent=String(Number(dateStr.slice(8,10)));
     cell.appendChild(dnum);
     const sites=byDate[dateStr];
-    if(sites&&Object.keys(sites).length){
+    const hasSites=!!(sites&&Object.keys(sites).length);
+    if(hasSites){
       Object.keys(sites).sort((a,b)=>a<b?-1:(a>b?1:0)).forEach(sn=>{
         const line=document.createElement('div');line.className='mrpt-cal-site';
         line.textContent=showCount?(sn+'：'+sites[sn].size+'人'):sn;
         cell.appendChild(line);
       });
-    }else{
+    }
+    // 有休表示（個人選択かつZIP由来時のみ）。現場稼働＋半日有休は両方表示される。
+    const leaves=leaveByDate?leaveByDate[dateStr]:null;
+    const hasLeave=!!(leaves&&leaves.length);
+    if(hasLeave){
+      leaves.slice().sort((a,b)=>paidLeaveRank(a)-paidLeaveRank(b)).forEach(t=>{
+        const line=document.createElement('div');line.className='mrpt-cal-leave';
+        line.textContent=paidLeaveLabel(t);
+        cell.appendChild(line);
+      });
+    }
+    if(!hasSites&&!hasLeave){
       const dash=document.createElement('div');dash.className='mrpt-cal-none';dash.textContent='—';cell.appendChild(dash);
     }
     row.appendChild(cell);col++;
@@ -2477,7 +2539,9 @@ const MULTI_SLOTS=[
   {key:'projects_summary',label:'projects_summary.csv',required:true},
   {key:'attendance_details',label:'attendance_details.csv',required:false},
   {key:'project_cost_details',label:'project_cost_details.csv',required:false},
-  {key:'machine_details',label:'machine_details.csv',required:false}
+  {key:'machine_details',label:'machine_details.csv',required:false},
+  {key:'paid_leave_details',label:'paid_leave_details.csv',required:false},
+  {key:'paid_leave_balances',label:'paid_leave_balances.csv',required:false}
 ];
 
 // 複数CSV用の内部状態（単体 state とは独立）
@@ -2487,13 +2551,17 @@ const multiState={
     projects_summary:null,
     attendance_details:null,
     project_cost_details:null,
-    machine_details:null
+    machine_details:null,
+    paid_leave_details:null,
+    paid_leave_balances:null
   },
   rows:{                        // パース済み行（オブジェクト配列）
     projects_summary:[],
     attendance_details:[],
     project_cost_details:[],
-    machine_details:[]
+    machine_details:[],
+    paid_leave_details:[],
+    paid_leave_balances:[]
   },
   indexes:{                     // 読込完了時に1回構築する索引
     projectsById:new Map(),         // project_id -> projects_summary 行
@@ -2518,7 +2586,9 @@ const multiState={
     projects_summary:null,
     attendance_details:null,
     project_cost_details:null,
-    machine_details:null
+    machine_details:null,
+    paid_leave_details:null,
+    paid_leave_balances:null
   },
   // インデックス構築時の派生集計（メッセージ生成に使用）
   emptyProjectId:{attendance:0,invoice:0,project:0},
@@ -2608,7 +2678,9 @@ const ZIP_FILENAME_TYPE={
   'projects_summary.csv':'projects_summary',
   'attendance_details.csv':'attendance_details',
   'project_cost_details.csv':'project_cost_details',
-  'machine_details.csv':'machine_details'
+  'machine_details.csv':'machine_details',
+  'paid_leave_details.csv':'paid_leave_details',
+  'paid_leave_balances.csv':'paid_leave_balances'
 };
 const SUPPORTED_MANIFEST_VERSIONS=['1.0'];
 

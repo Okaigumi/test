@@ -2556,3 +2556,66 @@ authenticated,public.reports,false,false,false,false,false,false,false
 ### SQL記録ファイル
 
 - `docs/sql/phase4c-5-reports-extra-privileges-revoke.sql`（実行済み記録へ更新済み）
+
+## 2026-07-02 Phase 4-D 有休CSV出力 secure RPC 追加（★実行済み★）
+
+### 目的
+
+- 社内確認用 月次稼働・日報詳細（CSV viewer）で「有休表示」「残有給表示」を行うための CSV 出力用 read RPC を2本追加する
+- 直接テーブル権限を増やさず、RPC EXECUTE のみで有休データを取得できる構造にする
+- CSV 整形はフロント責務とし、RPC は jsonb エンベロープ `{ meta, warnings, rows }` を返す（既存 export 系と同型）
+
+### 実行ステータス
+
+- **実行済み**（2026-07-02）。Supabase SQL Editor で本番反映済み。
+  - 事後確認 D：関数2本存在・`security_definer=true`・`config=search_path=public, extensions`・引数想定どおり。
+  - 事後確認 E：両関数とも `anon` / `authenticated` に EXECUTE あり。`PUBLIC` なし。
+  - 事後確認 E-2：`proacl` は `{postgres=X,anon=X,authenticated=X,service_role=X}`（すべて `/postgres`）。先頭空の `=X/postgres`（PUBLIC EXECUTE）なし。
+  - 事後確認 F：既存有休RPC 5本＋追加2本＝計7本が存在、すべて `security_definer=true`。
+
+### 追加するSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-paid-leave-export-rpc.sql` | 有休CSV出力 RPC 2本（事前確認 / CREATE・REVOKE・GRANT / 事後確認） |
+
+### 追加する関数（2本）
+
+| 関数名 | 期間 | 粒度 | 用途 |
+|---|---|---|---|
+| `export_paid_leave_details_secure(text, date, date)` | あり | 有休1件/行 | 承認済み有休の明細（paid_leave_details.csv） |
+| `export_paid_leave_balances_secure(text)` | なし | 従業員1人/行 | 残有給スナップショット（paid_leave_balances.csv） |
+
+- 両関数とも `SECURITY DEFINER` / `SET search_path = public, extensions`
+- CREATE 時デフォルトの PUBLIC EXECUTE を REVOKE し、`anon` / `authenticated` にのみ GRANT（既存 export 系に合わせ service_role は付与しない）
+- テーブルへの GRANT / REVOKE なし。helper `csv_export_fiscal_year(date, integer)` を再利用（新規 helper なし）
+
+### 管理者検証（既存 export 4本との差異）
+
+- 既存 export 4本（`csv-export-secure-rpc.sql`）は **admin_sessions 単経路**。
+- 本2本は有休系 RPC として `list_paid_leave_admin_secure` と同型の **二経路検証** を採用：
+  - a. `employee_sessions` + `employees.role = 'admin'`
+  - b. `admin_sessions` + `genka_admins.is_active = true`
+  - どちらも不成立なら `RAISE EXCEPTION 'Invalid or expired session'`。
+- この差異は本エントリと PR 本文に明記する。
+
+### 列・対象者ポリシー
+
+- `paid_leave_details`：列 `employee_id, employee_name, leave_date, fiscal_year, leave_type, status`。`reason` は含めない。`leave_type` は生値（full/am/pm、表示ラベルは閲覧側で変換）。`status='approved'` のみ。履歴保持のため `employees.is_active` では絞らない。
+- `paid_leave_balances`：列 `employee_id, employee_name, granted_total, used_total, remaining`。`granted_total`=付与の全年度合計、`used_total`=承認済みの full=1.0 / am,pm=0.5 合計、`remaining`=差。対象は `e.is_active = true` かつ付与または承認済み有休を持つ従業員（`role='admin'` は除外しない）。残有給は全期間累積のため期間フィルタしない。
+
+### 触らないもの
+
+- 既存 export 4本 / helper 2本
+- 有休系 既存 RPC 5本（`create_/review_/save_/list_my_/list_paid_leave_admin_`）
+- `paid_leave_requests` / `paid_leave_grants` のテーブル権限・policy
+- フロント（`index.html` / `genka-app.html`）／CSV viewer（本エントリでは変更なし・PR-B で対応）
+
+### 併せて実施（PR-A・DB非依存の同梱変更）
+
+- `admin-app.html`：ZIP 出力の `CSV_COLUMNS` に `paid_leave_details` / `paid_leave_balances` を追加、`exportCsvZip` の specs に2本追加（details=period:true / balances=period:false）。ZIP は 6CSV 構成（manifest 1.0 後方互換）。
+
+### 影響範囲
+
+- DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
+- admin-app.html：ZIP に2本追加。既存4CSV・個別出力・manifest 形式は不変（後方互換）。旧ZIP（4CSV）読込も従来どおり。

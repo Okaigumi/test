@@ -2407,3 +2407,87 @@ REVOKE SELECT ON public.reports FROM anon, authenticated;
 ### SQL記録ファイル
 
 - `docs/sql/phase4c-3-genka-reports-read-rpc.sql`
+
+---
+
+## 2026-07-02 Phase 4-C-4 report_summary View 封鎖・不要 GRANT 整理 完了
+
+### 目的
+
+- `report_summary` View への `anon` / `authenticated` の直接アクセス権を全て REVOKE し、
+  フロントからの View 直参照経路を封鎖する。
+- 管理者 / 原価 / 本人日報の読み取りは既に read RPC 3本（SECURITY DEFINER）へ移行済みのため、
+  View 直参照は不要。View 自体は DROP せず存続させる。
+
+### 方針（確定）
+
+- View は DROP しない。`report_summary` View 自体は残す。
+- `postgres` はそのまま（変更しない）。
+- `service_role` はそのまま（保守用に SELECT 等を温存）。
+- `anon` / `authenticated` から `report_summary` の権限を全 REVOKE する。
+- 実行 SQL は REVOKE のみ。GRANT はロールバック案としてコメントに記載。
+
+### 実行済み DB 変更（`docs/sql/phase4c-4-report-summary-revoke.sql` を Supabase SQL Editor で実行・2026-07-02）
+
+```sql
+REVOKE ALL PRIVILEGES ON public.report_summary FROM anon;
+REVOKE ALL PRIVILEGES ON public.report_summary FROM authenticated;
+```
+
+- 実行結果：Success. No rows returned（各文）
+- 危険SQL（DROP / DELETE / TRUNCATE / ALTER / UPDATE / INSERT）なし。変更行は REVOKE 2本のみ。
+
+### PUBLIC 対応
+
+- 実測で `report_summary` の relacl に PUBLIC エントリ（先頭が `=` の項目）は存在せず、
+  PUBLIC への明示付与なし。
+- そのため `REVOKE SELECT ON public.report_summary FROM PUBLIC;` は **実行していない**
+  （no-op のため実行対象外）。SQLファイル内ではコメントアウトのまま維持。
+
+### DB 事後確認結果
+
+- `report_summary` の relacl：`{postgres=arwdDxtm/postgres, service_role=arwdDxtm/postgres}`
+  - anon / authenticated の項目が relacl から消滅（REVOKE 成功）
+  - postgres / service_role は `arwdDxtm` のまま残存（保守用に温存）
+- anon：SELECT 不可 ／ authenticated：SELECT 不可
+- postgres：SELECT 可 ／ service_role：SELECT 可
+- 下流 View 依存：0 件（変化なし）
+- RPC 3本は SECURITY DEFINER かつ `report_summary` 実参照なし（維持）：
+  - `list_admin_reports_secure`
+  - `list_genka_reports_secure`
+  - `list_my_reports_secure`
+- `report_summary` View は DROP せず存続（relkind=v）
+
+### 本番画面確認（2026-07-02）
+
+- 従業員画面：OK
+- 管理者ログイン：OK ／ 管理タブ：OK ／ 集計タブ：OK ／ 月切替：OK ／
+  現場ドリルダウン：OK ／ CSV 出力：OK
+- 原価画面：OK ／ 原価 月切替：OK ／ 原価 現場フィルタ：OK ／ 原価サマリー：OK
+- Network に `report_summary`（View 直参照）：なし
+- Network に `list_genka_reports_secure`（RPC 経由）：あり
+- Console 赤エラー：なし
+
+### 触らなかったもの
+
+- `report_summary` View 定義（DROP せず存続）
+- `postgres` / `service_role` の権限（保守用に温存）
+- `reports` 権限 / policy
+- read RPC 3本の定義（`list_admin_reports_secure` / `list_genka_reports_secure` /
+  `list_my_reports_secure`）
+- `index.html` / `admin-app.html` / `genka-app.html` のコード
+
+### 申し送り（Phase 4-C-4 とは別タスク）
+
+- 集計タブ（index.html 管理コンソール）の CSV 出力は今回 OK だが、今後は不要にしたい。
+  CSV 出力は管理コンソール側のみに集約する方針。
+  → Phase 4-C-4 の範囲外。`docs/roadmap.md` の候補へ記録。
+
+### 次工程
+
+- Phase 4-C 系（4-C-1〜4-C-4）完了後の整理。
+- Playwright による読み取り専用スモークテスト導入の検討。
+
+### SQL記録ファイル
+
+- `docs/sql/phase4c-4-report-summary-revoke.sql`（実行済み記録へ更新済み）

@@ -162,7 +162,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 / 4-C-2 index 管理系 report_summary 代替RPC化 / 4-C-3 genka 原価系 report_summary 代替RPC化 完了。report_summary の読み取り整理は 4-C-4（View 封鎖・不要 GRANT 整理）が残り）
+状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 / 4-C-2 index 管理系 report_summary 代替RPC化 / 4-C-3 genka 原価系 report_summary 代替RPC化 / 4-C-4 report_summary View 封鎖・不要 GRANT 整理 完了。report_summary の読み取り整理（4-C-1〜4-C-4）は完了。以降は Phase 4-C 系の完了後整理・他テーブルの読み取り整理が残り）
 
 ### やること
 
@@ -242,15 +242,34 @@
 - SQL：`docs/sql/phase4c-3-genka-reports-read-rpc.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-07-06 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了」を参照
 
-### 次候補（report_summary 読み取り整理）
+### 4-C-4 report_summary View 封鎖・不要 GRANT 整理 ✅ 完了（2026-07-02）
 
-- 4-C-4 report_summary View 封鎖・不要 GRANT 整理（anon/authenticated SELECT の REVOKE）
+- `report_summary` View への `anon` / `authenticated` の直接アクセス権を全 REVOKE し、View 直参照経路を封鎖（4-C-1〜4-C-3 で read RPC 3本へ移行済みのため View 直参照は不要）
+- 実行SQLは REVOKE 2本のみ（`REVOKE ALL PRIVILEGES ON public.report_summary FROM anon;` / `... FROM authenticated;`）→ Success. No rows returned
+- View は DROP せず存続。`postgres` / `service_role` は変更せず（保守用に SELECT 等を温存）
+- PUBLIC は実測で明示付与なし（relacl に PUBLIC エントリなし）のため `REVOKE ... FROM PUBLIC` は実行対象外（SQLファイル内はコメントアウトのまま）
+- DB事後確認：relacl=`{postgres=arwdDxtm/postgres, service_role=arwdDxtm/postgres}`、anon/authenticated SELECT不可、postgres/service_role SELECT可、下流View依存0件、RPC 3本（list_admin/genka/my_reports_secure）は SECURITY DEFINER・report_summary 実参照なし維持
+- 本番確認OK（従業員画面／管理者ログイン・管理タブ・集計タブ・月切替・現場ドリルダウン・CSV出力／原価画面・月切替・現場フィルタ・原価サマリー。Network に report_summary 直参照なし・list_genka_reports_secure あり、Console 赤エラーなし）
+- SQL：`docs/sql/phase4c-4-report-summary-revoke.sql`（実行済み記録へ更新済み）
+- 詳細は docs/db-migrations.md の「2026-07-02 Phase 4-C-4 report_summary View 封鎖・不要 GRANT 整理 完了」を参照
+
+### 次候補（Phase 4-C 完了後の整理・他テーブル読み取り整理）
+
+- Phase 4-C 系（4-C-1〜4-C-4）完了後の整理（`reports_all` policy の整理判断・不要になった View/権限の棚卸しなど）
+- Playwright による読み取り専用スモークテスト導入検討（本番の主要画面表示・Network に direct read が出ないことの自動確認。読み取りのみ・DB非変更）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
   reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、
   photos の public維持／将来の private化・署名URL化方針と整合させる）
 - 将来：photos の private化・署名URL化（保存済み public URL の移行設計が必要・別フェーズ）
+
+### 別タスク候補（Phase 4-C-4 とは別）
+
+- 集計タブ（index.html 管理コンソール）の CSV 出力の廃止・管理コンソール側への集約
+  - 現状：集計タブ側の CSV 出力は 4-C-4 時点で動作OK。ただし今後は不要にしたい
+  - 方針：CSV 出力導線は管理コンソール側のみに集約する
+  - 位置づけ：Phase 4-C-4 の範囲外。読み取り整理とは独立した UI 整理タスクとして扱う
 
 ## Phase 5：PIN・ログイン強化
 

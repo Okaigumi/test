@@ -2082,6 +2082,12 @@ const CSV_COLUMNS={
   machine_details:[
     'machine_id','machine_name','ownership','owner_company',
     'lease_company','lease_start','lease_end','lease_monthly','owned_cost','is_active'
+  ],
+  paid_leave_details:[
+    'employee_id','employee_name','leave_date','fiscal_year','leave_type','status'
+  ],
+  paid_leave_balances:[
+    'employee_id','employee_name','granted_total','used_total','remaining'
   ]
 };
 
@@ -2251,7 +2257,9 @@ async function exportCsvZip(){
       {type:'projects_summary',name:'projects_summary.csv',rpc:'export_projects_summary_secure',cols:CSV_COLUMNS.projects_summary,period:true},
       {type:'attendance_details',name:'attendance_details.csv',rpc:'export_attendance_details_secure',cols:CSV_COLUMNS.attendance_details,period:true},
       {type:'project_cost_details',name:'project_cost_details.csv',rpc:'export_project_cost_details_secure',cols:CSV_COLUMNS.project_cost_details,period:true},
-      {type:'machine_details',name:'machine_details.csv',rpc:'export_machine_details_secure',cols:CSV_COLUMNS.machine_details,period:false}
+      {type:'machine_details',name:'machine_details.csv',rpc:'export_machine_details_secure',cols:CSV_COLUMNS.machine_details,period:false},
+      {type:'paid_leave_details',name:'paid_leave_details.csv',rpc:'export_paid_leave_details_secure',cols:CSV_COLUMNS.paid_leave_details,period:true},
+      {type:'paid_leave_balances',name:'paid_leave_balances.csv',rpc:'export_paid_leave_balances_secure',cols:CSV_COLUMNS.paid_leave_balances,period:false}
     ];
     const zip=new JSZip();
     const files=[];
@@ -2307,7 +2315,7 @@ async function pageCsv(){
             <button class="btn btn-primary" id="zipExportBtn">⬇ CSV一式をZIPで出力</button>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--text3);">4つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。帳票確認画面では、このZIPを選ぶだけで各帳票を確認できます。対象期間は年月で指定します（重機台帳は全期間が対象です）。</div>
+        <div style="font-size:12px;color:var(--text3);">6つのCSVとmanifest.jsonを1つのZIPにまとめて出力します。帳票確認画面では、このZIPを選ぶだけで各帳票を確認できます。対象期間は年月で指定します（重機台帳・残有給は全期間が対象です）。</div>
       </div>
     </div>
     <!-- ZIP以外の出力導線（個別CSV出力）は通常画面から非表示。内部関数・DOMは互換のため残置。Phase 2-4-9-8-f -->

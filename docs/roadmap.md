@@ -260,6 +260,15 @@
 - DB事後確認：`reports` の anon / authenticated ともに全7種 false（TRUNCATE/REFERENCES/TRIGGER の残存除去を確認）。`report_summary`・RPC・policy・postgres/service_role は未変更
 - SQL：`docs/sql/phase4c-5-reports-extra-privileges-revoke.sql`（実行済み記録へ更新済み）。詳細は docs/db-migrations.md の「2026-07-02 Phase 4-C-5 …完了」を参照
 
+### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
+
+- 従業員本人が自分の日報提出状況を月別カレンダーで確認できるMVPを `index.html`（履歴タブ）に追加。当月表示・前月/次月移動・日付セルに日報有無/有給/現場名（複数は「◯◯他N」）表示・日付クリックで既存詳細モーダル表示 or 日報入力タブへ誘導
+- PR #34 merge済み（merge commit `c76a76f`）。変更ファイルは `index.html` のみ
+- 既存の secure RPC を再利用：本人日報＝`list_my_reports_secure`（before_date+limit 方式）、承認済み有給＝`list_my_paid_leave_secure`
+- `reports` / `report_summary` / `paid_leave` の direct read は 0 件（RPC経由に統一・Phase 4-C の保護を維持）
+- DB変更・新規RPC作成なし。DB非依存でクライアント側描画
+- 将来課題：管理者向け全社員カレンダー、`list_my_reports_secure` の from-to 範囲版RPC（過去100件超の古い月の取りこぼし対策）、同日複数日報のセル全件表示（現状は先頭1件＋「+N」）
+
 ### 次候補（Phase 4-C 完了後の整理・他テーブル読み取り整理）
 
 - Phase 4-C 系（4-C-1〜4-C-4）完了後の整理（`reports_all` policy の整理判断・不要になった View/権限の棚卸しなど）

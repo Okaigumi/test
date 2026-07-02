@@ -41,6 +41,16 @@ input[type=file]{font:inherit;font-size:14px;}
   color:var(--ink);padding:11px 12px;border-radius:6px;cursor:pointer;margin-bottom:3px;min-height:42px;}
 .nav-btn:hover{background:var(--head);color:var(--ink);}
 .nav-btn.active{background:var(--accent-bg);color:var(--accent);font-weight:700;}
+/* ナビのグループ見出し（主な出力／確認用／旧ビュー・確認用） */
+.nav-group{margin-bottom:14px;}
+.nav-group-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:2px 12px 6px;border-bottom:1px solid var(--line);margin-bottom:6px;}
+/* 旧ビュー・確認用は控えめ（小さめ・淡色）。クリックは通常どおり可能。 */
+.nav-group-legacy .nav-group-label{color:var(--faint);}
+.nav-group-legacy .nav-btn{font-size:13px;color:var(--muted);min-height:36px;padding:8px 12px;}
+.nav-group-legacy .nav-btn.active{color:var(--accent);}
+/* 生データ：通常運用では押さない扱い。さらに小さく淡色に。 */
+.nav-btn-faint{font-size:12px!important;color:var(--faint)!important;min-height:30px!important;margin-top:4px;}
+.nav-btn-faint.active{color:var(--accent)!important;}
 .main{flex:1;min-width:0;padding:22px 28px;max-width:1080px;}
 
 /* ===== 帳票ヘッダ ===== */
@@ -163,6 +173,34 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
 /* 印刷専用要素は画面では非表示 */
 .print-only{display:none;}
 
+/* ===== 現場別人数集計・稼働カレンダー（画面・印刷共通のレイアウト） ===== */
+.mrpt-head{margin-bottom:12px;}
+.mrpt-title{font-size:18px;font-weight:700;color:var(--ink);}
+.mrpt-sub{font-size:13px;color:var(--muted);margin-top:2px;}
+.mrpt-section-title{font-size:14px;font-weight:700;color:var(--ink);margin:16px 0 8px;}
+.mrpt-total-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:6px;}
+.mrpt-total-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fafafa;}
+.mrpt-total-label{font-size:11px;color:var(--muted);}
+.mrpt-total-val{font-size:16px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:2px;}
+.mrpt-cal{display:flex;flex-direction:column;gap:3px;}
+.mrpt-cal-row{display:flex;gap:3px;}
+.mrpt-cal-wd{flex:1 1 0;text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:2px 0;}
+.mrpt-cal-wd.sat{color:#1560b0;}
+.mrpt-cal-wd.sun{color:#b02a2a;}
+.mrpt-cal-cell{flex:1 1 0;min-width:0;min-height:56px;border:1px solid var(--line);border-radius:6px;padding:3px 4px;background:#fff;overflow:hidden;}
+.mrpt-cal-cell.blank{border:none;background:none;}
+.mrpt-cal-daynum{font-size:11px;font-weight:700;color:var(--muted);line-height:1.1;}
+.mrpt-cal-daynum.sat{color:#1560b0;}
+.mrpt-cal-daynum.sun,.mrpt-cal-daynum.hol{color:#b02a2a;}
+.mrpt-cal-site{font-size:9px;color:var(--ink);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mrpt-cal-none{font-size:11px;color:var(--muted);text-align:center;margin-top:6px;}
+/* 従業員フィルタのボタン群 */
+.mrpt-emp-btns{display:flex;flex-wrap:wrap;gap:6px;}
+.mrpt-emp-btn{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:16px;cursor:pointer;}
+.mrpt-emp-btn:hover{background:var(--head);}
+.mrpt-emp-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-bg);font-weight:700;}
+/* 画面では帳票内タイトルは冗長なので控えめ（印刷では @media print で残す） */
+
 /* ===== 印刷 ===== */
 @media print{
   @page{margin:12mm;}
@@ -226,6 +264,35 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
   /* バッジは背景グラフィック印刷オフでも読めるよう罫線＋黒文字で表現 */
   .cr-badge{border:1px solid #000!important;color:#000!important;background:#fff!important;}
   .summary-item{border:1px solid #bbb;}
+
+  /* ===== 現場別人数集計・カレンダー（印刷）=====
+     意図した改ページのみ。大コンテナに break-inside:avoid は付けない（空白ページ防止）。
+     印刷対象は表示中の viewer-page のみ（既存の .viewer-page.hidden{display:none} を踏襲）。 */
+  #page-monthlyReport .mrpt-page-break{break-before:page;page-break-before:always;}
+  #page-monthlyReport .mrpt-title{font-size:15px;}
+  #page-monthlyReport .mrpt-sub{font-size:11px;}
+  #page-monthlyReport .mrpt-total-val{font-size:13px;}
+  #page-monthlyReport .mrpt-cal-cell{min-height:46px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #page-monthlyReport .mrpt-cal-site{font-size:8px;}
+  /* この帳票のみ A4横（名前付きページ）。既存4ビューの向き（既定）は変えない。 */
+  @page mrptLand{size:A4 landscape;margin:10mm;}
+  #page-monthlyReport{page:mrptLand;}
+  /* 詳細（従来明細）の emp-block はページ跨ぎを許可＝空白ページ防止（本ビュー限定・既存 empMonthly ビューには非適用） */
+  #page-monthlyReport .emp-block{break-inside:auto;page-break-inside:auto;}
+
+  /* 会計提出用 月次集計（印刷）：A4縦（既定）。サマリー表のみで空白ページ懸念は小。 */
+  #page-accountingReport .mrpt-title{font-size:15px;}
+  #page-accountingReport .mrpt-sub{font-size:11px;}
+  #page-accountingReport .mrpt-total-val{font-size:13px;}
+
+  /* 会計提出用・社内確認用は帳票本文を1ページ目から開始する。
+     - 共通「帳票確認」ヘッダ（#reportHeader）と読込メタ（#commonChips）を印刷から除外
+     - 本文カードの break-inside:avoid を解除し、先頭に空白ページが出ないようにする（本2ビュー限定） */
+  body.print-selftitled #reportHeader,
+  body.print-selftitled #commonChips,
+  body.print-selftitled #zipSingleBack{display:none!important;}
+  #page-accountingReport .card,
+  #page-monthlyReport .card{break-inside:auto;page-break-inside:auto;}
 }
 </style>
 <!-- ZIP読込用ライブラリ（ローカル同梱・外部CDNは使わない）。Phase 2-4-8-2 で vendor/jszip に同梱済み -->
@@ -288,6 +355,34 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
 
       <section id="page-overall" class="viewer-page hidden">
         <div class="card"><div class="card-title">全体出勤簿</div><div id="overallArea"></div></div>
+      </section>
+
+      <section id="page-accountingReport" class="viewer-page hidden">
+        <div class="card">
+          <div class="card-title no-print">会計提出用 月次集計</div>
+          <div class="no-print" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+            <label style="font-size:13px;color:var(--muted);">対象月</label>
+            <select id="acctMonthSelect" style="font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;"></select>
+            <button type="button" id="acctPrintBtn" class="back-btn" style="margin:0;">印刷・PDF保存</button>
+          </div>
+          <div id="acctArea"></div>
+        </div>
+      </section>
+
+      <section id="page-monthlyReport" class="viewer-page hidden">
+        <div class="card">
+          <div class="card-title no-print">社内確認用 月次稼働・日報詳細</div>
+          <div class="no-print" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+            <label style="font-size:13px;color:var(--muted);">対象月</label>
+            <select id="mrptMonthSelect" style="font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;"></select>
+            <button type="button" id="mrptPrintBtn" class="back-btn" style="margin:0;">印刷・PDF保存</button>
+          </div>
+          <div class="no-print" style="margin-bottom:12px;">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">対象従業員</div>
+            <div id="mrptEmpButtons" class="mrpt-emp-btns"></div>
+          </div>
+          <div id="mrptArea"></div>
+        </div>
       </section>
 
       <section id="page-projectList" class="viewer-page hidden">
@@ -506,30 +601,39 @@ const MAX_DISPLAY_ROWS=300;
 
 // ===== ページ定義 =====
 // types に 'all' を含むページは全CSV種別で表示。専用ビュー追加時はここに足す。
+// group：ナビのグループ分け。'main'=主な出力／'check'=確認用／'legacy'=旧ビュー・確認用。
+// 同一 group 内はこの配列順で表示される（グループ間の並びは NAV_GROUPS で定義）。
 const PAGE_DEFS=[
-  {id:'dashboard',label:'ダッシュボード',types:['all']},
-  {id:'monthly',label:'月別サマリー',types:['attendance_details']},
-  {id:'employee',label:'従業員別サマリー',types:['attendance_details']},
-  {id:'empMonthly',label:'従業員別 月別出勤簿',types:['attendance_details']},
-  {id:'overall',label:'全体出勤簿',types:['attendance_details']},
-  {id:'projectList',label:'工事一覧',types:['projects_summary']},
-  {id:'projectDetail',label:'工事詳細',types:['projects_summary']},
-  {id:'projectYear',label:'年度別集計',types:['projects_summary']},
-  {id:'projectClient',label:'発注者別集計',types:['projects_summary']},
-  {id:'projectCategory',label:'工事分類別集計',types:['projects_summary']},
-  {id:'invoiceList',label:'請求書一覧',types:['project_cost_details']},
-  {id:'invoiceVendor',label:'業者別集計',types:['project_cost_details']},
-  {id:'invoiceProject',label:'工事別集計',types:['project_cost_details']},
-  {id:'invoiceMonth',label:'月別集計',types:['project_cost_details']},
-  {id:'invoiceCategory',label:'費目別集計',types:['project_cost_details']},
-  {id:'invoiceChecks',label:'確認リスト',types:['project_cost_details']},
-  {id:'machineList',label:'重機一覧',types:['machine_details']},
-  {id:'machineSummary',label:'重機別集計',types:['machine_details']},
-  {id:'machineMonth',label:'月別集計',types:['machine_details']},
-  {id:'machineProject',label:'現場別集計',types:['machine_details']},
-  {id:'machineChecks',label:'確認リスト',types:['machine_details']},
-  {id:'raw',label:'生データ',types:['all']},
-  {id:'messages',label:'警告・エラー',types:['all']}
+  {id:'accountingReport',label:'会計提出用 月次集計',types:['attendance_details'],group:'main'},
+  {id:'monthlyReport',label:'社内確認用 月次稼働・日報詳細',types:['attendance_details'],group:'main'},
+  {id:'projectList',label:'工事一覧',types:['projects_summary'],group:'main'},
+  {id:'projectDetail',label:'工事詳細',types:['projects_summary'],group:'main'},
+  {id:'projectYear',label:'年度別集計',types:['projects_summary'],group:'main'},
+  {id:'projectClient',label:'発注者別集計',types:['projects_summary'],group:'main'},
+  {id:'projectCategory',label:'工事分類別集計',types:['projects_summary'],group:'main'},
+  {id:'invoiceList',label:'請求書一覧',types:['project_cost_details'],group:'main'},
+  {id:'invoiceVendor',label:'業者別集計',types:['project_cost_details'],group:'main'},
+  {id:'invoiceProject',label:'工事別集計',types:['project_cost_details'],group:'main'},
+  {id:'invoiceMonth',label:'月別集計',types:['project_cost_details'],group:'main'},
+  {id:'invoiceCategory',label:'費目別集計',types:['project_cost_details'],group:'main'},
+  {id:'invoiceChecks',label:'確認リスト',types:['project_cost_details'],group:'main'},
+  {id:'machineList',label:'重機一覧',types:['machine_details'],group:'main'},
+  {id:'machineSummary',label:'重機別集計',types:['machine_details'],group:'main'},
+  {id:'machineMonth',label:'月別集計',types:['machine_details'],group:'main'},
+  {id:'machineProject',label:'現場別集計',types:['machine_details'],group:'main'},
+  {id:'machineChecks',label:'確認リスト',types:['machine_details'],group:'main'},
+  {id:'monthly',label:'月別サマリー',types:['attendance_details'],group:'legacy'},
+  {id:'employee',label:'従業員別サマリー',types:['attendance_details'],group:'legacy'},
+  {id:'empMonthly',label:'従業員別 月別出勤簿',types:['attendance_details'],group:'legacy'},
+  {id:'overall',label:'全体出勤簿',types:['attendance_details'],group:'legacy'},
+  {id:'dashboard',label:'ダッシュボード',types:['all'],group:'legacy'},
+  {id:'messages',label:'警告・エラー',types:['all'],group:'legacy'},
+  {id:'raw',label:'生データ',types:['all'],group:'legacy',faint:true}
+];
+// ナビのグループ表示順と見出し。members が無いグループは見出しごと出さない。
+const NAV_GROUPS=[
+  {key:'main',label:'主な出力'},
+  {key:'legacy',label:'旧ビュー・確認用'}
 ];
 
 const VIEWER_PAGES=PAGE_DEFS.map(p=>p.id);
@@ -1044,17 +1148,30 @@ function renderProjectSummaryList(container,columns,dataArr){
 }
 
 // ===== ナビ描画（CSV種別に応じて動的生成・textContent） =====
+// グループ（主な出力／確認用／旧ビュー・確認用）ごとに見出し＋ボタンを描画。
+// 旧ビュー・確認用は控えめ表示（nav-group-legacy）。メンバーが無いグループは見出しを出さない。
 function renderViewerNav(csvType){
   const area=document.getElementById('viewerNavButtons');
   clear(area);
   const defs=getAvailablePageDefs(csvType);
-  defs.forEach(def=>{
+  const mkBtn=def=>{
     const btn=document.createElement('button');
-    btn.className='nav-btn';
+    btn.className='nav-btn'+(def.faint?' nav-btn-faint':'');
     btn.dataset.page=def.id;
     btn.textContent=def.label;
     btn.addEventListener('click',()=>showViewerPage(def.id));
-    area.appendChild(btn);
+    return btn;
+  };
+  NAV_GROUPS.forEach(g=>{
+    const members=defs.filter(d=>(d.group||'main')===g.key);
+    if(!members.length)return;
+    const grp=document.createElement('div');
+    grp.className='nav-group'+(g.key==='legacy'?' nav-group-legacy':'');
+    const h=document.createElement('div');h.className='nav-group-label';h.textContent=g.label;grp.appendChild(h);
+    const btns=document.createElement('div');btns.className='nav-group-btns';
+    members.forEach(def=>btns.appendChild(mkBtn(def)));
+    grp.appendChild(btns);
+    area.appendChild(grp);
   });
 }
 
@@ -1067,6 +1184,10 @@ function showViewerPage(pageName){
     if(sec)sec.classList.toggle('hidden',p!==target);
   });
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===target));
+  // 会計提出用・社内確認用は各ビュー内に帳票タイトルを持つため、印刷時は共通「帳票確認」ヘッダを隠す。
+  // 判定用に body へクラスを付与（既存4ビューは従来どおり共通ヘッダを印刷）。
+  const selfTitled=(target==='accountingReport'||target==='monthlyReport');
+  document.body.classList.toggle('print-selftitled',selfTitled);
 }
 
 // ===== 従業員名クリック → 従業員別 月別出勤簿 =====
@@ -1259,6 +1380,323 @@ function renderEmpMonthlyDefault(){
   const area=document.getElementById('empMonthlyArea');clear(area);
   if(state.csvType!=='attendance_details'){area.appendChild(noteEl('このCSVでは出勤簿未対応です（出勤・労務明細CSVで利用できます）。'));return;}
   area.appendChild(noteEl('「従業員別サマリー」で従業員名をクリックすると、その従業員の月別出勤簿を表示します。'));
+}
+
+// ===== 現場別人数集計・稼働カレンダー（月次確認・保管用 PDF） =====
+// 集計はすべて生CSV行（state.rows）と reports（state.reports）から算出。
+//  - 現場別（延べ人工/労務費/稼働日数/実人数）：生行を site_name でグループ（labor_days/labor_cost は按分後値）
+//  - 通常/残業（月次合計のみ）：reports を月で絞り report 単位で SUM（現場按分しない）
+let mrptMonth=null;
+let mrptEmp='ALL'; // 社内確認用の従業員フィルタ（'ALL' または employee_id）
+function mrptAvailableMonths(){
+  const set=new Set();
+  (state.rows||[]).forEach(r=>{const d=r['report_date']||'';if(d.length>=7)set.add(d.slice(0,7));});
+  return Array.from(set).sort((a,b)=>a<b?-1:(a>b?1:0));
+}
+// 対象月に出勤した従業員（id, name）を name 昇順で返す
+function mrptMonthEmployees(){
+  const prefix=(mrptMonth||'')+'-';
+  const map=new Map();
+  (state.reports||[]).filter(r=>(r.report_date||'').startsWith(prefix)).forEach(r=>{
+    const id=r.employee_id||('name:'+(r.employee_name||''));
+    if(!map.has(id))map.set(id,r.employee_name||'(名前なし)');
+  });
+  return Array.from(map,([id,name])=>({id,name})).sort((a,b)=>a.name<b.name?-1:(a.name>b.name?1:0));
+}
+// 従業員フィルタのボタン群を描画（全員＋対象月の各従業員）
+function renderMrptEmpButtons(){
+  const box=document.getElementById('mrptEmpButtons');if(!box)return;clear(box);
+  const emps=mrptMonthEmployees();
+  if(mrptEmp!=='ALL' && !emps.some(e=>e.id===mrptEmp))mrptEmp='ALL';
+  const mk=(id,label)=>{const b=document.createElement('button');b.type='button';b.className='mrpt-emp-btn'+(mrptEmp===id?' active':'');b.textContent=label;b.onclick=()=>{mrptEmp=id;renderMrptEmpButtons();renderMrptBody();};box.appendChild(b);};
+  mk('ALL','全員');
+  emps.forEach(e=>mk(e.id,e.name));
+}
+
+// ===== 会計提出用 月次集計（A4縦・サマリーのみ／日報詳細・メモは含めない） =====
+// 従業員別集計は既存 buildEmployeeAttendanceSummary を月フィルタして流用。
+// 現場別集計は生行を site_name でグループ（labor_days/labor_cost は按分後値）。
+let acctMonth=null;
+function renderAccountingReportPage(){
+  const area=document.getElementById('acctArea');
+  const sel=document.getElementById('acctMonthSelect');
+  if(!area||!sel)return;
+  clear(area);sel.replaceChildren();
+  if(state.csvType!=='attendance_details'||!state.reports){area.appendChild(noteEl('このCSVでは会計提出用集計 未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  const months=mrptAvailableMonths();
+  if(!months.length){area.appendChild(noteEl('データ0件です。'));return;}
+  if(!acctMonth||months.indexOf(acctMonth)===-1)acctMonth=months[months.length-1];
+  months.forEach(ym=>{const o=document.createElement('option');o.value=ym;o.textContent=formatMonthLabel(ym);if(ym===acctMonth)o.selected=true;sel.appendChild(o);});
+  sel.onchange=()=>{acctMonth=sel.value;renderAcctBody();};
+  const btn=document.getElementById('acctPrintBtn');
+  if(btn)btn.onclick=()=>window.print();
+  renderAcctBody();
+}
+function renderAcctBody(){
+  const area=document.getElementById('acctArea');clear(area);
+  const ym=acctMonth;const prefix=ym+'-';
+  const rows=(state.rows||[]).filter(r=>(r['report_date']||'').startsWith(prefix));
+  const reps=(state.reports||[]).filter(r=>(r.report_date||'').startsWith(prefix));
+  const siteOf=r=>{let sn=r['site_name'];return(sn===undefined||sn==='')?'(現場なし)':sn;};
+
+  // ---- 月次合計 ----
+  const siteSet=new Set(),empSetAll=new Set();
+  let totDays=0,totCost=0,totNormal=0,totOt=0;
+  rows.forEach(r=>{siteSet.add(siteOf(r));if(r['employee_id'])empSetAll.add(r['employee_id']);totDays+=toNumber(r['labor_days']);totCost+=toNumber(r['labor_cost']);});
+  reps.forEach(r=>{totNormal+=r.normal_mins;totOt+=r.overtime_mins;});
+
+  // ---- 帳票ヘッダ ----
+  const head=document.createElement('div');head.className='mrpt-head';
+  const t=document.createElement('div');t.className='mrpt-title';t.textContent='会計提出用 月次集計';head.appendChild(t);
+  const sub=document.createElement('div');sub.className='mrpt-sub';sub.textContent='対象期間：'+formatMonthLabel(ym)+'　／　出力日時：'+(state.generatedAt||'—');head.appendChild(sub);
+  area.appendChild(head);
+
+  // ---- 月次合計ストリップ ----
+  const grid=document.createElement('div');grid.className='mrpt-total-grid';
+  const addTotal=(label,val)=>{const c=document.createElement('div');c.className='mrpt-total-item';const l=document.createElement('div');l.className='mrpt-total-label';l.textContent=label;const v=document.createElement('div');v.className='mrpt-total-val';v.textContent=val;c.appendChild(l);c.appendChild(v);grid.appendChild(c);};
+  addTotal('対象月',formatMonthLabel(ym));
+  addTotal('稼働現場数',String(siteSet.size)+' 現場');
+  addTotal('実人数',String(empSetAll.size)+' 人');
+  addTotal('延べ人工',formatNumber(totDays,2));
+  addTotal('通常時間',formatMinutes(totNormal));
+  addTotal('残業時間',formatMinutes(totOt));
+  addTotal('労務費合計',formatMoney(totCost)+' 円');
+  area.appendChild(grid);
+
+  if(!rows.length){area.appendChild(noteEl('この月の日報はありません。'));return;}
+
+  // ---- 従業員別集計（既存 buildEmployeeAttendanceSummary を月フィルタして流用） ----
+  const secE=document.createElement('div');secE.className='mrpt-section-title';secE.textContent='従業員別集計';area.appendChild(secE);
+  const empSummary=buildEmployeeAttendanceSummary(reps);
+  const scrollE=document.createElement('div');scrollE.className='table-scroll';
+  const tblE=document.createElement('table');
+  const theadE=document.createElement('thead');const trhE=document.createElement('tr');
+  [['従業員名',''],['出勤日数','num'],['延べ人工','num'],['通常時間','num'],['残業時間','num'],['労務費','num']].forEach(([lbl,cls])=>{const th=document.createElement('th');th.textContent=lbl;if(cls)th.className=cls;trhE.appendChild(th);});
+  theadE.appendChild(trhE);tblE.appendChild(theadE);
+  const tbodyE=document.createElement('tbody');
+  empSummary.forEach(e=>{
+    const tr=document.createElement('tr');
+    const mk=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;tr.appendChild(td);};
+    mk(e.employee_name||'(名前なし)','');mk(String(e.work_days)+' 日','num');mk(formatNumber(e.labor_days,2),'num');mk(formatMinutes(e.normal_mins),'num');mk(formatMinutes(e.overtime_mins),'num');mk(formatMoney(e.labor_cost),'num');
+    tbodyE.appendChild(tr);
+  });
+  const trtE=document.createElement('tr');trtE.className='total-row';
+  const mkTE=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;trtE.appendChild(td);};
+  mkTE('合計','');mkTE(String(empSetAll.size)+' 人','num');mkTE(formatNumber(totDays,2),'num');mkTE(formatMinutes(totNormal),'num');mkTE(formatMinutes(totOt),'num');mkTE(formatMoney(totCost),'num');
+  tbodyE.appendChild(trtE);
+  tblE.appendChild(tbodyE);scrollE.appendChild(tblE);area.appendChild(scrollE);
+
+  // ---- 現場別集計（生行を site_name でグループ） ----
+  const secS=document.createElement('div');secS.className='mrpt-section-title';secS.textContent='現場別集計';area.appendChild(secS);
+  const siteMap=new Map();
+  rows.forEach(r=>{
+    const sn=siteOf(r);
+    let a=siteMap.get(sn);
+    if(!a){a={site:sn,days:new Set(),emps:new Set(),labor_days:0,labor_cost:0};siteMap.set(sn,a);}
+    if(r['report_date'])a.days.add(r['report_date']);
+    if(r['employee_id'])a.emps.add(r['employee_id']);
+    a.labor_days+=toNumber(r['labor_days']);
+    a.labor_cost+=toNumber(r['labor_cost']);
+  });
+  const siteArr=Array.from(siteMap.values()).sort((x,y)=>x.site<y.site?-1:(x.site>y.site?1:0));
+  const scrollS=document.createElement('div');scrollS.className='table-scroll';
+  const tblS=document.createElement('table');
+  const theadS=document.createElement('thead');const trhS=document.createElement('tr');
+  [['現場名',''],['稼働日数','num'],['実人数','num'],['延べ人工','num'],['労務費','num']].forEach(([lbl,cls])=>{const th=document.createElement('th');th.textContent=lbl;if(cls)th.className=cls;trhS.appendChild(th);});
+  theadS.appendChild(trhS);tblS.appendChild(theadS);
+  const tbodyS=document.createElement('tbody');
+  siteArr.forEach(a=>{
+    const tr=document.createElement('tr');
+    const mk=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;tr.appendChild(td);};
+    mk(a.site,'');mk(String(a.days.size)+' 日','num');mk(String(a.emps.size)+' 人','num');mk(formatNumber(a.labor_days,2),'num');mk(formatMoney(a.labor_cost),'num');
+    tbodyS.appendChild(tr);
+  });
+  const trtS=document.createElement('tr');trtS.className='total-row';
+  const mkTS=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;trtS.appendChild(td);};
+  mkTS('合計','');mkTS('—','num');mkTS(String(empSetAll.size)+' 人','num');mkTS(formatNumber(totDays,2),'num');mkTS(formatMoney(totCost),'num');
+  tbodyS.appendChild(trtS);
+  tblS.appendChild(tbodyS);scrollS.appendChild(tblS);area.appendChild(scrollS);
+}
+function renderMonthlyReportPage(){
+  const area=document.getElementById('mrptArea');
+  const sel=document.getElementById('mrptMonthSelect');
+  if(!area||!sel)return;
+  clear(area);sel.replaceChildren();
+  if(state.csvType!=='attendance_details'||!state.reports){area.appendChild(noteEl('このCSVでは現場別集計・カレンダー未対応です（出勤・労務明細CSVで利用できます）。'));return;}
+  const months=mrptAvailableMonths();
+  if(!months.length){area.appendChild(noteEl('データ0件です。'));return;}
+  // 単月なら自動選択、複数月なら最新を既定にしてセレクタで切替
+  if(!mrptMonth||months.indexOf(mrptMonth)===-1)mrptMonth=months[months.length-1];
+  months.forEach(ym=>{const o=document.createElement('option');o.value=ym;o.textContent=formatMonthLabel(ym);if(ym===mrptMonth)o.selected=true;sel.appendChild(o);});
+  sel.onchange=()=>{mrptMonth=sel.value;mrptEmp='ALL';renderMrptEmpButtons();renderMrptBody();};
+  const btn=document.getElementById('mrptPrintBtn');
+  if(btn)btn.onclick=()=>window.print();
+  renderMrptEmpButtons();
+  renderMrptBody();
+}
+function renderMrptBody(){
+  const area=document.getElementById('mrptArea');clear(area);
+  const ym=mrptMonth;const prefix=ym+'-';
+  const rows=(state.rows||[]).filter(r=>(r['report_date']||'').startsWith(prefix));
+  const reps=(state.reports||[]).filter(r=>(r.report_date||'').startsWith(prefix));
+  const siteOf=r=>{let sn=r['site_name'];return(sn===undefined||sn==='')?'(現場なし)':sn;};
+
+  // ---- 月次合計（ストリップ用の集計） ----
+  const siteSet=new Set(),empSetAll=new Set();
+  let totDays=0,totCost=0,totNormal=0,totOt=0;
+  rows.forEach(r=>{siteSet.add(siteOf(r));if(r['employee_id'])empSetAll.add(r['employee_id']);totDays+=toNumber(r['labor_days']);totCost+=toNumber(r['labor_cost']);});
+  reps.forEach(r=>{totNormal+=r.normal_mins;totOt+=r.overtime_mins;});
+
+  // ---- 対象従業員ラベル ----
+  let targetLabel='全員';
+  if(mrptEmp!=='ALL'){const e=mrptMonthEmployees().find(x=>x.id===mrptEmp);targetLabel=e?e.name:'(選択従業員)';}
+
+  // ---- 帳票ヘッダ（印刷にも出す・自己完結） ----
+  const head=document.createElement('div');head.className='mrpt-head';
+  const t=document.createElement('div');t.className='mrpt-title';t.textContent='社内確認用 月次稼働・日報詳細';head.appendChild(t);
+  const sub=document.createElement('div');sub.className='mrpt-sub';sub.textContent='対象期間：'+formatMonthLabel(ym)+'　／　対象：'+targetLabel+'　／　出力日時：'+(state.generatedAt||'—');head.appendChild(sub);
+  area.appendChild(head);
+
+  // ---- 月次合計ストリップ（全員選択時のみ表示・全体集計） ----
+  // 個人選択中は「全体の合計」が個人帳票に混在して紛らわしいため非表示にする。
+  if(mrptEmp==='ALL'){
+    const secTot=document.createElement('div');secTot.className='mrpt-section-title';secTot.textContent='月次合計（全体）';area.appendChild(secTot);
+    const grid=document.createElement('div');grid.className='mrpt-total-grid';
+    const addTotal=(label,val)=>{const c=document.createElement('div');c.className='mrpt-total-item';const l=document.createElement('div');l.className='mrpt-total-label';l.textContent=label;const v=document.createElement('div');v.className='mrpt-total-val';v.textContent=val;c.appendChild(l);c.appendChild(v);grid.appendChild(c);};
+    addTotal('対象月',formatMonthLabel(ym));
+    addTotal('稼働現場数',String(siteSet.size)+' 現場');
+    addTotal('実人数',String(empSetAll.size)+' 人');
+    addTotal('延べ人工',formatNumber(totDays,2));
+    addTotal('通常時間',formatMinutes(totNormal));
+    addTotal('残業時間',formatMinutes(totOt));
+    addTotal('労務費合計',formatMoney(totCost)+' 円');
+    area.appendChild(grid);
+  }
+
+  if(!rows.length){area.appendChild(noteEl('この月の日報はありません。'));return;}
+
+  // ================= 1. 月間稼働カレンダー（従業員フィルタ連動） =================
+  // 全員：日別「現場名：人数」／個人：その従業員が行った現場名のみ（人数なし）
+  const secCal=document.createElement('div');secCal.className='mrpt-section-title';secCal.textContent='1. 月間稼働カレンダー（'+formatMonthLabel(ym)+'・'+(mrptEmp==='ALL'?'全体':targetLabel)+'）';area.appendChild(secCal);
+  const calRows=(mrptEmp==='ALL')?rows:rows.filter(r=>(r['employee_id']||('name:'+(r['employee_name']||'')))===mrptEmp);
+  const byDate={};
+  calRows.forEach(r=>{
+    const d=r['report_date'];if(!d)return;
+    const sn=siteOf(r);
+    (byDate[d]=byDate[d]||{});
+    (byDate[d][sn]=byDate[d][sn]||new Set());
+    if(r['employee_id'])byDate[d][sn].add(r['employee_id']);
+  });
+  area.appendChild(buildMrptCalendar(ym,byDate,mrptEmp==='ALL'));
+
+  // 意図的な改ページ
+  area.appendChild(Object.assign(document.createElement('div'),{className:'mrpt-page-break'}));
+
+  // ================= 2. 従業員別 現場別稼働日数集計（従業員フィルタ連動） =================
+  const secEmp=document.createElement('div');secEmp.className='mrpt-section-title';secEmp.textContent='2. 従業員別 現場別稼働日数集計'+(mrptEmp==='ALL'?'':'（対象：'+targetLabel+'）');area.appendChild(secEmp);
+  // 従業員→現場→{days:Set(report_date), labor_days, labor_cost}
+  const empMap=new Map();
+  rows.forEach(r=>{
+    const key=r['employee_id']||('name:'+(r['employee_name']||''));
+    let e=empMap.get(key);
+    if(!e){e={key:key,name:r['employee_name']||'(名前なし)',sites:new Map()};empMap.set(key,e);}
+    const sn=siteOf(r);
+    let s=e.sites.get(sn);
+    if(!s){s={site:sn,days:new Set(),labor_days:0,labor_cost:0};e.sites.set(sn,s);}
+    if(r['report_date'])s.days.add(r['report_date']);
+    s.labor_days+=toNumber(r['labor_days']);
+    s.labor_cost+=toNumber(r['labor_cost']);
+  });
+  const empArr=Array.from(empMap.values())
+    .filter(e=>mrptEmp==='ALL'||e.key===mrptEmp)
+    .sort((a,b)=>a.name<b.name?-1:(a.name>b.name?1:0));
+  if(!empArr.length)area.appendChild(noteEl('対象の従業員データがありません。'));
+  empArr.forEach(e=>{
+    const block=document.createElement('div');block.className='emp-block';
+    const h=document.createElement('div');h.className='emp-head';h.textContent=e.name;block.appendChild(h);
+    const scroll=document.createElement('div');scroll.className='table-scroll';
+    const table=document.createElement('table');
+    const thead=document.createElement('thead');const trh=document.createElement('tr');
+    [['現場名',''],['稼働日数','num'],['延べ人工','num'],['労務費','num']].forEach(([lbl,cls])=>{const th=document.createElement('th');th.textContent=lbl;if(cls)th.className=cls;trh.appendChild(th);});
+    thead.appendChild(trh);table.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    const sArr=Array.from(e.sites.values()).sort((x,y)=>x.site<y.site?-1:(x.site>y.site?1:0));
+    let eDays=new Set(),eLd=0,eLc=0;
+    sArr.forEach(s=>{
+      const tr=document.createElement('tr');
+      const mk=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;tr.appendChild(td);};
+      mk(s.site,'');mk(String(s.days.size)+' 日','num');mk(formatNumber(s.labor_days,2),'num');mk(formatMoney(s.labor_cost),'num');
+      tbody.appendChild(tr);
+      s.days.forEach(d=>eDays.add(d));eLd+=s.labor_days;eLc+=s.labor_cost;
+    });
+    // 従業員小計（稼働日数は現場横断の distinct report_date）
+    const trt=document.createElement('tr');trt.className='total-row';
+    const mkT=(txt,cls)=>{const td=document.createElement('td');td.textContent=txt;if(cls)td.className=cls;trt.appendChild(td);};
+    mkT('小計','');mkT(String(eDays.size)+' 日','num');mkT(formatNumber(eLd,2),'num');mkT(formatMoney(eLc),'num');
+    tbody.appendChild(trt);
+    table.appendChild(tbody);scroll.appendChild(table);block.appendChild(scroll);
+    area.appendChild(block);
+  });
+
+  // 意図的な改ページ
+  area.appendChild(Object.assign(document.createElement('div'),{className:'mrpt-page-break'}));
+
+  // ================= 3. 詳細（従来の日報明細を流用・従業員フィルタ連動） =================
+  const secDet=document.createElement('div');secDet.className='mrpt-section-title';secDet.textContent='3. 詳細（日報明細）'+(mrptEmp==='ALL'?'':'（対象：'+targetLabel+'）');area.appendChild(secDet);
+  // 従業員ごとに reports をまとめ、buildAttendanceBlock を流用。
+  // 詳細は実績日のみ表示するため showEmptyDays を一時退避/復元（本体は改変しない）。
+  const repMap=new Map();
+  reps.forEach(r=>{
+    const key=r.employee_id||('name:'+(r.employee_name||''));
+    let g=repMap.get(key);
+    if(!g){g={key:key,name:r.employee_name||'(名前なし)',list:[]};repMap.set(key,g);}
+    g.list.push(r);
+  });
+  const repArr=Array.from(repMap.values())
+    .filter(g=>mrptEmp==='ALL'||g.key===mrptEmp)
+    .sort((a,b)=>a.name<b.name?-1:(a.name>b.name?1:0));
+  const _savedShowEmpty=state.showEmptyDays;
+  state.showEmptyDays=false; // 詳細は実績日のみ
+  try{
+    repArr.forEach(g=>{area.appendChild(buildAttendanceBlock(g.name,g.list));});
+  }finally{
+    state.showEmptyDays=_savedShowEmpty; // 必ず復元（他ビューへ影響させない）
+  }
+}
+function buildMrptCalendar(ym,byDate,showCount){
+  if(showCount===undefined)showCount=true; // 全員=人数表示 / 個人=現場名のみ
+  const wrap=document.createElement('div');wrap.className='mrpt-cal';
+  // 曜日ヘッダ
+  const head=document.createElement('div');head.className='mrpt-cal-row mrpt-cal-wdrow';
+  WEEKDAY_LABELS.forEach((w,i)=>{const c=document.createElement('div');c.className='mrpt-cal-wd'+(i===0?' sun':i===6?' sat':'');c.textContent=w;head.appendChild(c);});
+  wrap.appendChild(head);
+  const dates=enumerateMonthDates(ym);
+  if(!dates.length)return wrap;
+  const firstDow=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1,1).getDay();
+  let row=document.createElement('div');row.className='mrpt-cal-row';
+  for(let i=0;i<firstDow;i++){const b=document.createElement('div');b.className='mrpt-cal-cell blank';row.appendChild(b);}
+  let col=firstDow;
+  dates.forEach(dateStr=>{
+    const info=getDayInfo(dateStr);
+    const cell=document.createElement('div');cell.className='mrpt-cal-cell';
+    const dnum=document.createElement('div');dnum.className='mrpt-cal-daynum'+(info&&info.isSun?' sun':info&&info.isSat?' sat':'')+(info&&info.isHoliday?' hol':'');
+    dnum.textContent=String(Number(dateStr.slice(8,10)));
+    cell.appendChild(dnum);
+    const sites=byDate[dateStr];
+    if(sites&&Object.keys(sites).length){
+      Object.keys(sites).sort((a,b)=>a<b?-1:(a>b?1:0)).forEach(sn=>{
+        const line=document.createElement('div');line.className='mrpt-cal-site';
+        line.textContent=showCount?(sn+'：'+sites[sn].size+'人'):sn;
+        cell.appendChild(line);
+      });
+    }else{
+      const dash=document.createElement('div');dash.className='mrpt-cal-none';dash.textContent='—';cell.appendChild(dash);
+    }
+    row.appendChild(cell);col++;
+    if(col===7){wrap.appendChild(row);row=document.createElement('div');row.className='mrpt-cal-row';col=0;}
+  });
+  if(col>0){for(let i=col;i<7;i++){const b=document.createElement('div');b.className='mrpt-cal-cell blank';row.appendChild(b);}wrap.appendChild(row);}
+  return wrap;
 }
 
 function renderRawPage(){
@@ -1852,6 +2290,8 @@ function renderAllPages(){
   renderEmployeePage();
   renderEmpMonthlyDefault();
   renderOverallPage();
+  renderAccountingReportPage();
+  renderMonthlyReportPage();
   renderProjectListPage();
   renderProjectDetailDefault();
   renderProjectYearPage();

@@ -278,6 +278,33 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .machine-meta{font-size:11px;color:var(--text3);}
 .machine-hist-item{font-size:12px;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border);}
 .machine-hist-item:last-child{border-bottom:none;}
+
+/* ===== 本人月別カレンダー（日報カレンダーMVP） ===== */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-title{font-size:15px;font-weight:700;color:var(--text);}
+.cal-nav-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);width:40px;height:36px;font-size:16px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;}
+.cal-nav-btn:active{background:var(--accent-light);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-wd{text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:2px 0;}
+.cal-wd.sat{color:#1560b0;}
+.cal-wd.sun{color:var(--danger);}
+.cal-cell{min-height:52px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:3px 3px 4px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden;}
+.cal-cell.blank{border:none;background:none;cursor:default;}
+.cal-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+.cal-cell.has-report{background:var(--accent-light);}
+.cal-cell.has-leave{background:var(--warn-bg);}
+.cal-daynum{font-size:11px;font-weight:700;color:var(--text2);line-height:1;}
+.cal-daynum.sat{color:#1560b0;}
+.cal-daynum.sun{color:var(--danger);}
+.cal-dot{font-size:10px;line-height:1.2;}
+.cal-site{font-size:9px;color:var(--accent);line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cal-leave{font-size:9px;font-weight:700;color:var(--warn);line-height:1.15;}
+.cal-legend{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px;font-size:11px;color:var(--text3);}
+.cal-legend span{display:inline-flex;align-items:center;gap:4px;}
+.cal-legend i{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--border);}
+.cal-legend i.rep{background:var(--accent-light);}
+.cal-legend i.lv{background:var(--warn-bg);}
+.cal-section-title{font-size:13px;font-weight:700;color:var(--text2);margin:18px 0 8px;}
 </style>
 </head>
 <body>
@@ -485,6 +512,18 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
   <!-- 履歴 -->
   <div class="content" id="content-history">
+    <div class="cal-head">
+      <button class="cal-nav-btn" onclick="changeMyCalMonth(-1)" aria-label="前月">‹</button>
+      <div class="cal-title" id="myCalTitle">-</div>
+      <button class="cal-nav-btn" onclick="changeMyCalMonth(1)" aria-label="次月">›</button>
+    </div>
+    <div class="cal-grid" id="myCalGrid"></div>
+    <div class="cal-legend">
+      <span><i class="rep"></i>日報あり</span>
+      <span><i class="lv"></i>有給</span>
+      <span>枠なし＝日報なし</span>
+    </div>
+    <div class="cal-section-title">📋 日報履歴</div>
     <div id="historyList"><div class="empty-msg">読み込み中...</div></div>
   </div>
 
@@ -1455,6 +1494,84 @@ async function loadHistory(){
   });
   renderHistory(data||[]);
 }
+
+// ===== 本人月別カレンダー（日報カレンダーMVP） =====
+// 本人日報は list_my_reports_secure、承認済み有給は list_my_paid_leave_secure を再利用（direct readなし）。
+let myCalMonth=new Date();
+function calYmd(y,m1,d){return `${y}-${String(m1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;} // m1は1-12
+function changeMyCalMonth(delta){myCalMonth=new Date(myCalMonth.getFullYear(),myCalMonth.getMonth()+delta,1);loadMyCalendar();}
+async function loadMyCalendar(){
+  const token=state.currentUser?.session_token;
+  if(!token)return;
+  const y=myCalMonth.getFullYear(),m=myCalMonth.getMonth(); // m:0-11
+  document.getElementById('myCalTitle').textContent=`${y}年${m+1}月`;
+  // 対象月の「翌月1日」より前の本人日報を取得（before_date + limit方式のRPCを再利用。limitは上限100）
+  const nextFirst=calYmd(m===11?y+1:y, m===11?1:m+2, 1);
+  let reports=[];
+  try{
+    const{data,error}=await sb.rpc('list_my_reports_secure',{session_token_input:token,before_date_input:nextFirst,limit_input:100});
+    if(error){console.error('list_my_reports_secure error:',error);}else{reports=data||[];}
+  }catch(e){console.error('list_my_reports_secure exception:',e);}
+  // 承認済み有給（任意表示）。取得失敗してもカレンダー本体は表示する。
+  let leaves=[];
+  try{
+    const{data}=await sb.rpc('list_my_paid_leave_secure',{session_token_input:token});
+    leaves=((data&&data.requests)||[]).filter(r=>r.status==='approved');
+  }catch(e){console.error('list_my_paid_leave_secure exception:',e);}
+  // 対象月ぶんだけ日付マップ化
+  const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;
+  const byDate={};
+  const ensure=k=>(byDate[k]=byDate[k]||{reports:[],leave:null});
+  reports.forEach(r=>{if((r.report_date||'').startsWith(prefix))ensure(r.report_date).reports.push(r);});
+  leaves.forEach(l=>{if((l.leave_date||'').startsWith(prefix))ensure(l.leave_date).leave=l;});
+  window._myCalData=byDate;
+  renderMyCalendar(y,m,byDate);
+}
+function renderMyCalendar(y,m,byDate){
+  const grid=document.getElementById('myCalGrid');
+  if(!grid)return;
+  const wd=['日','月','火','水','木','金','土'];
+  let html=wd.map((w,i)=>`<div class="cal-wd${i===0?' sun':i===6?' sat':''}">${w}</div>`).join('');
+  const firstDow=new Date(y,m,1).getDay();
+  const lastDate=new Date(y,m+1,0).getDate();
+  for(let i=0;i<firstDow;i++)html+='<div class="cal-cell blank"></div>';
+  const todayStr=localToday();
+  for(let d=1;d<=lastDate;d++){
+    const dateStr=calYmd(y,m+1,d);
+    const dow=new Date(y,m,d).getDay();
+    const cell=byDate[dateStr];
+    const cls=['cal-cell'];
+    if(dateStr===todayStr)cls.push('today');
+    if(cell&&cell.reports.length)cls.push('has-report');
+    else if(cell&&cell.leave)cls.push('has-leave');
+    const numCls='cal-daynum'+(dow===0?' sun':dow===6?' sat':'');
+    let inner=`<div class="${numCls}">${d}</div>`;
+    if(cell&&cell.reports.length){
+      const r=cell.reports[0];
+      const names=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean);
+      let siteLabel=names[0]||'現場なし';
+      if(names.length>1)siteLabel=`${names[0]}他${names.length-1}`;
+      const more=cell.reports.length>1?`<span style="color:var(--text3);">+${cell.reports.length-1}</span>`:'';
+      inner+=`<div class="cal-dot">📝${more}</div><div class="cal-site">${escapeHtml(siteLabel)}</div>`;
+    }else if(cell&&cell.leave){
+      const t=cell.leave.leave_type;
+      inner+=`<div class="cal-leave">🌴${t==='full'?'有給':t==='am'?'午前':'午後'}</div>`;
+    }
+    html+=`<div class="${cls.join(' ')}" onclick="onMyCalDay('${dateStr}')">${inner}</div>`;
+  }
+  grid.innerHTML=html;
+}
+function onMyCalDay(dateStr){
+  const cell=(window._myCalData||{})[dateStr];
+  if(cell&&cell.reports.length){showDetailData(cell.reports[0]);return;}
+  // 日報なし → 詳細モーダルで案内。既存の日報入力タブへ誘導する。
+  document.getElementById('detailTitle').textContent=`📋 ${dateStr}`;
+  let msg='<div style="padding:8px 0;color:var(--text2);font-size:14px;">この日の日報はありません。</div>';
+  if(cell&&cell.leave){const t=cell.leave.leave_type;msg=`<div style="padding:8px 0;color:var(--warn);font-size:14px;font-weight:700;">🌴 有給（${t==='full'?'全日':t==='am'?'午前休':'午後休'}）</div>`;}
+  msg+=`<button onclick="document.getElementById('detailModal').classList.remove('show');switchTab('report');" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">✏️ 日報入力へ</button>`;
+  document.getElementById('detailBody').innerHTML=msg;
+  document.getElementById('detailModal').classList.add('show');
+}
 function renderHistory(data){
   if(!data.length){document.getElementById('historyList').innerHTML='<div class="empty-msg">日報がまだありません</div>';return;}
   window._historyData=data;
@@ -1485,7 +1602,10 @@ function renderHistory(data){
 }
 
 function showDetail(i){
-  const r=window._historyData[i];
+  showDetailData(window._historyData[i]);
+}
+function showDetailData(r){
+  if(!r)return;
   const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
   const matNames=(r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);if(!m)return null;const q=(r.material_quantities||{})[id]||1;return `${m.name}×${q}`;}).filter(Boolean).join('、');
   const wtLabel=r.work_type==='night'?'🌙 夜間緊急':r.work_type==='overtime'?'⏰ 残業':'🌞 通常';
@@ -2287,6 +2407,7 @@ async function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('content-'+name).classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
+  if(name==='history')await loadMyCalendar();
   if(name==='stats')await loadStats();
   if(name==='machine')await loadMachines();
   if(name==='leave')await loadLeaveData();

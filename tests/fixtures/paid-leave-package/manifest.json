@@ -1,0 +1,14 @@
+{
+  "format_version": "1.0",
+  "system": "playwright-smoke-fixture",
+  "exported_at": "2099-01-31T00:00:00+09:00",
+  "period": { "label": "2099年1月" },
+  "files": [
+    { "name": "projects_summary.csv", "type": "projects_summary", "rows": 2 },
+    { "name": "attendance_details.csv", "type": "attendance_details", "rows": 5 },
+    { "name": "project_cost_details.csv", "type": "project_cost_details", "rows": 2 },
+    { "name": "machine_details.csv", "type": "machine_details", "rows": 2 },
+    { "name": "paid_leave_details.csv", "type": "paid_leave_details", "rows": 3 },
+    { "name": "paid_leave_balances.csv", "type": "paid_leave_balances", "rows": 2 }
+  ]
+}

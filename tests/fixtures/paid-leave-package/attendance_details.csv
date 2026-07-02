@@ -1,0 +1,6 @@
+report_id,report_date,employee_id,employee_name,site_name,normal_mins,overtime_mins,labor_days,labor_cost,report_status
+R001,2099-01-05,E001,テスト太郎,架空現場A,480,60,1,20000,confirmed
+R002,2099-01-06,E001,テスト太郎,架空現場B,480,0,1,18000,confirmed
+R003,2099-01-05,E002,テスト花子,架空現場A,480,30,1,19000,confirmed
+R004,2099-01-07,E002,テスト花子,架空現場B,480,0,1,18000,confirmed
+R005,2099-01-05,E003,テスト次郎,架空現場A,480,0,1,17000,confirmed

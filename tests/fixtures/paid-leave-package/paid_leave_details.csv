@@ -1,0 +1,4 @@
+employee_id,employee_name,leave_date,fiscal_year,leave_type,status
+E001,テスト太郎,2099-01-08,2099,full,confirmed
+E001,テスト太郎,2099-01-09,2099,am,confirmed
+E002,テスト花子,2099-01-10,2099,pm,confirmed

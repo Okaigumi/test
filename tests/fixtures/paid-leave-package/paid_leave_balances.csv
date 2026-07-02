@@ -1,0 +1,3 @@
+employee_id,employee_name,granted_total,used_total,remaining
+E001,テスト太郎,20,5,15
+E002,テスト花子,20,3,17

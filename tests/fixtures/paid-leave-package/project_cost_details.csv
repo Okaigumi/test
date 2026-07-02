@@ -1,0 +1,3 @@
+invoice_id,invoice_date,project_id,site_name,cost_category,vendor_name,amount,status
+INV001,2099-01-10,P001,架空現場A,material,架空商店A,500000,confirmed
+INV002,2099-01-12,P002,架空現場B,subcontract,架空業者B,800000,confirmed

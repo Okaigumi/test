@@ -1,0 +1,3 @@
+machine_id,machine_name,ownership,lease_monthly,owned_cost,is_active
+M001,架空重機A,owned,0,3000000,true
+M002,架空重機B,lease,150000,0,true

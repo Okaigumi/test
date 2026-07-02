@@ -16,3 +16,10 @@ backups/
 # Supabase CLI ローカル生成物
 supabase/.temp/
 supabase/.branches/
+
+# Node / Playwright（読み取り専用スモーク）
+node_modules/
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/

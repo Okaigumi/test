@@ -1,0 +1,13 @@
+{
+  "name": "genba-nippo-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "読み取り専用・バックエンド非依存の Playwright スモークテスト（アプリ本体は静的HTML）。",
+  "type": "module",
+  "scripts": {
+    "test:smoke": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

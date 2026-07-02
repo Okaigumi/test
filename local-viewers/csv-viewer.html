@@ -90,6 +90,16 @@ tr.total-row td{font-weight:700;background:#f7f8fa;border-top:2px solid #cfd4dc;
 .emp-block{margin-bottom:26px;}
 .emp-head{font-size:16px;font-weight:700;margin-bottom:4px;}
 .emp-meta{font-size:14px;color:var(--muted);margin-bottom:8px;}
+/* 出勤簿：曜日・祝日の控えめ色分け（日付セルの文字色のみ・行背景は変えない） */
+.att-sat{color:#1560b0;}
+.att-sun,.att-holiday{color:#b02a2a;}
+.att-wd{color:var(--muted);font-weight:400;margin-left:2px;}
+.att-holname{color:#b02a2a;font-size:11px;margin-left:4px;}
+/* 作業なし日の行：文字を薄くして実績行と区別（既存の罫線・レイアウトは維持） */
+tr.att-empty td{color:var(--muted);background:#fcfcfd;}
+/* 「作業なし日も表示」トグル */
+.empty-toggle{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);margin-bottom:10px;cursor:pointer;}
+.empty-toggle input{cursor:pointer;}
 
 /* ===== ボタン ===== */
 .link-btn{border:none;background:none;color:var(--accent);font:inherit;font-size:15px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 2px;}
@@ -534,7 +544,9 @@ function getAvailablePageIds(csvType){
 
 // 読み込み状態
 let state={loaded:false,fileName:'',csvType:null,csvLabel:'',headers:[],rows:[],
-  reports:null,warnings:[],errors:[],minDate:'',maxDate:'',generatedAt:''};
+  reports:null,warnings:[],errors:[],minDate:'',maxDate:'',generatedAt:'',
+  // 出勤簿：作業なし日も表示するか（初期ON）／従業員別 月別出勤簿の再描画用に現在の従業員IDを保持
+  showEmptyDays:true,currentEmpMonthlyId:null};
 
 // ===== CSVパーサ（自前・文字単位ステートマシン） =====
 // 返り値：array of arrays（行 × セル）。クォート未閉じは例外。
@@ -621,6 +633,63 @@ function formatMonthLabel(ym){
   const m=/^(\d{4})-(\d{2})$/.exec(ym);
   if(!m)return ym;
   return m[1]+'年'+String(Number(m[2]))+'月';
+}
+
+// ===== 出勤簿：曜日・祝日ヘルパー =====
+const WEEKDAY_LABELS=['日','月','火','水','木','金','土'];
+// 日本の祝日（固定リスト・手動更新前提）。
+// ★重要：外部API/ライブラリは使わない方針のため、ここに YYYY-MM-DD をベタ書きする。
+//   国民の祝日は法改正・振替休日・春分/秋分の確定により毎年変わるため、
+//   新しい年を扱うときは必ずこのリストへ手動で追記すること（自動算出はしない）。
+//   まずは実データで使う可能性が高い2026年分を収録。
+const HOLIDAYS={
+  // 2026年（内閣府公表ベース）
+  '2026-01-01':'元日',
+  '2026-01-12':'成人の日',
+  '2026-02-11':'建国記念の日',
+  '2026-02-23':'天皇誕生日',
+  '2026-03-20':'春分の日',
+  '2026-04-29':'昭和の日',
+  '2026-05-03':'憲法記念日',
+  '2026-05-04':'みどりの日',
+  '2026-05-05':'こどもの日',
+  '2026-05-06':'振替休日',
+  '2026-07-20':'海の日',
+  '2026-08-11':'山の日',
+  '2026-09-21':'敬老の日',
+  '2026-09-22':'国民の休日',
+  '2026-09-23':'秋分の日',
+  '2026-10-12':'スポーツの日',
+  '2026-11-03':'文化の日',
+  '2026-11-23':'勤労感謝の日'
+  // 例）2027年分を追加する場合はここに続けて記載する：'2027-01-01':'元日', ...
+};
+// 'YYYY-MM-DD' を分解して曜日・土日・祝日情報を返す。パース不能なら null。
+// ※ new Date("YYYY-MM-DD") はUTC解釈で日付がずれるため使わず、必ず new Date(y,m-1,d)。
+function getDayInfo(dateStr){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if(!m)return null;
+  const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
+  const dow=new Date(y,mo-1,d).getDay(); // 0=日 .. 6=土（ローカル基準）
+  const holidayName=HOLIDAYS[dateStr]||null;
+  return{
+    dow:dow,
+    weekday:WEEKDAY_LABELS[dow],
+    isSat:dow===6,
+    isSun:dow===0,
+    isHoliday:!!holidayName,
+    holidayName:holidayName
+  };
+}
+// 対象月（'YYYY-MM'）の全日付を 'YYYY-MM-DD' 昇順で返す。
+function enumerateMonthDates(ym){
+  const m=/^(\d{4})-(\d{2})$/.exec(ym);
+  if(!m)return[];
+  const y=Number(m[1]),mo=Number(m[2]);
+  const last=new Date(y,mo,0).getDate(); // 翌月0日＝当月末日
+  const out=[];
+  for(let d=1;d<=last;d++)out.push(ym+'-'+String(d).padStart(2,'0'));
+  return out;
 }
 function nowStamp(){
   const d=new Date();const p=n=>String(n).padStart(2,'0');
@@ -787,8 +856,10 @@ function buildEmployeeAttendanceSummary(reports){
 
 // ===== 出勤簿 日別ブロック生成（overall / empMonthly 共通） =====
 // reports（Layer2）のみ使用。normal_mins/overtime_mins は report単位値。
+// 日付列は曜日・祝日の装飾があるため fmt を持たず専用描画（buildAttendanceBlock 内で処理）。
+// それ以外の列は report を受けて文字列を返す fmt を持つ。
 const DAILY_COLS=[
-  {label:'日付',cls:'',fmt:r=>r.report_date},
+  {label:'日付',cls:'',date:true},
   {label:'現場名',cls:'',fmt:r=>r.site_names.join('・')},
   {label:'開始',cls:'',fmt:r=>r.start_time},
   {label:'終了',cls:'',fmt:r=>r.end_time},
@@ -800,6 +871,22 @@ const DAILY_COLS=[
   {label:'メモ',cls:'',fmt:r=>r.memo}
 ];
 
+// 日付セルを描画（曜日を付け、土日・祝日は控えめに色分け）。td に直接書き込む。
+function fillDateCell(td,dateStr){
+  const info=getDayInfo(dateStr);
+  // 日付本体
+  td.appendChild(document.createTextNode(dateStr));
+  if(!info)return;
+  // 曜日（例：（月））
+  const wd=document.createElement('span');wd.className='att-wd';wd.textContent='（'+info.weekday+'）';td.appendChild(wd);
+  // 土日・祝日の色分け（日付セルの文字色のみ）
+  if(info.isHoliday)td.classList.add('att-holiday');
+  else if(info.isSun)td.classList.add('att-sun');
+  else if(info.isSat)td.classList.add('att-sat');
+  // 祝日名を小さく併記
+  if(info.isHoliday){const hn=document.createElement('span');hn.className='att-holname';hn.textContent=info.holidayName;td.appendChild(hn);}
+}
+
 function buildAttendanceBlock(headingText,reportList){
   // 並び：report_date 昇順 → start_time 昇順 → report_id 昇順
   const list=reportList.slice().sort((a,b)=>{
@@ -807,6 +894,7 @@ function buildAttendanceBlock(headingText,reportList){
     if(a.start_time!==b.start_time)return a.start_time<b.start_time?-1:1;
     return a.report_id<b.report_id?-1:(a.report_id>b.report_id?1:0);
   });
+  // 集計は実績（list）からのみ。作業なし日はここに一切混ぜない。
   const dateSet=new Set(),reportSet=new Set();
   let sN=0,sO=0,sD=0,sC=0;
   list.forEach(r=>{dateSet.add(r.report_date);reportSet.add(r.report_id);sN+=r.normal_mins;sO+=r.overtime_mins;sD+=r.labor_days_total;sC+=r.labor_cost_total;});
@@ -817,15 +905,56 @@ function buildAttendanceBlock(headingText,reportList){
   meta.textContent='出勤日数：'+dateSet.size+'日　稼働件数：'+reportSet.size+'件　通常時間：'+formatMinutes(sN)+'　残業時間：'+formatMinutes(sO)+'　人工：'+formatNumber(sD,2)+'　労務費：'+formatMoney(sC)+'円';
   block.appendChild(meta);
 
+  // 表示する行を組み立てる。
+  //  - state.showEmptyDays が false：従来どおり実績（list）のみ。
+  //  - true：list に含まれる各月について1日〜月末を生成し、実績がある日は実績行、無い日は「作業なし行」を出す。
+  //    ※ 集計（上の sN 等・dateSet）は list からのみ計算済みなので、作業なし行を足しても集計は変わらない。
+  let renderRows;
+  if(state.showEmptyDays){
+    // 日付→実績配列（list は既にソート済みなので順序は保たれる）
+    const byDate=new Map();
+    list.forEach(r=>{if(!byDate.has(r.report_date))byDate.set(r.report_date,[]);byDate.get(r.report_date).push(r);});
+    // list に登場する月（YYYY-MM）を昇順で。全体出勤簿は複数月にまたがるため月ごとに自然に埋める。
+    const monthSet=new Set();
+    list.forEach(r=>{if(r.report_date&&r.report_date.length>=7)monthSet.add(r.report_date.slice(0,7));});
+    const months=Array.from(monthSet).sort((a,b)=>a<b?-1:(a>b?1:0));
+    renderRows=[];
+    months.forEach(ym=>{
+      enumerateMonthDates(ym).forEach(dateStr=>{
+        const reps=byDate.get(dateStr);
+        if(reps&&reps.length)reps.forEach(r=>renderRows.push({empty:false,r:r,date:dateStr}));
+        else renderRows.push({empty:true,r:null,date:dateStr});
+      });
+    });
+  }else{
+    renderRows=list.map(r=>({empty:false,r:r,date:r.report_date}));
+  }
+
   const scroll=document.createElement('div');scroll.className='table-scroll';
   const table=document.createElement('table');
   const thead=document.createElement('thead');const trh=document.createElement('tr');
   DAILY_COLS.forEach(c=>{const th=document.createElement('th');th.textContent=c.label;if(c.cls)th.className=c.cls;trh.appendChild(th);});
   thead.appendChild(trh);table.appendChild(thead);
   const tbody=document.createElement('tbody');
-  list.forEach(r=>{const tr=document.createElement('tr');DAILY_COLS.forEach(c=>{const td=document.createElement('td');td.textContent=c.fmt(r);if(c.cls)td.className=c.cls;tr.appendChild(td);});tbody.appendChild(tr);});
+  renderRows.forEach(row=>{
+    const tr=document.createElement('tr');
+    if(row.empty)tr.className='att-empty';
+    DAILY_COLS.forEach(c=>{
+      const td=document.createElement('td');
+      if(c.cls)td.className=c.cls;
+      if(c.date){
+        fillDateCell(td,row.date); // 実績行・作業なし行とも日付＋曜日＋祝日装飾
+      }else if(row.empty){
+        td.textContent='—'; // 作業なし行は日付以外を「—」
+      }else{
+        td.textContent=c.fmt(row.r);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
 
-  // 合計行（通常・残業・人工・労務費）
+  // 合計行（通常・残業・人工・労務費）。作業なし行は含めない実績集計そのまま。
   const totals={'通常':formatMinutes(sN),'残業':formatMinutes(sO),'人工':formatNumber(sD,2),'労務費':formatMoney(sC)};
   const trt=document.createElement('tr');trt.className='total-row';
   DAILY_COLS.forEach((c,idx)=>{const td=document.createElement('td');if(idx===0)td.textContent='合計';else if(totals[c.label]!==undefined)td.textContent=totals[c.label];else td.textContent='';if(c.cls)td.className=c.cls;trt.appendChild(td);});
@@ -833,6 +962,16 @@ function buildAttendanceBlock(headingText,reportList){
 
   table.appendChild(tbody);scroll.appendChild(table);block.appendChild(scroll);
   return block;
+}
+
+// 「作業なし日も表示」トグルを生成。変更時は onChange で該当ページを再描画する。
+function buildEmptyDayToggle(onChange){
+  const wrap=document.createElement('label');wrap.className='empty-toggle no-print';
+  const cb=document.createElement('input');cb.type='checkbox';cb.checked=state.showEmptyDays;
+  cb.addEventListener('change',()=>{state.showEmptyDays=cb.checked;onChange();});
+  wrap.appendChild(cb);
+  wrap.appendChild(document.createTextNode('作業なし日も表示（土日・祝日を含む対象月の全日）'));
+  return wrap;
 }
 
 // ===== サマリーテーブル描画（textContent・列ごとにnumクラス対応） =====
@@ -937,6 +1076,7 @@ function showEmployeeMonthlyAttendance(employeeId){
 }
 
 function renderEmployeeMonthlyAttendance(employeeId){
+  state.currentEmpMonthlyId=employeeId; // トグル変更時の再描画に使う
   const area=document.getElementById('empMonthlyArea');
   clear(area);
   const back=document.createElement('button');
@@ -944,6 +1084,7 @@ function renderEmployeeMonthlyAttendance(employeeId){
   back.textContent='← 従業員別サマリーに戻る';
   back.addEventListener('click',()=>showViewerPage('employee'));
   area.appendChild(back);
+  area.appendChild(buildEmptyDayToggle(()=>renderEmployeeMonthlyAttendance(state.currentEmpMonthlyId)));
 
   const reps=(state.reports||[]).filter(r=>r.employee_id===employeeId);
   if(reps.length===0){area.appendChild(noteEl('対象の従業員データがありません。'));return;}
@@ -1109,6 +1250,7 @@ function renderOverallPage(){
     if(!g){g={employee_name:rep.employee_name,reports:[]};groups.set(key,g);}
     g.reports.push(rep);
   });
+  area.appendChild(buildEmptyDayToggle(renderOverallPage));
   const groupArr=Array.from(groups.values()).sort((a,b)=>a.employee_name<b.employee_name?-1:(a.employee_name>b.employee_name?1:0));
   groupArr.forEach(g=>{area.appendChild(buildAttendanceBlock(g.employee_name||'(名前なし)',g.reports));});
 }
@@ -1808,7 +1950,8 @@ function buildSingleStateAndRender(args){
   // 状態初期化（parse部で得た warnings/errors を取りこぼさず引き継ぐ）
   // source は読込元の識別子（'zip' / 'file'）。チップの読込元表示で raw CSV名の出し分けに使う。Phase 2-4-9-8-d
   state={loaded:true,fileName:fileName,source:args.source||'file',csvType:null,csvLabel:'',headers:[],rows:[],
-    reports:null,warnings:warnings,errors:errors,minDate:'',maxDate:'',generatedAt:nowStamp()};
+    reports:null,warnings:warnings,errors:errors,minDate:'',maxDate:'',generatedAt:nowStamp(),
+    showEmptyDays:true,currentEmpMonthlyId:null};
   document.getElementById('preLoad').classList.add('hidden');
   document.getElementById('viewerBody').classList.remove('hidden');
   // ZIP由来単体ビューの戻る導線は既定で隠す。ZIP経路（openZipSingleReport）でのみ後から表示する。
@@ -1874,7 +2017,8 @@ document.getElementById('fileInput').addEventListener('change',function(e){
   reader.onload=function(){handleText(file.name,String(reader.result));};
   reader.onerror=function(){
     state={loaded:true,fileName:file.name,csvType:null,csvLabel:'',headers:[],rows:[],
-      reports:null,warnings:[],errors:['ファイルが読めません。'],minDate:'',maxDate:'',generatedAt:nowStamp()};
+      reports:null,warnings:[],errors:['ファイルが読めません。'],minDate:'',maxDate:'',generatedAt:nowStamp(),
+      showEmptyDays:true,currentEmpMonthlyId:null};
     document.getElementById('preLoad').classList.add('hidden');
     document.getElementById('viewerBody').classList.remove('hidden');
     renderAllPages();showViewerPage('messages');

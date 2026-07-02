@@ -253,6 +253,13 @@
 - SQL：`docs/sql/phase4c-4-report-summary-revoke.sql`（実行済み記録へ更新済み）
 - 詳細は docs/db-migrations.md の「2026-07-02 Phase 4-C-4 report_summary View 封鎖・不要 GRANT 整理 完了」を参照
 
+### 4-C-5 reports 残存不要権限（TRUNCATE / REFERENCES / TRIGGER）REVOKE ✅ 完了（2026-07-02）
+
+- Phase 4-C 補整理。ライブ確認で `reports` に残っていた `anon` / `authenticated` の TRUNCATE / REFERENCES / TRIGGER を REVOKE（SELECT/INSERT/UPDATE/DELETE は既に遮断済み）。日報カレンダーMVPのブロッカーではないが先に対応。
+- 実行SQLは REVOKE 1本のみ（`revoke truncate, references, trigger on table public.reports from anon, authenticated;`）→ Success. No rows returned
+- DB事後確認：`reports` の anon / authenticated ともに全7種 false（TRUNCATE/REFERENCES/TRIGGER の残存除去を確認）。`report_summary`・RPC・policy・postgres/service_role は未変更
+- SQL：`docs/sql/phase4c-5-reports-extra-privileges-revoke.sql`（実行済み記録へ更新済み）。詳細は docs/db-migrations.md の「2026-07-02 Phase 4-C-5 …完了」を参照
+
 ### 次候補（Phase 4-C 完了後の整理・他テーブル読み取り整理）
 
 - Phase 4-C 系（4-C-1〜4-C-4）完了後の整理（`reports_all` policy の整理判断・不要になった View/権限の棚卸しなど）

@@ -2491,3 +2491,68 @@ REVOKE ALL PRIVILEGES ON public.report_summary FROM authenticated;
 ### SQL記録ファイル
 
 - `docs/sql/phase4c-4-report-summary-revoke.sql`（実行済み記録へ更新済み）
+
+## 2026-07-02 Phase 4-C-5 reports 残存不要権限（TRUNCATE / REFERENCES / TRIGGER）REVOKE 完了
+
+### 目的
+
+- `public.reports` に残っていた `anon` / `authenticated` の非読み取り不要権限
+  （TRUNCATE / REFERENCES / TRIGGER）を REVOKE する。
+- SELECT / INSERT / UPDATE / DELETE は既に遮断済み（Phase 4-C-1 ほか）。本整理は
+  それらの遮断後に残っていた TRUNCATE / REFERENCES / TRIGGER の除去のみ。
+- 日報カレンダー MVP の読み取りブロッカーではないが、Phase 4-C 補整理として先に対応。
+
+### 背景（Phase 4-C 完了後のライブ確認結果）
+
+- `report_summary`：anon / authenticated ともに全権限 false（残存なし・4-C-4 で対応済み）。
+- `reports`：anon / authenticated ともに SELECT/INSERT/UPDATE/DELETE=false だが、
+  TRUNCATE / REFERENCES / TRIGGER = true が残存していた。
+
+### 方針（確定）
+
+- 実行 SQL は REVOKE 1本のみ。
+- `report_summary` / RPC / policy / `postgres` / `service_role` は一切変更しない。
+- `index.html` / `admin-app.html` / `genka-app.html` は変更しない。
+
+### 実行済み SQL（`docs/sql/phase4c-5-reports-extra-privileges-revoke.sql` を Supabase SQL Editor で実行・2026-07-02）
+
+```sql
+revoke truncate, references, trigger on table public.reports from anon, authenticated;
+```
+
+- 実行結果：Success. No rows returned
+- 危険SQL（DROP / DELETE / TRUNCATE / ALTER / UPDATE / INSERT / CREATE）なし。変更は REVOKE 1本のみ。
+
+### 実行前確認結果（ユーザー提供・2026-07-02）
+
+```text
+role_name,object_name,can_select,can_insert,can_update,can_delete,can_truncate,can_references,can_trigger
+anon,public.report_summary,false,false,false,false,false,false,false
+authenticated,public.report_summary,false,false,false,false,false,false,false
+anon,public.reports,false,false,false,false,true,true,true
+authenticated,public.reports,false,false,false,false,true,true,true
+```
+
+- `reports`：anon / authenticated ともに can_truncate=true / can_references=true / can_trigger=true（要除去）。
+- `report_summary`：全 false（対象外・確認のみ）。
+
+### 実行後確認結果（Supabase SQL Editor・2026-07-02）
+
+```text
+role_name,object_name,can_select,can_insert,can_update,can_delete,can_truncate,can_references,can_trigger
+anon,public.reports,false,false,false,false,false,false,false
+authenticated,public.reports,false,false,false,false,false,false,false
+```
+
+- `reports`：anon / authenticated ともに全 7 種 false（SELECT/INSERT/UPDATE/DELETE は従来どおり遮断、TRUNCATE/REFERENCES/TRIGGER の残存を除去）。期待どおり。
+
+### 触らないもの
+
+- `report_summary`（既に全 REVOKE 済み）
+- read RPC 5本 / write RPC / policy
+- `postgres` / `service_role` の権限
+- フロント（`index.html` / `admin-app.html` / `genka-app.html`）
+
+### SQL記録ファイル
+
+- `docs/sql/phase4c-5-reports-extra-privileges-revoke.sql`（実行済み記録へ更新済み）

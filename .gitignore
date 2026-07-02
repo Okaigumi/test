@@ -6,3 +6,13 @@ backups/
 
 # ローカル環境変数（接続文字列・パスワードを含む）
 .env.backup.local
+
+# 環境変数全般（接続文字列・トークンを含む。example は明示的に追跡する）
+.env
+.env.*
+!.env.example
+!.env.backup.local.example
+
+# Supabase CLI ローカル生成物
+supabase/.temp/
+supabase/.branches/

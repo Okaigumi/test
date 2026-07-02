@@ -216,8 +216,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .stats-top-num{font-size:20px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);}
 .stats-top-num.ot{color:var(--accent2);}
 .stats-top-label{font-size:11px;color:var(--text3);margin-top:2px;}
-.csv-btn{width:100%;background:var(--surface);border:1.5px solid var(--accent);color:var(--accent);border-radius:var(--radius);padding:12px;font-size:14px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;}
-.csv-btn:active{background:var(--accent-light);}
 
 .empty-msg{text-align:center;color:var(--text3);padding:40px 0;font-size:14px;}
 
@@ -624,7 +622,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div id="statsSiteList"><div class="empty-msg">読み込み中...</div></div>
     <div class="stats-section-title">外注 使用数量</div>
     <div id="statsMaterialList"><div class="empty-msg">読み込み中...</div></div>
-    <button class="csv-btn" onclick="exportCSV()">📥 CSVダウンロード</button>
     <div style="height:24px;"></div>
 
     <!-- 現場別詳細（タップで表示） -->
@@ -1915,25 +1912,6 @@ function showSiteDetail(siteId){
 function closeSiteDetail(){
   document.getElementById('siteDetailView').style.display='none';
   window.scrollTo(0,0);
-}
-
-function exportCSV(){
-  const reports=window._statsReports||[];
-  if(!reports.length){alert('データがありません');return;}
-  const header=['日付','従業員','開始','終了','通常時間(h)','残業時間(h)','現場','材料・数量','メモ'];
-  const rows=reports.map(r=>[
-    r.report_date,r.employee_name,r.start_time,r.end_time,
-    Math.round((r.normal_mins||0)/60*10)/10,
-    Math.round((r.overtime_mins||0)/60*10)/10,
-    (r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').join('・'),
-    (r.material_ids||[]).map(id=>{const m=state.materials.find(m=>m.id===id);const q=(r.material_quantities||{})[id]||1;return `${m?.name}×${q}`;}).join('・'),
-    (r.memo||'').replace(/,/g,'、')
-  ]);
-  const csv='\uFEFF'+[header,...rows].map(r=>r.join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`日報集計_${statsMonth.getFullYear()}${String(statsMonth.getMonth()+1).padStart(2,'0')}.csv`;
-  a.click();
 }
 
 // ===== MACHINES =====

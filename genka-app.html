@@ -585,7 +585,16 @@ async function openBudgetModal(siteId,siteName){
   document.getElementById('budgetMemo').value='';
 
   // 既存の年間予算を読み込む（重複行があっても最新1件を採用）
-  const{data,error}=await sb.from('site_budgets').select('*').eq('site_id',siteId).eq('year',currentMonth.getFullYear()).eq('is_active',true).is('month',null).order('updated_at',{ascending:false}).limit(1);
+  // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data,error}=await sb.rpc('list_site_budgets_secure',{
+    session_token_input:token,
+    is_active_input:true,
+    site_id_input:siteId,
+    year_input:currentMonth.getFullYear(),
+    annual_only_input:true
+  });
   if(error){alert('予算データの取得に失敗しました：'+error.message);return;}
   const budget=data?.[0]||null;
   if(budget){
@@ -841,7 +850,15 @@ async function loadData(){
   const invs=invoicesData||[];
 
   // 予算データ取得（年間のみ）
-  const{data:budgetsData}=await sb.from('site_budgets').select('*').eq('year',currentMonth.getFullYear()).eq('is_active',true);
+  // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。annual_only で年間予算のみ。
+  const{data:budgetsData,error:budgetsError}=await sb.rpc('list_site_budgets_secure',{
+    session_token_input:token,
+    is_active_input:true,
+    site_id_input:null,
+    year_input:currentMonth.getFullYear(),
+    annual_only_input:true
+  });
+  if(budgetsError)console.error('予算取得エラー:',budgetsError);
   const budgets=budgetsData||[];
   const budgetMap={};
   budgets.forEach(b=>{

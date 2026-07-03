@@ -2791,3 +2791,57 @@ authenticated,public.reports,false,false,false,false,false,false,false
 
 - DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
 - フロント：変更なし（本エントリでは HTML 無改変）。
+
+---
+
+## 2026-07-04 Phase 4-D-2c site_budgets SELECT REVOKE（★実行済み★）
+
+### 目的
+
+- 4-D-2a（read RPC 追加）・4-D-2b（フロント移行・本番 Network 確認 OK）を経て、`site_budgets`（現場予算）の `anon` / `authenticated` 直接 SELECT を REVOKE し、読み取りを secure read RPC 経由に一本化する
+- Phase 4-D-2（予算 `site_budgets` 読み取り保護）の最終段。これにより 4-D-2 完了
+
+### 実行ステータス
+
+- **実行済み**（2026-07-04）。Supabase SQL Editor で本番反映済み（Claude Code CLI からの DB 接続・Supabase CLI 使用なし）。
+  - 実行SQL：
+    - `REVOKE SELECT ON TABLE public.site_budgets FROM anon, authenticated;` → Success. No rows returned
+  - 事前確認 A〜E：すべて合格
+    - A：anon/authenticated に SELECT 残存（REVOKE前）・INSERT/UPDATE/DELETE なし。**PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行**
+    - B：read RPC 2本（`list_site_budgets_secure` / `get_site_budget_secure`）存在・`security_definer=true`・`search_path=public, extensions`
+    - C：read RPC 2本 EXECUTE = anon/authenticated/service_role（6行）・PUBLIC なし
+    - D：write RPC 4本（`upsert_site_budget_secure` / `update_site_budget_secure` / `deactivate_site_budget_secure` / `restore_site_budget_secure`）存在・`security_definer=true`・`search_path=public, extensions`
+    - E：RLS 有効（`relrowsecurity=true` / `relforcerowsecurity=false`）・policy（`anon_can_update_site_budgets` / `sb_read` / `sb_update` / `sb_write`）現状把握（変更しない）
+  - 事後確認 F〜J：すべて合格
+    - F：`site_budgets` の anon/authenticated SELECT 消滅（PUBLIC も無し・想定外DML権限なし）
+    - G：read RPC 2本 EXECUTE 維持（anon/authenticated/service_role・PUBLIC なし）
+    - H：read RPC 2本 `security_definer=true`・`search_path=public, extensions` 維持
+    - I：write RPC 4本 不変で存在
+    - J：RLS 有効のまま・policy 4本 不変
+
+### 本番 Network 確認（REVOKE 後）
+
+- admin：予算 active/inactive 一覧で `list_site_budgets_secure`、編集モーダルで `get_site_budget_secure` が出る（追加モーダルは RPC 呼び出しなし）。`site_budgets?select` なし・画面表示OK・Console 赤エラーなし・401/403 なし
+- genka：原価サマリ・予算モーダルで `list_site_budgets_secure` が出る。`site_budgets?select` なし・表示OK・赤エラーなし・401/403 なし
+- ※ genka 予算モーダルの表示位置が低い件は RPC/REVOKE とは無関係の UI 改善候補として切り離し（別工程）
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-2c-site-budgets-select-revoke.sql` | 事前確認A〜E / REVOKE SELECT（anon,authenticated）/ 事後確認F〜J / ロールバック（GRANT・コメントアウト）/ PUBLIC REVOKE（コメントアウト・検出時は停止確認） |
+
+### 触らなかったもの
+
+- read RPC（`list_site_budgets_secure` / `get_site_budget_secure`）/ write RPC 4本の EXECUTE 権限（維持）
+- `service_role` / `postgres`(owner) の権限（維持）
+- RLS 有効状態・既存 policy（変更なし。policy 整理は別工程候補）
+- helper `_verify_management_session`（非公開のまま不変）
+- `site_budgets` 以外のテーブル
+- PUBLIC 向け SELECT（事前A で検出なし＝REVOKE 対象外）・ロールバック GRANT（未実行）
+
+### 影響範囲
+
+- DB：`site_budgets` の anon/authenticated 直接 SELECT を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
+- フロント：変更なし（HTML 無改変。読み取りは 4-D-2b で既に read RPC 経由に移行済み）。
+- これにより **Phase 4-D-2（予算 `site_budgets` 読み取り保護）完了**。以降は 4-D-3 請求書（`invoices`）。

@@ -1,10 +1,39 @@
 -- ============================================================
 -- Phase 4-D-2c：site_budgets（現場予算）SELECT REVOKE
 -- ============================================================
--- 【実行ステータス】☆未実行☆
---   - このファイルは設計・確認用。DB へはまだ適用していない。
---   - 実行は Supabase SQL Editor で「事前確認A〜E」→「REVOKE」→「事後確認F〜J」
---     の順に手動実行する（事前・事後確認は必須）。
+-- 【実行ステータス】★実行済み★
+--   - 実行日：2026-07-04（Supabase SQL Editor 手動実行）。Claude Code CLI からの
+--     DB 接続・Supabase CLI 使用はしていない。
+--   - 実行SQL：
+--       REVOKE SELECT ON TABLE public.site_budgets FROM anon, authenticated; … Success. No rows returned
+--   - 事前確認A〜E：すべて合格
+--       A site_budgets：anon/authenticated に SELECT 残存（REVOKE前）・INSERT/UPDATE/DELETE なし。
+--         ★PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行★
+--       B read RPC 2本（list_site_budgets_secure / get_site_budget_secure）：
+--         prosecdef=true・proconfig=[search_path=public, extensions]
+--       C read RPC 2本 EXECUTE：anon/authenticated/service_role（6行）・PUBLIC なし
+--       D write RPC 4本（upsert/update/deactivate/restore_site_budget_secure）：
+--         prosecdef=true・proconfig=[search_path=public, extensions]
+--       E RLS 有効（relrowsecurity=true / relforcerowsecurity=false）。
+--         policy＝anon_can_update_site_budgets / sb_read / sb_update / sb_write（把握のみ・変更なし）
+--   - 事後確認F〜J：すべて合格
+--       F site_budgets の anon/authenticated SELECT：消滅（PUBLIC も無し・想定外DMLなし）
+--       G read RPC 2本 EXECUTE：anon/authenticated/service_role 維持（6行）・PUBLIC なし
+--       H read RPC 2本：prosecdef=true・search_path=public, extensions 維持
+--       I write RPC 4本：不変で存在（prosecdef=true）
+--       J RLS 有効のまま・policy 4本 不変
+--   - PUBLIC REVOKE 未実行（事前A で PUBLIC SELECT 検出なし）。ロールバック GRANT 未実行。
+--   - 本番 Network 確認（REVOKE 後）OK：
+--       admin：予算 active/inactive 一覧・編集モーダルで list_site_budgets_secure /
+--              get_site_budget_secure が出る。site_budgets?select= なし・赤エラーなし・401/403 なし。
+--       genka：原価サマリ・予算モーダルで list_site_budgets_secure が出る。同上。
+--       ※ genka 予算モーダルの表示位置が低い件は RPC/REVOKE とは別の UI 改善候補として切り離し。
+--
+--   【この段の状態】
+--   - site_budgets の anon/authenticated direct SELECT は遮断完了。読み取りは read RPC 経由に一本化。
+--   - RLS / policy は未変更（policy 整理は別工程候補）。
+--   - 記録先：docs/db-migrations.md「2026-07-04 Phase 4-D-2c site_budgets SELECT REVOKE（実行済み）」/
+--     docs/roadmap.md Phase 4-D-2 セクション参照。これにより Phase 4-D-2（site_budgets 読み取り保護）完了。
 --
 -- 【前提（すべて完了済み）】
 --   - 4-D-2a：read RPC 2本追加済み（list_site_budgets_secure /

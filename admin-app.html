@@ -321,14 +321,18 @@ async function aLogout(){
 }
 
 async function startApp(){
+  // Phase 4-D-1b：単価（unit_rates）は secure read RPC 経由（direct SELECT を置換）。
+  const token=currentUser?.session_token;
+  if(!token){sessionStorage.removeItem('adminUser');location.reload();return;}
   const[sRes,eRes,subRes,mRes,urRes,cRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true).order('name'),
     sb.from('employees').select('id,name,role,company_id,is_active').eq('is_active',true).order('name'),
     sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
     sb.from('machines').select('*').eq('is_active',true).order('name'),
-    sb.from('unit_rates').select('*'),
+    sb.rpc('list_unit_rates_secure',{session_token_input:token}),
     sb.from('companies').select('*').eq('is_active',true).order('name')
   ]);
+  if(urRes.error)console.error('単価取得エラー:',urRes.error);
   _sites=sRes.data||[];
   _employees=eRes.data||[];
   _subcontractors=subRes.data||[];
@@ -1167,10 +1171,15 @@ async function excludeInvDoc(){
 
 // ===== RATES PAGE =====
 async function pageRates(){
-  const{data:erData}=await sb.from('employee_rates').select('*');
+  // Phase 4-D-1b：単価・日給は secure read RPC 経由（direct SELECT を置換）。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data:erData,error:erErr}=await sb.rpc('list_employee_rates_secure',{session_token_input:token});
+  if(erErr)console.error('従業員日給取得エラー:',erErr);
   const erMap={};
   (erData||[]).sort((a,b)=>a.effective_from<b.effective_from?1:-1).forEach(r=>{if(!erMap[r.employee_id])erMap[r.employee_id]=r;});
-  const{data:urData}=await sb.from('unit_rates').select('*');
+  const{data:urData,error:urErr}=await sb.rpc('list_unit_rates_secure',{session_token_input:token});
+  if(urErr)console.error('単価取得エラー:',urErr);
   (urData||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
 
   const html=`

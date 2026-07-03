@@ -1249,6 +1249,9 @@ async function saveUnitRate(cat,name,inputId,unit){
 
 // ===== BUDGETS PAGE =====
 async function pageBudgets(tab){
+  // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   if(tab) _budgetTab=tab;
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openBudgetModal()">＋ 予算を追加</button>`;
 
@@ -1261,7 +1264,14 @@ async function pageBudgets(tab){
   let html='';
 
   if(_budgetTab==='active'){
-    const{data}=await sb.from('site_budgets').select('*').eq('is_active',true).order('year',{ascending:false});
+    const{data,error}=await sb.rpc('list_site_budgets_secure',{
+      session_token_input:token,
+      is_active_input:true,
+      site_id_input:null,
+      year_input:null,
+      annual_only_input:false
+    });
+    if(error)console.error('予算一覧取得エラー:',error);
     const budgets=data||[];
     html=`
       ${tabBar}
@@ -1285,7 +1295,14 @@ async function pageBudgets(tab){
         </table>
       </div>`;
   }else{
-    const{data}=await sb.from('site_budgets').select('*').eq('is_active',false).order('year',{ascending:false});
+    const{data,error}=await sb.rpc('list_site_budgets_secure',{
+      session_token_input:token,
+      is_active_input:false,
+      site_id_input:null,
+      year_input:null,
+      annual_only_input:false
+    });
+    if(error)console.error('取り消し済み予算取得エラー:',error);
     const budgets=data||[];
     html=`
       ${tabBar}
@@ -1313,8 +1330,15 @@ async function pageBudgets(tab){
 }
 
 async function openBudgetModal(budgetId=null){
+  // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   let b=null;
-  if(budgetId){const{data}=await sb.from('site_budgets').select('*').eq('id',budgetId).single();b=data;}
+  if(budgetId){
+    const{data,error}=await sb.rpc('get_site_budget_secure',{session_token_input:token,id_input:budgetId});
+    if(error)console.error('予算取得エラー:',error);
+    b=data?.[0]||null;
+  }
   const siteOpts=_sites.map(s=>`<option value="${s.id}" ${b?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
   _editBudgetId=b?.id||null;
   const body=`

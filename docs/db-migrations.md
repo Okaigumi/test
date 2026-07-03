@@ -2619,3 +2619,63 @@ authenticated,public.reports,false,false,false,false,false,false,false
 
 - DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
 - admin-app.html：ZIP に2本追加。既存4CSV・個別出力・manifest 形式は不変（後方互換）。旧ZIP（4CSV）読込も従来どおり。
+
+---
+
+## 2026-07-03 Phase 4-D-1a 単価系 read RPC 追加（★実行済み★）
+
+### 目的
+
+- `unit_rates`（単価）/ `employee_rates`（従業員日給）の管理画面 direct SELECT を、将来 secure read RPC 経由へ移行するための前段として、read RPC を2本追加する
+- Phase 4-D（financial系 読み取り保護）の最初の実施項目（4-D-1 単価系）
+- この段では **read RPC 追加のみ**。SELECT REVOKE はしない（新旧併存）
+
+### 実行ステータス
+
+- **実行済み**（2026-07-03）。Supabase SQL Editor で本番反映済み。
+  - 実行：CREATE FUNCTION ×2 / REVOKE EXECUTE FROM PUBLIC ×2 / GRANT EXECUTE TO anon,authenticated,service_role ×2（すべて Success. No rows returned）
+  - 事前確認 A-1：`_verify_management_session` 存在・`SECURITY DEFINER=true`・`search_path=public, extensions`
+  - 事前確認 A-2：ヘルパーの `anon`/`authenticated`/`public` 直接 EXECUTE なし（0行）
+  - 事前確認 B：戻り型が設計と一致
+    - `employee_rates`：`daily_rate=integer/int4` / `effective_from=date` / `employee_id=uuid` / `id=uuid`
+    - `unit_rates`：`category/name/unit=text` / `id=uuid` / `unit_price=integer/int4` / `updated_at=timestamp with time zone/timestamptz`
+  - 事前確認 C：`list_unit_rates_secure` / `list_employee_rates_secure` 事前 0行（新規）
+  - 事前確認 D：`unit_rates` / `employee_rates` とも `anon`/`authenticated` SELECT 残存（4行）
+  - 事後確認 F：2関数とも存在・`SECURITY DEFINER=true`・`search_path=public, extensions`
+  - 事後確認 G：EXECUTE = 2関数 ×（anon/authenticated/service_role）＝6行
+  - 事後確認 G-2：PUBLIC EXECUTE なし（`proacl` は postgres/anon/authenticated/service_role のみ）
+  - 事後確認 H：`unit_rates` / `employee_rates` の `anon`/`authenticated` SELECT は引き続き残存（4行）＝REVOKE 未実施
+
+### 追加したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-1a-rates-read-rpc.sql` | 単価系 read RPC 2本（事前確認A〜D / CREATE・REVOKE・GRANT / 事後確認F〜H） |
+
+### 追加した関数（2本）
+
+| 関数名 | 戻り列 | 並び |
+|---|---|---|
+| `list_unit_rates_secure(text)` | `id, category, name, unit_price, unit, updated_at`（全行） | `ORDER BY category, name` |
+| `list_employee_rates_secure(text)` | `id, employee_id, daily_rate, effective_from`（全行・多世代履歴） | `ORDER BY employee_id, effective_from DESC` |
+
+- 両関数とも `SECURITY DEFINER` / `SET search_path = public, extensions`
+- 認可は既存ヘルパー `public._verify_management_session(text)` を `PERFORM` で再利用（admin_sessions+genka_admins OR employee_sessions role=admin の二経路。不正/期限切れは helper 内で RAISE）。同一対象テーブルの write RPC（`upsert_unit_rate_secure` / `upsert_employee_rate_secure`）と同じヘルパー
+- CREATE 時デフォルトの PUBLIC EXECUTE を REVOKE し、`anon` / `authenticated` / `service_role` に GRANT
+- `employee_rates` は全行返し（従業員ごと最新採用はフロント側ロジックに委譲）
+
+### 触らないもの / この段の状態
+
+- **SELECT REVOKE 未実施**：`unit_rates` / `employee_rates` の `anon`/`authenticated` 直接 SELECT は残存。**新旧併存**状態
+- 既存 write RPC・helper `_verify_management_session`・RLS・policy・他テーブル・Storage は不変（additive-only）
+- フロント（`admin-app.html` / `genka-app.html`）は未変更
+
+### 次工程
+
+- 4-D-1b：フロント移行（`genka-app.html` startApp、`admin-app.html` startApp / pageRates の計5箇所の direct SELECT を read RPC へ置換）→ PR → merge → 本番反映確認（Network に `list_*_secure` あり / direct SELECT なし）
+- 4-D-1c：本番で RPC 経由を確認した後に `unit_rates` / `employee_rates` の `anon`/`authenticated` 直接 SELECT を REVOKE（別ファイル・別段階）
+
+### 影響範囲
+
+- DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
+- フロント：変更なし（本エントリでは HTML 無改変）。

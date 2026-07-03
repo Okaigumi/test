@@ -2,10 +2,37 @@
 -- Phase 4-D-1a：単価系 read RPC 追加
 --   list_unit_rates_secure / list_employee_rates_secure
 -- ============================================================
--- 【実行ステータス】☆未実行☆
---   - このファイルはまだ Supabase SQL Editor で実行していない。
---   - 実行は別段階（承認後）。実行後に docs/db-migrations.md /
---     docs/roadmap.md へ「実行済み」記録を追記する（今は追記しない）。
+-- 【実行ステータス】★実行済み★
+--   - 実行日：2026-07-03（Supabase SQL Editor 手動実行）
+--   - 実行内容：
+--       CREATE FUNCTION public.list_unit_rates_secure(text)          … Success. No rows returned
+--       REVOKE EXECUTE ON FUNCTION list_unit_rates_secure FROM PUBLIC … Success. No rows returned
+--       GRANT  EXECUTE ... TO anon, authenticated, service_role       … Success. No rows returned
+--       CREATE FUNCTION public.list_employee_rates_secure(text)      … Success. No rows returned
+--       REVOKE EXECUTE ON FUNCTION list_employee_rates_secure FROM PUBLIC … Success. No rows returned
+--       GRANT  EXECUTE ... TO anon, authenticated, service_role       … Success. No rows returned
+--   - 事前確認A〜D：OK
+--       A-1 _verify_management_session：存在・SECURITY DEFINER=true・search_path=public, extensions
+--       A-2 ヘルパーの anon/authenticated/public 直接 EXECUTE：0行（非公開）
+--       B   戻り型：設計と一致
+--             employee_rates.daily_rate = integer/int4、effective_from = date、
+--             employee_id = uuid、id = uuid
+--             unit_rates.category/name/unit = text、id = uuid、
+--             unit_price = integer/int4、updated_at = timestamp with time zone/timestamptz
+--       C   list_unit_rates_secure / list_employee_rates_secure：事前は 0行（新規）
+--       D   併存ベースライン：unit_rates / employee_rates とも anon/authenticated SELECT 残存（4行）
+--   - 事後確認F〜H：OK
+--       F   2関数とも存在・SECURITY DEFINER=true・search_path=public, extensions
+--       G   EXECUTE：2関数 × (anon/authenticated/service_role) = 6行
+--       G-2 PUBLIC EXECUTE：なし（proacl は postgres/anon/authenticated/service_role のみ）
+--       H   unit_rates / employee_rates の anon/authenticated SELECT：引き続き残存（4行）
+--
+--   【重要（この段の状態）】
+--   - ★SELECT REVOKE は未実施★（unit_rates / employee_rates の anon/authenticated
+--     直接 SELECT は残存）。新旧併存状態。
+--   - フロント移行（4-D-1b）・SELECT REVOKE（4-D-1c）は未実施。
+--   - 記録先：docs/db-migrations.md「2026-07-03 Phase 4-D-1a 単価系 read RPC 追加（実行済み）」/
+--     docs/roadmap.md Phase 4 セクション参照。
 --
 -- 【このファイルの方針（重要）】
 --   - additive-only：新規 read RPC を2本 CREATE するだけ。
@@ -44,6 +71,7 @@
 --
 -- ============================================================
 -- ★★★ 実行前に必須：戻り値の型確認（事前確認B）★★★
+--   （2026-07-03 実行時に事前確認Bで実型と一致を確認済み。再実行時も本チェックを先に行うこと）
 --   RETURNS TABLE の宣言型は実カラム型と一致していること。
 --   下記「事前確認B」（information_schema.columns・スキーマメタのみ／実データは読まない）を
 --   先に実行し、設計と実型が異なる場合は CREATE 前に RETURNS TABLE の型を必ず修正すること。

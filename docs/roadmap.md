@@ -260,6 +260,17 @@
 - DB事後確認：`reports` の anon / authenticated ともに全7種 false（TRUNCATE/REFERENCES/TRIGGER の残存除去を確認）。`report_summary`・RPC・policy・postgres/service_role は未変更
 - SQL：`docs/sql/phase4c-5-reports-extra-privileges-revoke.sql`（実行済み記録へ更新済み）。詳細は docs/db-migrations.md の「2026-07-02 Phase 4-C-5 …完了」を参照
 
+### 4-D-1a 単価系 read RPC 追加 ✅ 完了（2026-07-03）
+
+- Phase 4-D（financial系 読み取り保護）の最初の実施項目。単価系（`unit_rates` / `employee_rates`）の管理画面 direct SELECT を secure read RPC 経由へ移行するための前段として、read RPC を2本追加
+- read RPC 2本追加：`list_unit_rates_secure(text)`（戻り `id, category, name, unit_price, unit, updated_at`・全行・`ORDER BY category, name`）／`list_employee_rates_secure(text)`（戻り `id, employee_id, daily_rate, effective_from`・全行＝多世代履歴・`ORDER BY employee_id, effective_from DESC`）
+- 認可は既存ヘルパー `_verify_management_session(text)` を再利用（同一対象テーブルの write RPC `upsert_unit_rate_secure` / `upsert_employee_rate_secure` と同型）。両関数とも `SECURITY DEFINER` / `search_path=public, extensions`／REVOKE PUBLIC → GRANT anon,authenticated,service_role
+- 事前確認A〜D・事後確認F〜H すべて期待どおり。戻り型は実カラム型と一致確認済み（`unit_price=int4` / `updated_at=timestamptz` / `daily_rate=int4` / `effective_from=date` 等）
+- **★SELECT REVOKE は未実施★・新旧併存**（`unit_rates` / `employee_rates` の anon/authenticated 直接 SELECT は残存）。フロント移行（4-D-1b）→本番確認 の後に 4-D-1c で REVOKE
+- フロント（`admin-app.html` / `genka-app.html`）は未変更。既存 write RPC・helper・RLS・policy・他テーブルは不変（additive-only）
+- SQL：`docs/sql/phase4d-1a-rates-read-rpc.sql`（**実行済み（2026-07-03）**）。詳細は docs/db-migrations.md「2026-07-03 Phase 4-D-1a 単価系 read RPC 追加（実行済み）」参照
+- 次工程：**4-D-1b** フロント移行（genka startApp・admin startApp/pageRates の計5箇所を read RPC へ置換 → PR → 本番反映確認）／**4-D-1c** `unit_rates` / `employee_rates` の direct SELECT REVOKE
+
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 
 - 従業員本人が自分の日報提出状況を月別カレンダーで確認できるMVPを `index.html`（履歴タブ）に追加。当月表示・前月/次月移動・日付セルに日報有無/有給/現場名（複数は「◯◯他N」）表示・日付クリックで既存詳細モーダル表示 or 日報入力タブへ誘導
@@ -284,7 +295,9 @@
 
 - Phase 4-C 系（4-C-1〜4-C-4）完了後の整理（`reports_all` policy の整理判断・不要になった View/権限の棚卸しなど）
 - Playwright による読み取り専用スモークテスト導入検討（本番の主要画面表示・Network に direct read が出ないことの自動確認。読み取りのみ・DB非変更）
-- invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化
+- invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化（Phase 4-D）
+  - 4-D-1 単価系（`unit_rates` / `employee_rates`）：**4-D-1a read RPC 追加は完了（2026-07-03）**。4-D-1b フロント移行・4-D-1c SELECT REVOKE は未実施
+  - 4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）：未着手
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
   reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、

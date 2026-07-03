@@ -2732,3 +2732,62 @@ authenticated,public.reports,false,false,false,false,false,false,false
 - DB：`unit_rates` / `employee_rates` の anon/authenticated 直接 SELECT を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
 - フロント：変更なし（HTML 無改変。読み取りは 4-D-1b で既に read RPC 経由に移行済み）。
 - これにより **Phase 4-D-1（単価系 読み取り保護）完了**。以降は 4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）。
+
+---
+
+## 2026-07-03 Phase 4-D-2a site_budgets read RPC 追加（★実行済み★）
+
+### 目的
+
+- `site_budgets`（現場予算）の管理画面 direct SELECT を、将来 secure read RPC 経由へ移行するための前段として、read RPC を2本追加する
+- Phase 4-D（financial系 読み取り保護）の 4-D-2（予算）の最初の実施項目
+- この段では **read RPC 追加のみ**。SELECT REVOKE はしない（新旧併存）
+
+### 実行ステータス
+
+- **実行済み**（2026-07-03）。Supabase SQL Editor で本番反映済み。
+  - 実行：CREATE FUNCTION ×2 / REVOKE EXECUTE FROM PUBLIC ×2 / GRANT EXECUTE TO anon,authenticated,service_role ×2（すべて Success. No rows returned）
+  - 事前確認 A：`_verify_management_session` 存在・`SECURITY DEFINER=true`・`search_path=public, extensions`
+  - 事前確認 A-2：ヘルパーの `anon`/`authenticated`/`public` 直接 EXECUTE なし（0行）
+  - 事前確認 B：戻り型が設計と一致
+    - `site_budgets`：`id=uuid` / `site_id=uuid`（NOT NULL）／`year=integer/int4`・`budget=integer/int4`・`is_active=boolean/bool`・`updated_at=timestamp with time zone/timestamptz`（NOT NULL）／`month=integer/int4`・`memo=text`（nullable）
+  - 事前確認 C：`list_site_budgets_secure` / `get_site_budget_secure` 事前 0行（新規）
+  - 事前確認 D：`site_budgets` の `anon`/`authenticated` SELECT 残存（併存ベースライン）
+  - 事後確認 F：2関数とも存在・`SECURITY DEFINER=true`・`search_path=public, extensions`
+  - 事後確認 G：EXECUTE = 2関数 ×（anon/authenticated/service_role）＝6行
+  - 事後確認 G-2：PUBLIC EXECUTE なし（`proacl` は postgres/anon/authenticated/service_role のみ）
+  - 事後確認 H：`site_budgets` の `anon`/`authenticated` SELECT は引き続き残存＝REVOKE 未実施
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-2a-site-budgets-read-rpc.sql` | site_budgets read RPC 2本（事前確認A〜D / CREATE・REVOKE・GRANT / 事後確認F〜H） |
+
+### 追加した関数（2本）
+
+| 関数名 | 戻り列 | 絞り込み / 並び |
+|---|---|---|
+| `list_site_budgets_secure(text, boolean, uuid, integer, boolean)` | `id, site_id, year, month, budget, memo, is_active, updated_at` | 引数 `is_active_input` / `site_id_input` / `year_input` / `annual_only_input` で絞り込み・`ORDER BY year DESC, updated_at DESC` |
+| `get_site_budget_secure(text, uuid)` | 同上 | `WHERE id = id_input`（該当なしは 0 行） |
+
+- 両関数とも `SECURITY DEFINER` / `SET search_path = public, extensions`
+- 認可は既存ヘルパー `public._verify_management_session(text)` を `PERFORM` で再利用（admin_sessions+genka_admins OR employee_sessions role=admin の二経路。不正/期限切れは helper 内で RAISE）。Phase 4-D-1 の read RPC と同型
+- CREATE 時デフォルトの PUBLIC EXECUTE を REVOKE し、`anon` / `authenticated` / `service_role` に GRANT
+- `annual_only_input`（boolean DEFAULT false）：`false`/`NULL`＝month 条件なし（全 month）／`true`＝`month IS NULL`（年間予算のみ）。条件式 `(COALESCE(annual_only_input, false) = false OR sb.month IS NULL)`。genka の「現場×年度」「年度集計」で年間予算のみを DB 側で絞るために追加
+
+### 触らないもの / この段の状態
+
+- **SELECT REVOKE 未実施**：`site_budgets` の `anon`/`authenticated` 直接 SELECT は残存。**新旧併存**状態
+- 既存 write RPC（`upsert_site_budget_secure` / `update_site_budget_secure` / `deactivate_site_budget_secure` / `restore_site_budget_secure`）・helper `_verify_management_session`・RLS・policy・他テーブル・Storage は不変（additive-only）
+- フロント（`admin-app.html` / `genka-app.html`）は未変更
+
+### 次工程
+
+- 4-D-2b：フロント移行（`admin-app.html` pageBudgets①② / openBudgetModal③、`genka-app.html` openBudgetModal④ / 原価サマリ集計⑤ の計5箇所の direct SELECT を read RPC へ置換）→ PR → merge → 本番反映確認（Network に `list_site_budgets_secure` / `get_site_budget_secure` あり / `site_budgets?select` なし）
+- 4-D-2c：本番で RPC 経由を確認した後に `site_budgets` の `anon`/`authenticated` 直接 SELECT を REVOKE（別ファイル・別段階）
+
+### 影響範囲
+
+- DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
+- フロント：変更なし（本エントリでは HTML 無改変）。

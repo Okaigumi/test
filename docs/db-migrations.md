@@ -2679,3 +2679,56 @@ authenticated,public.reports,false,false,false,false,false,false,false
 
 - DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
 - フロント：変更なし（本エントリでは HTML 無改変）。
+
+---
+
+## 2026-07-03 Phase 4-D-1c 単価系 SELECT REVOKE（★実行済み★）
+
+### 目的
+
+- 4-D-1a（read RPC 追加）・4-D-1b（フロント移行・本番 Network 確認 OK）を経て、`unit_rates` / `employee_rates` の `anon` / `authenticated` 直接 SELECT を REVOKE し、読み取りを secure read RPC 経由に一本化する
+- Phase 4-D-1（単価系 読み取り保護）の最終段。これにより 4-D-1 完了
+
+### 実行ステータス
+
+- **実行済み**（2026-07-03）。Supabase SQL Editor で本番反映済み。
+  - 実行SQL：
+    - `REVOKE SELECT ON TABLE public.unit_rates FROM anon, authenticated;` → Success. No rows returned
+    - `REVOKE SELECT ON TABLE public.employee_rates FROM anon, authenticated;` → Success. No rows returned
+  - 事前確認 A〜E：すべて合格
+    - A：両テーブルとも anon/authenticated に SELECT 残存（REVOKE前）・INSERT/UPDATE なし。**PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行**
+    - B：read RPC 2本 存在・`security_definer=true`・`search_path=public, extensions`
+    - C：read RPC 2本 EXECUTE = anon/authenticated/service_role・PUBLIC なし
+    - D：write RPC 2本（`upsert_unit_rate_secure` / `upsert_employee_rate_secure`）存在
+    - E：RLS 有効・policy 現状把握（変更しない）
+  - 事後確認 F〜J：すべて合格
+    - F：unit_rates / employee_rates の anon/authenticated SELECT 消滅
+    - G：read RPC 2本 EXECUTE 維持（anon/authenticated/service_role・PUBLIC なし）
+    - H：read RPC 2本 `security_definer=true`・`search_path=public, extensions` 維持
+    - I：write RPC 2本 不変で存在
+    - J：RLS 有効のまま・policy 不変
+
+### 本番 Network 確認（REVOKE 後）
+
+- genka：`list_unit_rates_secure` / `list_employee_rates_secure` あり（200）、`unit_rates?select` / `employee_rates?select` なし、画面表示OK、Console 赤エラーなし
+- admin：同上（両 read RPC 200・direct SELECT なし・表示OK・赤エラーなし）
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-1c-rates-select-revoke.sql` | 事前確認A〜E / REVOKE SELECT ×2 / 事後確認F〜J / ロールバック（GRANT・コメントアウト） |
+
+### 触らなかったもの
+
+- read RPC / write RPC の EXECUTE 権限（維持）
+- `service_role` / `postgres`(owner) の権限（維持）
+- RLS 有効状態・既存 policy（変更なし。policy 整理は別工程候補）
+- helper `_verify_management_session`（非公開のまま不変）
+- `unit_rates` / `employee_rates` 以外のテーブル
+
+### 影響範囲
+
+- DB：`unit_rates` / `employee_rates` の anon/authenticated 直接 SELECT を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
+- フロント：変更なし（HTML 無改変。読み取りは 4-D-1b で既に read RPC 経由に移行済み）。
+- これにより **Phase 4-D-1（単価系 読み取り保護）完了**。以降は 4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）。

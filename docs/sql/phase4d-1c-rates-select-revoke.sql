@@ -1,10 +1,34 @@
 -- ============================================================
 -- Phase 4-D-1c：単価系 SELECT REVOKE（unit_rates / employee_rates）
 -- ============================================================
--- 【実行ステータス】☆未実行☆
---   - このファイルはまだ Supabase SQL Editor で実行していない。
---   - 実行は別段階（承認後）。実行後に docs/db-migrations.md /
---     docs/roadmap.md へ「実行済み」記録を追記する（今は追記しない）。
+-- 【実行ステータス】★実行済み★
+--   - 実行日：2026-07-03（Supabase SQL Editor 手動実行）
+--   - 実行内容：
+--       REVOKE SELECT ON TABLE public.unit_rates     FROM anon, authenticated; … Success. No rows returned
+--       REVOKE SELECT ON TABLE public.employee_rates FROM anon, authenticated; … Success. No rows returned
+--   - 事前確認A〜E：すべて合格
+--       A unit_rates / employee_rates とも anon/authenticated に SELECT 残存（REVOKE前）。
+--         INSERT/UPDATE なし。★PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行★
+--       B read RPC 2本：存在・SECURITY DEFINER=true・search_path=public, extensions
+--       C read RPC 2本 EXECUTE：anon/authenticated/service_role あり・PUBLIC なし
+--       D write RPC 2本（upsert_unit_rate_secure / upsert_employee_rate_secure）：存在
+--       E RLS 有効・policy 現状把握（今回は変更しない）
+--   - 事後確認F〜J：すべて合格
+--       F unit_rates / employee_rates の anon/authenticated SELECT：消滅（行が出ない）
+--       G read RPC 2本 EXECUTE：anon/authenticated/service_role 維持・PUBLIC なし
+--       H read RPC 2本：SECURITY DEFINER=true・search_path=public, extensions 維持
+--       I write RPC 2本：不変で存在
+--       J RLS 有効のまま・policy 不変
+--   - 本番 Network 確認 OK：
+--       genka / admin とも list_unit_rates_secure / list_employee_rates_secure が 200、
+--       unit_rates?select / employee_rates?select は出ない。画面表示OK・Console 赤エラーなし。
+--
+--   【この段の状態】
+--   - unit_rates / employee_rates の anon/authenticated direct SELECT は遮断完了。
+--     読み取りは read RPC 経由に一本化（新旧併存の解消）。
+--   - RLS / policy は未変更（policy 整理は別工程候補）。
+--   - 記録先：docs/db-migrations.md「2026-07-03 Phase 4-D-1c 単価系 SELECT REVOKE（実行済み）」/
+--     docs/roadmap.md Phase 4 セクション参照。これにより Phase 4-D-1（単価系 読み取り保護）完了。
 --
 -- 【前提（すべて完了済み）】
 --   - 4-D-1a：read RPC 2本追加済み（list_unit_rates_secure /

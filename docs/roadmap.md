@@ -271,6 +271,29 @@
 - SQL：`docs/sql/phase4d-1a-rates-read-rpc.sql`（**実行済み（2026-07-03）**）。詳細は docs/db-migrations.md「2026-07-03 Phase 4-D-1a 単価系 read RPC 追加（実行済み）」参照
 - 次工程：**4-D-1b** フロント移行（genka startApp・admin startApp/pageRates の計5箇所を read RPC へ置換 → PR → 本番反映確認）／**4-D-1c** `unit_rates` / `employee_rates` の direct SELECT REVOKE
 
+### 4-D-1b 単価系フロント移行 ✅ 完了（2026-07-03）
+
+- `admin-app.html` / `genka-app.html` に残っていた `unit_rates` / `employee_rates` の direct SELECT 5箇所を、4-D-1a の read RPC（`list_unit_rates_secure` / `list_employee_rates_secure`）経由へ置換
+  - genka `startApp`（employee_rates / unit_rates）、admin `startApp`（unit_rates）、admin `pageRates`（employee_rates / unit_rates）
+- token ガード追加（startApp＝token 欠落時は該当 sessionStorage 削除→reload／admin `pageRates`＝alert して return）。RPC error は `console.error` のみ、既存 `(data||[])` フォールバック維持。集計・保存・編集描画ロジックは無改変
+- データ形状は現行互換（`unit_rates` の map 化・`employee_rates` の effective_from 降順→最新採用は不変）
+- `npm run test:smoke` 4 passed。PR #42 merge済み（merge commit `8a227d6`）。変更は `admin-app.html` / `genka-app.html` のみ
+- 本番 Network 確認 OK：genka / admin とも `list_unit_rates_secure` / `list_employee_rates_secure` が 200、`unit_rates?select` / `employee_rates?select` は出ない、表示OK・Console 赤エラーなし
+- DB変更なし（read RPC は 4-D-1a で追加済みを利用）
+
+### 4-D-1c 単価系 SELECT REVOKE ✅ 完了（2026-07-03）
+
+- 本番で read RPC 経由を確認済みのため、`unit_rates` / `employee_rates` の `anon` / `authenticated` 直接 SELECT を REVOKE（読み取りを read RPC 経由に一本化・新旧併存の解消）
+- 実行SQL：`REVOKE SELECT ON TABLE public.unit_rates FROM anon, authenticated;` / `REVOKE SELECT ON TABLE public.employee_rates FROM anon, authenticated;`（各 Success. No rows returned）
+- 事前確認A〜E・事後確認F〜J すべて合格。**PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行**。read RPC / write RPC の EXECUTE 維持、RLS / policy は不変（policy 整理は別工程候補）
+- 本番 Network 確認 OK：両アプリとも read RPC 200・direct SELECT 消失・表示OK・Console 赤エラーなし
+- SQL：`docs/sql/phase4d-1c-rates-select-revoke.sql`（**実行済み（2026-07-03）**）。詳細は docs/db-migrations.md「2026-07-03 Phase 4-D-1c 単価系 SELECT REVOKE（実行済み）」参照
+
+### ✅ Phase 4-D-1 単価系 読み取り保護 完了（2026-07-03）
+
+- 4-D-1a（read RPC 追加）→ 4-D-1b（フロント移行）→ 4-D-1c（SELECT REVOKE）まで完了。`unit_rates` / `employee_rates` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み。
+- 次は **4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）** の読み取り保護（同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で進める）。
+
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 
 - 従業員本人が自分の日報提出状況を月別カレンダーで確認できるMVPを `index.html`（履歴タブ）に追加。当月表示・前月/次月移動・日付セルに日報有無/有給/現場名（複数は「◯◯他N」）表示・日付クリックで既存詳細モーダル表示 or 日報入力タブへ誘導
@@ -296,7 +319,7 @@
 - Phase 4-C 系（4-C-1〜4-C-4）完了後の整理（`reports_all` policy の整理判断・不要になった View/権限の棚卸しなど）
 - Playwright による読み取り専用スモークテスト導入検討（本番の主要画面表示・Network に direct read が出ないことの自動確認。読み取りのみ・DB非変更）
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化（Phase 4-D）
-  - 4-D-1 単価系（`unit_rates` / `employee_rates`）：**4-D-1a read RPC 追加は完了（2026-07-03）**。4-D-1b フロント移行・4-D-1c SELECT REVOKE は未実施
+  - 4-D-1 単価系（`unit_rates` / `employee_rates`）：**✅ 完了（2026-07-03）**（4-D-1a read RPC 追加 → 4-D-1b フロント移行 → 4-D-1c SELECT REVOKE すべて実行済み・本番確認OK）
   - 4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）：未着手
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。

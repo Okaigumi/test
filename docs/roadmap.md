@@ -294,6 +294,18 @@
 - 4-D-1a（read RPC 追加）→ 4-D-1b（フロント移行）→ 4-D-1c（SELECT REVOKE）まで完了。`unit_rates` / `employee_rates` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み。
 - 次は **4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）** の読み取り保護（同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で進める）。
 
+### 4-D-2a site_budgets read RPC 追加 ✅ 完了（2026-07-03）
+
+- Phase 4-D-2（予算 `site_budgets` 読み取り保護）の前段。`admin-app.html` / `genka-app.html` に残る `site_budgets` の direct SELECT（計5箇所）を secure read RPC 経由へ移行するため、read RPC を2本追加
+- read RPC 2本追加：`list_site_budgets_secure(text, boolean, uuid, integer, boolean)`（戻り `id, site_id, year, month, budget, memo, is_active, updated_at`・`is_active_input`/`site_id_input`/`year_input`/`annual_only_input` で絞り込み・`ORDER BY year DESC, updated_at DESC`）／`get_site_budget_secure(text, uuid)`（同戻り列・`WHERE id = id_input`・該当なしは0行）
+- `annual_only_input`（boolean DEFAULT false）：`false`/`NULL`＝month 条件なし、`true`＝`month IS NULL`（年間予算のみ）。genka の「現場×年度」「年度集計」の年間予算絞り込みを DB 側で再現するために追加。条件式 `(COALESCE(annual_only_input, false) = false OR sb.month IS NULL)`
+- 認可は既存ヘルパー `_verify_management_session(text)` を再利用（Phase 4-D-1 read RPC と同型）。両関数とも `SECURITY DEFINER` / `search_path=public, extensions`／REVOKE PUBLIC → GRANT anon,authenticated,service_role
+- 事前確認A〜D・事後確認F〜H すべて期待どおり。戻り型は実カラム型と一致確認済み（`year=int4` / `month=int4` / `budget=int4` / `updated_at=timestamptz` / `id・site_id=uuid` / `is_active=bool` / `memo=text`）
+- **★SELECT REVOKE は未実施★・新旧併存**（`site_budgets` の anon/authenticated 直接 SELECT は残存）。フロント移行（4-D-2b）→本番確認 の後に 4-D-2c で REVOKE
+- フロント（`admin-app.html` / `genka-app.html`）は未変更。既存 write RPC（`upsert/update/deactivate/restore_site_budget_secure`）・helper・RLS・policy・他テーブルは不変（additive-only）
+- SQL：`docs/sql/phase4d-2a-site-budgets-read-rpc.sql`（**実行済み（2026-07-03）**・PR #44 merge済み `73668b7`）。詳細は docs/db-migrations.md「2026-07-03 Phase 4-D-2a site_budgets read RPC 追加（★実行済み★）」参照
+- 次工程：**4-D-2b** フロント移行（admin pageBudgets①②/openBudgetModal③・genka openBudgetModal④/原価サマリ集計⑤ の計5箇所を read RPC へ置換 → PR → 本番反映確認）／**4-D-2c** `site_budgets` の direct SELECT REVOKE
+
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 
 - 従業員本人が自分の日報提出状況を月別カレンダーで確認できるMVPを `index.html`（履歴タブ）に追加。当月表示・前月/次月移動・日付セルに日報有無/有給/現場名（複数は「◯◯他N」）表示・日付クリックで既存詳細モーダル表示 or 日報入力タブへ誘導

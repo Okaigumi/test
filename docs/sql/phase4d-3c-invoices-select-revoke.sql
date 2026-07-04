@@ -1,10 +1,46 @@
 -- ============================================================
 -- Phase 4-D-3c：invoices（請求書）SELECT REVOKE
 -- ============================================================
--- 【実行ステータス】☆未実行☆
---   - このSQLはまだ実行しない（SQLファイル作成のみ）。
---   - Supabase SQL Editor での手動実行は未実施。実行後にこの行を
---     ★実行済み★ に更新し、実行日・事前A〜E/事後F〜J・本番確認結果を追記する。
+-- 【実行ステータス】★実行済み★
+--   - 実行日：2026-07-04（Supabase SQL Editor 手動実行）。Claude Code CLI からの
+--     DB 接続・Supabase CLI 使用はしていない。
+--   - 実行SQL：
+--       REVOKE SELECT ON TABLE public.invoices FROM anon, authenticated; … Success. No rows returned
+--   - 事前確認A〜E：すべて合格
+--       A invoices：anon/authenticated に SELECT 残存（REVOKE前）・INSERT/UPDATE/DELETE なし。
+--         ★PUBLIC に SELECT なし → PUBLIC 向け REVOKE は未実行★
+--         ※ REFERENCES/TRIGGER/TRUNCATE は anon/authenticated に残存。ただし invoices 固有ではなく
+--           employee_rates / unit_rates / site_budgets にも共通の既存横断パターンのため、
+--           今回の SELECT REVOKE とは分離し「後日の権限棚卸し候補」として扱う（本工程の対象外）。
+--       B read RPC 2本（list_invoices_secure / get_invoice_secure）：
+--         prosecdef=true・proconfig=[search_path=public, extensions]
+--       C read RPC 2本 EXECUTE：anon/authenticated/service_role（6行）・PUBLIC なし（0行）
+--       D write RPC 4本（create/update/reject/restore_invoice_secure）：
+--         prosecdef=true・proconfig=[search_path=public, extensions]
+--       E RLS 有効（relrowsecurity=true / relforcerowsecurity=false）。
+--         policy＝inv_read(SELECT) / inv_update(UPDATE) / inv_write(INSERT)（把握のみ・変更なし）
+--   - 事後確認F〜J：すべて合格
+--       F invoices の anon/authenticated SELECT：消滅（PUBLIC も無し・INSERT/UPDATE/DELETE なし）。
+--         REFERENCES/TRIGGER/TRUNCATE は事前A と同じく残存（既存横断パターン・今回対象外）。
+--       G read RPC 2本 EXECUTE：anon/authenticated/service_role 維持（6行）・PUBLIC なし（0行）
+--       H read RPC 2本：prosecdef=true・search_path=public, extensions 維持
+--       I write RPC 4本：不変で存在（prosecdef=true・search_path=public, extensions）
+--       J RLS 有効のまま・policy 3本（inv_read/inv_update/inv_write）不変
+--   - PUBLIC REVOKE 未実行（事前A で PUBLIC SELECT 検出なし）。ロールバック GRANT 未実行。
+--   - 本番 Network 確認（REVOKE 後）OK：
+--       admin：A-1 通常一覧・A-2 取消済み一覧で list_invoices_secure（200）、
+--              A-3 編集モーダルで get_invoice_secure（200）。
+--       genka：B-1 月次請求書リスト・B-3 原価サマリ集計で list_invoices_secure（200）、
+--              B-2 編集モーダルで get_invoice_secure（200）。
+--       共通：invoices?select= なし・Console 赤エラーなし・401/403 なし・HTTP 400 なし。
+--       ※ admin A-1 の初回 HTTP 400 は管理セッション期限切れが原因で、再ログイン後に解消（REVOKE 起因ではない）。
+--       ※ 請求書編集モーダルの表示位置が下すぎる件（admin/genka）は RPC/REVOKE とは別の UI 改善候補として切り離し。
+--
+--   【この段の状態】
+--   - invoices の anon/authenticated direct SELECT は遮断完了。読み取りは read RPC 経由に一本化。
+--   - RLS / policy は未変更（policy 整理は別工程候補）。
+--   - 記録先：docs/db-migrations.md「2026-07-04 Phase 4-D-3c invoices SELECT REVOKE（実行済み）」/
+--     docs/roadmap.md Phase 4-D-3 セクション参照。これにより Phase 4-D-3（invoices 読み取り保護）完了。
 --
 -- 【目的】
 --   - invoices の anon / authenticated 直接 SELECT を遮断し、読み取りを

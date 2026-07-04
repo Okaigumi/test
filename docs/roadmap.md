@@ -292,7 +292,7 @@
 ### ✅ Phase 4-D-1 単価系 読み取り保護 完了（2026-07-03）
 
 - 4-D-1a（read RPC 追加）→ 4-D-1b（フロント移行）→ 4-D-1c（SELECT REVOKE）まで完了。`unit_rates` / `employee_rates` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み。
-- 次は **4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）** の読み取り保護（同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で進める）。
+- 後続の **4-D-2 予算（`site_budgets`）／4-D-3 請求書（`invoices`）** の読み取り保護も、同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で完了済み。
 
 ### 4-D-2a site_budgets read RPC 追加 ✅ 完了（2026-07-03）
 
@@ -328,7 +328,7 @@
 ### ✅ Phase 4-D-2 予算（site_budgets）読み取り保護 完了（2026-07-04）
 
 - 4-D-2a（read RPC 追加）→ 4-D-2b（フロント移行）→ 4-D-2c（SELECT REVOKE）まで完了。`site_budgets` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み。
-- 次は **4-D-3 請求書（`invoices`）** の読み取り保護（同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で進める）。
+- 後続の **4-D-3 請求書（`invoices`）** の読み取り保護も、同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で完了済み。
 
 ### 4-D-3a invoices read RPC 追加 ✅ 完了（2026-07-04）
 
@@ -339,6 +339,34 @@
 - **★SELECT REVOKE は未実施★・新旧併存**（`invoices` の anon/authenticated 直接 SELECT は残存）。フロント移行（4-D-3b）→本番確認 の後に 4-D-3c で REVOKE
 - SQL：`docs/sql/phase4d-3a-invoices-read-rpc.sql`（**実行済み（2026-07-04）**・PR #49 merge済み `9ecd7d7`）。詳細は docs/db-migrations.md「2026-07-04 Phase 4-D-3a invoices read RPC 追加（★実行済み★）」参照
 - 次工程：**4-D-3b** フロント移行（admin pageInvoices active/rejected・openInvoiceModal・genka loadInvoices・editInvoice・loadData 集計 の計6箇所を read RPC へ置換 → PR → 本番反映確認）／**4-D-3c** `invoices` の direct SELECT REVOKE
+
+### 4-D-3b invoices フロント移行 ✅ 完了（2026-07-04）
+
+- admin-app.html / genka-app.html に残っていた `invoices` の direct SELECT 6箇所を、4-D-3a の read RPC 経由へ置換
+- admin：pageInvoices（通常一覧＝`exclude_status_input:'rejected'` / 取消済み一覧＝`statuses_input:['rejected']`・ともに `limit_input:200`）・openInvoiceModal（`get_invoice_secure`）
+- genka：loadInvoices（月次＝`statuses_input:['confirmed','posted']`・期間指定）・editInvoice（`get_invoice_secure`）・loadData 集計（`statuses_input:['confirmed','posted']`・期間・`site_id_input:siteId||null`）
+- `.single()` 廃止。詳細取得は `data?.[0] || null` 系に統一。token/error ガード追加。RPC 引数はすべて明示
+- PR #51 merge済み（merge commit `4603726`）。DB変更なし（read RPC は 4-D-3a で追加済みを利用）
+- 本番 Network 確認 OK：admin（通常/取消済み一覧・編集モーダル）・genka（月次リスト・編集モーダル・原価サマリ集計）とも read RPC が 200・`invoices?select=` なし・表示OK・赤エラーなし・401/403/400 なし
+
+### 4-D-3c invoices SELECT REVOKE ✅ 完了（2026-07-04）
+
+- 4-D-3a（read RPC 追加）・4-D-3b（フロント移行・本番確認 OK）を経て、`invoices` の anon / authenticated 直接 SELECT を REVOKE。読み取りを secure read RPC 経由に一本化
+- 実行SQL：`REVOKE SELECT ON TABLE public.invoices FROM anon, authenticated;`
+- 事前確認A〜E・事後確認F〜J すべて合格
+- PUBLIC SELECT は検出なし。PUBLIC REVOKE 未実行。rollback GRANT 未実行
+- read RPC 2本 EXECUTE 維持 / write RPC 4本不変 / RLS・policy 不変
+- `REFERENCES` / `TRIGGER` / `TRUNCATE` が anon/authenticated に残存しているが、`invoices` 固有ではなく financial系4テーブル（`invoices` / `employee_rates` / `unit_rates` / `site_budgets`）共通の既存横断パターンのため、今回の SELECT REVOKE とは分離し、後日の権限棚卸し候補として扱う
+- 本番 Network 確認 OK（REVOKE 後）：admin/genka とも read RPC が 200・`invoices?select=` なし・表示OK・赤エラーなし・401/403/400 なし
+- admin 通常一覧の初回400は管理セッション期限切れが原因で、再ログイン後に解消。REVOKE起因ではない
+- SQL：`docs/sql/phase4d-3c-invoices-select-revoke.sql`（**実行済み（2026-07-04）**・PR #52 merge済み `66ecee5`）。詳細は docs/db-migrations.md「2026-07-04 Phase 4-D-3c invoices SELECT REVOKE（★実行済み★）」参照
+
+### ✅ Phase 4-D-3 請求書（invoices）読み取り保護 完了（2026-07-04）
+
+- 4-D-3a（read RPC 追加）→ 4-D-3b（フロント移行）→ 4-D-3c（SELECT REVOKE）まで完了
+- `invoices` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み
+- Phase 4-D の financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）の読み取り保護はすべて完了
+- 残課題（別工程候補）：financial系4テーブルに共通の `REFERENCES` / `TRIGGER` / `TRUNCATE`（anon/authenticated）権限の棚卸し
 
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 
@@ -367,7 +395,7 @@
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化（Phase 4-D）
   - 4-D-1 単価系（`unit_rates` / `employee_rates`）：**✅ 完了（2026-07-03）**（4-D-1a read RPC 追加 → 4-D-1b フロント移行 → 4-D-1c SELECT REVOKE すべて実行済み・本番確認OK）
   - 4-D-2 予算（`site_budgets`）：**✅ 完了（2026-07-04）**（4-D-2a read RPC 追加 → 4-D-2b フロント移行 → 4-D-2c SELECT REVOKE すべて実行済み・本番確認OK）
-  - 4-D-3 請求書（`invoices`）：🚧 進行中（4-D-3a read RPC 追加 **実行済み（2026-07-04）**／4-D-3b フロント移行・4-D-3c SELECT REVOKE 未着手）
+  - 4-D-3 請求書（`invoices`）：✅ 完了（2026-07-04。4-D-3a read RPC 追加・4-D-3b フロント移行・4-D-3c SELECT REVOKE・REVOKE後本番確認まで完了）
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
   reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、
@@ -2793,6 +2821,8 @@ Phase 2-5-c：試運用フィードバック反映
 - staging / production 環境分離
 - 操作マニュアル作成
 - 社員向け簡易説明資料作成
+- 請求書編集モーダルの表示位置調整（現状は表示位置が下すぎるため、中央またはやや上寄せにする）
+- genka 原価サマリ/集計画面の自動集計化（画面切り替え時に自動集計し、実装後は集計ボタンを削除）
 - CSV出力物・ビューアー保存場所・pCloud + NAS バックアップ運用ルール策定（下記参照）
 
 ### CSV出力物・ビューアー保存場所・pCloud + NAS バックアップ運用ルール策定

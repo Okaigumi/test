@@ -2963,3 +2963,72 @@ authenticated,public.reports,false,false,false,false,false,false,false
 - DB：`invoices` の anon/authenticated 直接 SELECT を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
 - フロント：変更なし（HTML 無改変。読み取りは 4-D-3b で既に read RPC 経由に移行済み）。
 - これにより **Phase 4-D-3（請求書 `invoices` 読み取り保護）完了**。
+
+## 2026-07-04 Phase 4-D-4 financial系4テーブル 残存不要権限（TRUNCATE / REFERENCES / TRIGGER）REVOKE 完了（★実行済み★）
+
+### 目的
+
+- financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）に残っていた `anon` / `authenticated` の非読み取り不要権限（TRUNCATE / REFERENCES / TRIGGER）を REVOKE する。
+- SELECT / INSERT / UPDATE / DELETE は Phase 4-D-1 / 4-D-2 / 4-D-3 で既に遮断済み・読み取りは secure read RPC 経由に一本化済み。本整理は各段（4-D-1c / 4-D-2c / 4-D-3c）で「後日の権限棚卸し候補」として分離していた TRUNCATE / REFERENCES / TRIGGER の横断的な後片付け。
+
+### 背景（Stage B 調査結果・ユーザーが Supabase SQL Editor で手動確認）
+
+- 権限：4テーブルとも anon/authenticated は SELECT/INSERT/UPDATE/DELETE=false・TRUNCATE/REFERENCES/TRIGGER=true（要除去）。public は全権限 false。
+- RLS：4テーブルとも `relrowsecurity=true` / `relforcerowsecurity=false`。
+- policy：`employee_rates`=er_read/er_update/er_write、`invoices`=inv_read/inv_update/inv_write、`site_budgets`=anon_can_update_site_budgets/sb_read/sb_update/sb_write、`unit_rates`=ur_read/ur_update/ur_write。
+  - ※ `site_budgets.anon_can_update_site_budgets` は既存 policy として残存。ただし anon の direct UPDATE grant は false のため本 REVOKE 判断は止めず、後日の policy 棚卸し候補として記録。
+- トリガ：4テーブルともユーザー定義トリガ 0 件。
+- FK：`employee_rates→employees` / `invoices→companies,sites` / `site_budgets→companies,sites` / `unit_rates→companies`。financial系を参照先にする FK はなし（＝REFERENCES を REVOKE しても既存 FK に影響なし。REFERENCES は新規 FK 作成権限で、既存 FK 制約は保持）。
+- secure RPC：financial系 secure RPC はすべて `prosecdef=true` / `owner=postgres` / `search_path=public, extensions` 固定。
+
+### 方針（確定）
+
+- 実行 SQL は REVOKE のみ（1テーブル1文×4本）。順番：employee_rates → invoices → site_budgets → unit_rates。
+- RPC / RLS / policy / `postgres` / `service_role` は一切変更しない。`index.html` / `admin-app.html` / `genka-app.html` も変更しない。
+
+### 実行済み SQL（`docs/sql/phase4d-4-financial-extra-privileges-revoke.sql` を Supabase SQL Editor で実行・2026-07-04）
+
+```sql
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.employee_rates FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.invoices FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.site_budgets FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authenticated;
+```
+
+- 実行結果：Success. No rows returned（4本とも）。
+- 危険SQL（DROP / DELETE / TRUNCATE 実行 / ALTER / UPDATE / INSERT / CREATE）なし。変更は REVOKE 4本のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-04）
+
+- G（anon / authenticated）：対象4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）とも全権限 false（SELECT/INSERT/UPDATE/DELETE は従来どおり遮断、TRUNCATE/REFERENCES/TRIGGER の残存を除去）。期待どおり。
+- G-2（public）：対象4テーブルとも全権限 false（不変・今回 public は未変更）。期待どおり。
+
+### 本番画面確認（Stage E・REVOKE 後）
+
+今回 REVOKE した TRUNCATE / REFERENCES / TRIGGER はフロントの PostgREST クライアントが使わない DDL 系権限のため、画面挙動への影響はなく「リグレッションが出ていないこと」を確認。
+
+- admin：単価マスタ（`list_unit_rates_secure` / `list_employee_rates_secure` 200）・実行予算（`list_site_budgets_secure` / `get_site_budget_secure` 200）・請求書（`list_invoices_secure` / `get_invoice_secure` 200）とも従来どおり。
+- genka：単価読込（`list_unit_rates_secure` / `list_employee_rates_secure` 200）・実行予算読込（`list_site_budgets_secure` 200）・請求書/原価サマリ（`list_invoices_secure` / `get_invoice_secure` 200）とも従来どおり。
+- 共通：`unit_rates?select=` / `employee_rates?select=` / `site_budgets?select=` / `invoices?select=` の direct access なし。Console 赤エラーなし・HTTP 400 / 401 / 403 なし。
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-4-financial-extra-privileges-revoke.sql` | 事前確認A〜F / REVOKE TRUNCATE,REFERENCES,TRIGGER（4テーブル・1文ずつ）/ 事後確認G・G-2 / rollback（GRANT・コメントアウト）。STATUS を EXECUTED に更新済み |
+
+### 触らなかったもの
+
+- read RPC / write RPC（定義・EXECUTE・SECURITY DEFINER）
+- RLS 有効状態・既存 policy（`site_budgets.anon_can_update_site_budgets` 含む。policy 棚卸しは別工程候補）
+- `service_role` / `postgres`(owner) の権限
+- SELECT / INSERT / UPDATE / DELETE（既に遮断済み・本工程では未変更）
+- フロント（`index.html` / `admin-app.html` / `genka-app.html`）
+- rollback GRANT（未実行・コメントアウトのまま）
+
+### 影響範囲
+
+- DB：financial系4テーブルの anon/authenticated の TRUNCATE / REFERENCES / TRIGGER を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
+- フロント：変更なし。
+- これにより Phase 4-D-3c 以降に残課題としていた「financial系4テーブル共通の TRUNCATE / REFERENCES / TRIGGER 権限棚卸し」を解消。**Phase 4-D-4 完了**。

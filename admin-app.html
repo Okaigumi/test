@@ -529,6 +529,9 @@ async function deleteSite(id){
 
 // ===== INVOICES PAGE =====
 async function pageInvoices(tab){
+  // Phase 4-D-3b：invoices は secure read RPC 経由（direct SELECT を置換）。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   if(tab) _invoiceTab=tab;
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openInvoiceModal()">＋ 請求書を追加</button>`;
   const catInfo={subcontract:{label:'外注費',cls:'badge-orange'},material:{label:'材料費',cls:'badge-purple'},machine_lease:{label:'重機リース',cls:'badge-blue'},other:{label:'その他',cls:'badge-green'}};
@@ -542,7 +545,16 @@ async function pageInvoices(tab){
   let html='';
 
   if(_invoiceTab==='active'){
-    const{data}=await sb.from('invoices').select('*').neq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
+    const{data,error}=await sb.rpc('list_invoices_secure',{
+      session_token_input:token,
+      statuses_input:null,
+      exclude_status_input:'rejected',
+      date_from_input:null,
+      date_to_input:null,
+      site_id_input:null,
+      limit_input:200
+    });
+    if(error)console.error('請求書一覧取得エラー:',error);
     const invs=data||[];
     const totalAmt=invs.reduce((s,i)=>s+(Number(i.amount)||0),0);
     html=`
@@ -578,7 +590,16 @@ async function pageInvoices(tab){
         </table>
       </div>`;
   }else{
-    const{data}=await sb.from('invoices').select('*').eq('status','rejected').order('invoice_date',{ascending:false}).limit(200);
+    const{data,error}=await sb.rpc('list_invoices_secure',{
+      session_token_input:token,
+      statuses_input:['rejected'],
+      exclude_status_input:null,
+      date_from_input:null,
+      date_to_input:null,
+      site_id_input:null,
+      limit_input:200
+    });
+    if(error)console.error('取消済み請求書取得エラー:',error);
     const invs=data||[];
     html=`
       ${tabBar}
@@ -611,8 +632,15 @@ async function pageInvoices(tab){
 }
 
 async function openInvoiceModal(invId=null){
+  // Phase 4-D-3b：invoices 詳細は secure read RPC 経由（.single() 廃止）。
+  const token=currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   let inv=null;
-  if(invId){const{data}=await sb.from('invoices').select('*').eq('id',invId).single();inv=data;}
+  if(invId){
+    const{data,error}=await sb.rpc('get_invoice_secure',{session_token_input:token,id_input:invId});
+    if(error)console.error('請求書取得エラー:',error);
+    inv=data?.[0]||null;
+  }
   const siteOpts=_sites.map(s=>`<option value="${s.id}" ${inv?.site_id===s.id?'selected':''}>${s.name}</option>`).join('');
   const cats=[['subcontract','🧱 外注費'],['material','📦 材料費'],['machine_lease','🚜 重機リース'],['other','📋 その他']];
   _editInvId=inv?.id||null;

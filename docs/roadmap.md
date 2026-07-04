@@ -366,7 +366,16 @@
 - 4-D-3a（read RPC 追加）→ 4-D-3b（フロント移行）→ 4-D-3c（SELECT REVOKE）まで完了
 - `invoices` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み
 - Phase 4-D の financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）の読み取り保護はすべて完了
-- 残課題（別工程候補）：financial系4テーブルに共通の `REFERENCES` / `TRIGGER` / `TRUNCATE`（anon/authenticated）権限の棚卸し
+- 残課題だった financial系4テーブル共通の `TRUNCATE` / `REFERENCES` / `TRIGGER`（anon/authenticated）権限の棚卸しは **4-D-4 で解消済み**（下記参照）
+
+### 4-D-4 financial系4テーブル 残存不要権限（TRUNCATE / REFERENCES / TRIGGER）REVOKE ✅ 完了（2026-07-04）
+
+- 4-D-1c / 4-D-2c / 4-D-3c で「後日の権限棚卸し候補」として分離していた、financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）共通の `anon` / `authenticated` の TRUNCATE / REFERENCES / TRIGGER を横断的に REVOKE。SELECT/INSERT/UPDATE/DELETE は既に遮断済みのため対象外。
+- Stage B 調査（ユーザー手動）：4テーブルとも anon/authenticated は SELECT/INSERT/UPDATE/DELETE=false・TRUNCATE/REFERENCES/TRIGGER=true、public は全 false。RLS 有効・ユーザー定義トリガ0件・financial系を参照先にする FK なし（REFERENCES REVOKE は既存 FK に無影響）・secure RPC は全て SECURITY DEFINER。`site_budgets.anon_can_update_site_budgets` policy は残存だが anon direct UPDATE grant=false のため止めず、policy 棚卸しは別工程候補。
+- 実行SQL（1テーブル1文×4本・順番 employee_rates→invoices→site_budgets→unit_rates）：`REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.<table> FROM anon, authenticated;`。実行結果 Success. No rows returned。
+- DB事後確認：G（anon/authenticated）・G-2（public）とも対象4テーブルの全権限 false。RPC / RLS / policy / postgres / service_role・フロントは未変更。rollback GRANT 未実行。
+- 本番画面確認 OK：admin/genka とも単価・実行予算・請求書・原価サマリが secure RPC（200）で従来どおり表示。`unit_rates?select=` / `employee_rates?select=` / `site_budgets?select=` / `invoices?select=` の direct access なし・赤エラーなし・400/401/403 なし。
+- SQL：`docs/sql/phase4d-4-financial-extra-privileges-revoke.sql`（**実行済み（2026-07-04）**・STATUS を EXECUTED に更新済み）。詳細は docs/db-migrations.md「2026-07-04 Phase 4-D-4 …完了（★実行済み★）」を参照。
 
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 

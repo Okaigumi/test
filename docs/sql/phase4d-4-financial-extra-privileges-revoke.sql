@@ -2,10 +2,17 @@
 -- Phase 4-D-4: financial tables - cleanup of residual unneeded privileges
 --   (REVOKE TRUNCATE / REFERENCES / TRIGGER from anon / authenticated)
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - Not yet run in Supabase SQL Editor.
---   - No DB connection / Supabase CLI from Claude Code CLI. DB execution is done
---     manually by the user.
+-- [STATUS] EXECUTED (2026-07-04)
+--   - REVOKE body (4 statements) run manually in Supabase SQL Editor.
+--     Result: Success. No rows returned.
+--   - No DB connection / Supabase CLI / psql from Claude Code CLI. DB execution
+--     was done manually by the user.
+--   - Post-check G: anon / authenticated have all privileges = false on all four
+--     target tables (unit_rates / employee_rates / site_budgets / invoices).
+--   - Post-check G-2: public has all privileges = false on all four target tables.
+--   - Production verification (admin / genka) OK: financial reads/writes go through
+--     secure RPCs (200); no direct table access (no *?select=); no 400/401/403;
+--     no red console errors. See docs/db-migrations.md and docs/roadmap.md.
 --
 -- [PURPOSE]
 --   Revoke the residual, non-read, unneeded privileges (TRUNCATE / REFERENCES /

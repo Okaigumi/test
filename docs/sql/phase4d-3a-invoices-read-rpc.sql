@@ -2,9 +2,32 @@
 -- Phase 4-D-3a：invoices read RPC 追加
 --   list_invoices_secure / get_invoice_secure
 -- ============================================================
--- 【実行ステータス】☆未実行☆
---   （Supabase SQL Editor での手動実行は未実施。実行後にこの行を
---     ★実行済み★ に更新し、実行日・事前/事後確認結果を追記する。）
+-- 【実行ステータス】★実行済み★（2026-07-04）
+--   Supabase SQL Editor で本番反映済み（Claude Code CLI からの DB 接続・
+--   Supabase CLI 使用なし）。
+--   実行：CREATE FUNCTION ×2 / REVOKE EXECUTE FROM PUBLIC ×2 /
+--         GRANT EXECUTE TO anon,authenticated,service_role ×2
+--         （すべて Success. No rows returned）
+--   事前確認：
+--     A-1：_verify_management_session 存在・prosecdef=true・
+--          proconfig=["search_path=public, extensions"]
+--     A-2：helper の anon/authenticated/PUBLIC 直接 EXECUTE なし（0行）
+--     B  ：invoices 実型が設計と一致
+--          amount=integer/int4(NOT NULL) / category=text(NOT NULL) /
+--          description=text(NULL可) / id=uuid(NOT NULL) /
+--          invoice_date=date(NOT NULL) / memo=text(NULL可) /
+--          site_id=uuid(NULL可) / status=text(NOT NULL) /
+--          tax_included=boolean/bool(NOT NULL) / vendor_name=text(NOT NULL)
+--          → invoice_date=date・amount=integer・tax_included=boolean を確認、
+--            RETURNS TABLE 修正不要。status/category は ::text で正規化して返す。
+--     C  ：list_invoices_secure / get_invoice_secure 事前 0行（新規）
+--     D  ：invoices の anon/authenticated SELECT 残存（併存ベースライン）
+--   事後確認：
+--     F  ：2関数とも存在・prosecdef=true・search_path=public, extensions
+--     G  ：EXECUTE = 2関数 ×（anon/authenticated/service_role）＝6行
+--     G-2：PUBLIC EXECUTE なし（0行）
+--     H  ：invoices の anon/authenticated SELECT は引き続き残存＝REVOKE 未実施
+--   ★SELECT REVOKE は未実施・新旧併存★（4-D-3c で別段階）。
 -- ============================================================
 -- 【このファイルの方針（重要）】
 --   - additive-only：新規 read RPC を2本 CREATE するだけ。

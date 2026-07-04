@@ -2845,3 +2845,64 @@ authenticated,public.reports,false,false,false,false,false,false,false
 - DB：`site_budgets` の anon/authenticated 直接 SELECT を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
 - フロント：変更なし（HTML 無改変。読み取りは 4-D-2b で既に read RPC 経由に移行済み）。
 - これにより **Phase 4-D-2（予算 `site_budgets` 読み取り保護）完了**。以降は 4-D-3 請求書（`invoices`）。
+
+---
+
+## 2026-07-04 Phase 4-D-3a invoices read RPC 追加（★実行済み★）
+
+### 目的
+
+- `invoices`（請求書）の管理画面 direct SELECT を、将来 secure read RPC 経由へ移行するための前段として、read RPC を2本追加する
+- Phase 4-D（financial系 読み取り保護）の 4-D-3（請求書）の最初の実施項目
+- この段では **read RPC 追加のみ**。SELECT REVOKE はしない（新旧併存）
+
+### 実行ステータス
+
+- **実行済み**（2026-07-04）。Supabase SQL Editor で本番反映済み（Claude Code CLI からの DB 接続・Supabase CLI 使用なし）。
+  - 実行：CREATE FUNCTION ×2 / REVOKE EXECUTE FROM PUBLIC ×2 / GRANT EXECUTE TO anon,authenticated,service_role ×2（すべて Success. No rows returned）
+  - 事前確認 A-1：`_verify_management_session` 存在・`prosecdef=true`・`proconfig=["search_path=public, extensions"]`
+  - 事前確認 A-2：ヘルパーの `anon`/`authenticated`/`PUBLIC` 直接 EXECUTE なし（0行）
+  - 事前確認 B：`invoices` 実型が設計と一致
+    - `amount=integer/int4`（NOT NULL）／`invoice_date=date`（NOT NULL）／`tax_included=boolean/bool`（NOT NULL）／`id=uuid`（NOT NULL）／`status=text`（NOT NULL）／`category=text`（NOT NULL）／`vendor_name=text`（NOT NULL）／`site_id=uuid`（nullable）／`description=text`・`memo=text`（nullable）
+    - → `invoice_date=date`・`amount=integer`・`tax_included=boolean` を確認し `RETURNS TABLE` 修正不要。`status`/`category` は `::text` で正規化して返す方針どおり
+  - 事前確認 C：`list_invoices_secure` / `get_invoice_secure` 事前 0行（新規）
+  - 事前確認 D：`invoices` の `anon`/`authenticated` SELECT 残存（併存ベースライン）
+  - 事後確認 F：2関数とも存在・`prosecdef=true`・`search_path=public, extensions`
+  - 事後確認 G：EXECUTE = 2関数 ×（anon/authenticated/service_role）＝6行
+  - 事後確認 G-2：PUBLIC EXECUTE なし（0行）
+  - 事後確認 H：`invoices` の `anon`/`authenticated` SELECT は引き続き残存＝REVOKE 未実施
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4d-3a-invoices-read-rpc.sql` | invoices read RPC 2本（事前確認A〜D / CREATE・REVOKE・GRANT / 事後確認F〜H・G-2） |
+
+### 追加した関数（2本）
+
+| 関数名 | 戻り列 | 絞り込み / 並び |
+|---|---|---|
+| `list_invoices_secure(text, text[], text, date, date, uuid, integer)` | `id, invoice_date, site_id, vendor_name, category, amount, tax_included, description, memo, status` | 引数 `statuses_input`（`status::text = ANY`）/ `exclude_status_input`（`status::text <>`）/ `date_from_input` / `date_to_input`（`invoice_date` 範囲）/ `site_id_input` で絞り込み・`ORDER BY invoice_date DESC` ・`LIMIT limit_input`（NULL=全件） |
+| `get_invoice_secure(text, uuid)` | 同上 | `WHERE id = id_input`（該当なしは 0 行） |
+
+- 両関数とも `SECURITY DEFINER` / `SET search_path = public, extensions`
+- 認可は既存ヘルパー `public._verify_management_session(text)` を `PERFORM` で再利用（admin_sessions+genka_admins OR employee_sessions role=admin の二経路。不正/期限切れは helper 内で RAISE）。Phase 4-D-1 / 4-D-2 の read RPC と同型
+- CREATE 時デフォルトの PUBLIC EXECUTE を REVOKE し、`anon` / `authenticated` / `service_role` に GRANT
+- `status`・`category` は enum / USER-DEFINED 型化された場合の戻り型不一致を避けるため、比較・戻り値とも `::text` で正規化（今回の実型は両方 `text`）。`statuses_input` と `exclude_status_input` は原則どちらか一方のみ指定（両条件 AND 結合）
+- 戻り列は実使用10列に限定（`company_id` / `created_at` は現行フロント未使用のため含めない）
+
+### 触らないもの / この段の状態
+
+- **SELECT REVOKE 未実施**：`invoices` の `anon`/`authenticated` 直接 SELECT は残存。**新旧併存**状態
+- 既存 write RPC（`create_invoice_secure` / `update_invoice_secure` / `reject_invoice_secure` / `restore_invoice_secure` ほか・admin_sessions 単経路検証）・helper `_verify_management_session`・RLS・policy・他テーブル・Storage は不変（additive-only）
+- フロント（`admin-app.html` / `genka-app.html`）は未変更
+
+### 次工程
+
+- 4-D-3b：フロント移行（`admin-app.html` pageInvoices active/rejected・openInvoiceModal、`genka-app.html` loadInvoices・editInvoice・loadData 集計 の計6箇所の direct SELECT を read RPC へ置換）→ token/error ガード追加（.single() 廃止）→ PR → merge → 本番反映確認（Network に `list_invoices_secure` / `get_invoice_secure` あり / `invoices?select` なし）
+- 4-D-3c：本番で RPC 経由を確認した後に `invoices` の `anon`/`authenticated` 直接 SELECT を REVOKE（別ファイル・別段階）
+
+### 影響範囲
+
+- DB：新規 RPC 2本追加のみ。既存テーブル・RPC・policy・権限・helper は不変。
+- フロント：変更なし（本エントリでは HTML 無改変）。

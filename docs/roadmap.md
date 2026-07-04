@@ -330,6 +330,16 @@
 - 4-D-2a（read RPC 追加）→ 4-D-2b（フロント移行）→ 4-D-2c（SELECT REVOKE）まで完了。`site_budgets` の読み取りは secure read RPC（管理セッション検証・SECURITY DEFINER）経由に一本化され、anon/authenticated の直接 SELECT は遮断済み。
 - 次は **4-D-3 請求書（`invoices`）** の読み取り保護（同じ read RPC 追加→フロント移行→SELECT REVOKE の3段で進める）。
 
+### 4-D-3a invoices read RPC 追加 ✅ 完了（2026-07-04）
+
+- Phase 4-D-3（請求書 `invoices` 読み取り保護）の前段。`admin-app.html` / `genka-app.html` に残る `invoices` の direct SELECT（計6箇所）を secure read RPC 経由へ移行するため、read RPC を2本追加
+- 追加関数：`list_invoices_secure(text, text[], text, date, date, uuid, integer)`（`statuses_input` 包含 / `exclude_status_input` 除外 / `date_from_input`・`date_to_input` 期間 / `site_id_input` / `limit_input`（NULL=全件）で絞り込み・`ORDER BY invoice_date DESC`）／`get_invoice_secure(text, uuid)`（id 指定1件・該当なし0行）
+- 認可は既存ヘルパー `_verify_management_session(text)` を再利用（Phase 4-D-1 / 4-D-2 read RPC と同型）。両関数とも `SECURITY DEFINER` / `search_path=public, extensions`／REVOKE PUBLIC → GRANT anon,authenticated,service_role
+- 戻り列は実使用10列 `id, invoice_date, site_id, vendor_name, category, amount, tax_included, description, memo, status`。`status`/`category` は enum 化時の型不一致回避のため比較・戻り値とも `::text` 正規化（実型は両方 `text`）。既存 invoice write RPC（admin_sessions 単経路）は不変
+- **★SELECT REVOKE は未実施★・新旧併存**（`invoices` の anon/authenticated 直接 SELECT は残存）。フロント移行（4-D-3b）→本番確認 の後に 4-D-3c で REVOKE
+- SQL：`docs/sql/phase4d-3a-invoices-read-rpc.sql`（**実行済み（2026-07-04）**・PR #49 merge済み `9ecd7d7`）。詳細は docs/db-migrations.md「2026-07-04 Phase 4-D-3a invoices read RPC 追加（★実行済み★）」参照
+- 次工程：**4-D-3b** フロント移行（admin pageInvoices active/rejected・openInvoiceModal・genka loadInvoices・editInvoice・loadData 集計 の計6箇所を read RPC へ置換 → PR → 本番反映確認）／**4-D-3c** `invoices` の direct SELECT REVOKE
+
 ### 日報カレンダーMVP（本人月別）✅ 完了（2026-07-02）
 
 - 従業員本人が自分の日報提出状況を月別カレンダーで確認できるMVPを `index.html`（履歴タブ）に追加。当月表示・前月/次月移動・日付セルに日報有無/有給/現場名（複数は「◯◯他N」）表示・日付クリックで既存詳細モーダル表示 or 日報入力タブへ誘導
@@ -357,7 +367,7 @@
 - invoices / site_budgets / employee_rates / unit_rates の管理セッション限定読み取り化（Phase 4-D）
   - 4-D-1 単価系（`unit_rates` / `employee_rates`）：**✅ 完了（2026-07-03）**（4-D-1a read RPC 追加 → 4-D-1b フロント移行 → 4-D-1c SELECT REVOKE すべて実行済み・本番確認OK）
   - 4-D-2 予算（`site_budgets`）：**✅ 完了（2026-07-04）**（4-D-2a read RPC 追加 → 4-D-2b フロント移行 → 4-D-2c SELECT REVOKE すべて実行済み・本番確認OK）
-  - 4-D-3 請求書（`invoices`）：未着手
+  - 4-D-3 請求書（`invoices`）：🚧 進行中（4-D-3a read RPC 追加 **実行済み（2026-07-04）**／4-D-3b フロント移行・4-D-3c SELECT REVOKE 未着手）
 - paid_leave の write系 policy 整理（別工程候補）
 - 管理者向け日報写真確認導線（管理者が従業員の日報写真を確認できる画面/導線。
   reports / report_summary の読み取り整理と合わせて検討。管理者セッション検証を前提とし、

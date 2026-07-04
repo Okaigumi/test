@@ -206,11 +206,14 @@ from   pg_proc p
 join   pg_namespace n on n.oid = p.pronamespace
 where  n.nspname = 'public'
   and  p.proname in (
-         -- unit_rates / employee_rates (4-D-1)
-         'list_unit_rates_secure', 'get_unit_rate_secure',
-         'list_employee_rates_secure', 'get_employee_rate_secure',
+         -- unit_rates (4-D-1)
+         'list_unit_rates_secure', 'upsert_unit_rate_secure',
+         -- employee_rates (4-D-1)
+         'list_employee_rates_secure', 'upsert_employee_rate_secure',
          -- site_budgets (4-D-2)
          'list_site_budgets_secure', 'get_site_budget_secure',
+         'upsert_site_budget_secure', 'update_site_budget_secure',
+         'deactivate_site_budget_secure', 'restore_site_budget_secure',
          -- invoices (4-D-3)
          'list_invoices_secure', 'get_invoice_secure',
          'create_invoice_secure', 'update_invoice_secure',

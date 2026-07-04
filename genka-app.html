@@ -689,13 +689,25 @@ async function saveInvoice(){
 }
 
 async function loadInvoices(){
+  // Phase 4-D-3b：invoices は secure read RPC 経由（direct SELECT を置換）。
+  const token=gCurrentUser?.session_token;
+  if(!token)return;
   const y=currentMonth.getFullYear();
   const m=String(currentMonth.getMonth()+1).padStart(2,'0');
   const from=`${y}-${m}-01`;
   const last=new Date(y,currentMonth.getMonth()+1,0).getDate();
   const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
 
-  const{data}=await sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to).in('status',['confirmed','posted']).order('invoice_date',{ascending:false});
+  const{data,error}=await sb.rpc('list_invoices_secure',{
+    session_token_input:token,
+    statuses_input:['confirmed','posted'],
+    exclude_status_input:null,
+    date_from_input:from,
+    date_to_input:to,
+    site_id_input:null,
+    limit_input:null
+  });
+  if(error)console.error('請求書取得エラー:',error);
   const invs=data||[];
   document.getElementById('invCount').textContent=`${invs.length}件`;
 
@@ -757,7 +769,12 @@ function setEditInvCat(cat){
 }
 
 async function editInvoice(id){
-  const{data}=await sb.from('invoices').select('*').eq('id',id).single();
+  // Phase 4-D-3b：invoices 詳細は secure read RPC 経由（.single() 廃止）。
+  const token=gCurrentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const{data:rows,error}=await sb.rpc('get_invoice_secure',{session_token_input:token,id_input:id});
+  if(error)console.error('請求書取得エラー:',error);
+  const data=rows?.[0]||null;
   if(!data)return;
   editingInvId=id;
 
@@ -844,9 +861,16 @@ async function loadData(){
   const reps=reports||[];
 
   // 請求書データも取得（confirmed/posted のみ原価に反映）
-  let invQ=sb.from('invoices').select('*').gte('invoice_date',from).lte('invoice_date',to).in('status',['confirmed','posted']);
-  if(siteId) invQ=invQ.eq('site_id',siteId);
-  const{data:invoicesData}=await invQ;
+  const{data:invoicesData,error:invoicesError}=await sb.rpc('list_invoices_secure',{
+    session_token_input:token,
+    statuses_input:['confirmed','posted'],
+    exclude_status_input:null,
+    date_from_input:from,
+    date_to_input:to,
+    site_id_input:siteId||null,
+    limit_input:null
+  });
+  if(invoicesError)console.error('請求書取得エラー:',invoicesError);
   const invs=invoicesData||[];
 
   // 予算データ取得（年間のみ）

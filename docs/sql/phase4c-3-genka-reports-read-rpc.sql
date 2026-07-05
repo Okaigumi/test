@@ -2,7 +2,7 @@
 -- Phase 4-C-3：genka 原価系 report_summary 代替 read RPC 追加
 --   （list_genka_reports_secure）
 -- ============================================================
--- 【実行ステータス】★実行済み（2026-07-06）★
+-- 【実行ステータス】★実行済み（2026-07-01）★
 --   - Supabase SQL Editor で「事前確認A〜H」→「変更（CREATE / REVOKE / GRANT）」
 --     →「事後確認I〜N」の順に実行済み。
 --   - 実行結果：

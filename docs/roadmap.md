@@ -386,16 +386,16 @@
 - DB変更・新規RPC作成なし。DB非依存でクライアント側描画
 - 将来課題：管理者向け全社員カレンダー、`list_my_reports_secure` の from-to 範囲版RPC（過去100件超の古い月の取りこぼし対策）、同日複数日報のセル全件表示（現状は先頭1件＋「+N」）
 
-### 有休表示フェーズ 🚧 進行中（PR-A：DB実行済み・admin-app ZIP拡張済み・PR作成前 / PR-B 未着手）
+### 有休表示フェーズ ✅ 完了（PR-A：PR #38 merged / PR-B：PR #39 merged・いずれも 2026-07-02）
 
 - CSV viewer の社内確認用 月次稼働・日報詳細に「有休表示（個人カレンダー）」と「残有給表示（個人選択時ヘッダ）」を追加する機能フェーズ。2PR構成で進行。
-- **PR-A（DB＋出力・DB実行済み / commit・PR 前）**：有休CSV出力 secure RPC 2本追加＋`admin-app.html` ZIP拡張＋docs記録
+- **PR-A（DB＋出力・✅ PR #38 merged・2026-07-02）**：有休CSV出力 secure RPC 2本追加＋`admin-app.html` ZIP拡張＋docs記録
   - 追加RPC：`export_paid_leave_details_secure(text, date, date)`（承認済み有休明細・期間あり・有休1件/行）／`export_paid_leave_balances_secure(text)`（残有給スナップショット・期間なし・従業員1人/行）
   - 両RPCとも二経路検証（`list_paid_leave_admin_secure` 同型）。既存 export 4本の admin_sessions 単経路とは検証方式が異なる点を明記。SECURITY DEFINER / search_path 固定 / REVOKE PUBLIC → GRANT anon,authenticated / helper `csv_export_fiscal_year` 再利用
   - `admin-app.html`：`CSV_COLUMNS` に paid_leave_details / paid_leave_balances 追加、`exportCsvZip` specs に2本追加（details=period:true / balances=period:false）。ZIP は 6CSV 構成（manifest 1.0 後方互換）
   - SQL：`docs/sql/phase4d-paid-leave-export-rpc.sql`（**実行済み（2026-07-02）**）。詳細は docs/db-migrations.md「2026-07-02 Phase 4-D 有休CSV出力 secure RPC 追加（実行済み）」参照
-  - 現況：**DB実行済み**（2026-07-02・Supabase SQL Editor。事後確認 D/E/E-2/F すべて期待どおり）＋`admin-app.html` ZIP拡張済み＋docs記録・静的確認まで完了。**commit・push・PR は未実施（PR作成前・承認待ち）**
-- **PR-B（viewer表示・DB非依存）**：`csv-viewer.html` に `paid_leave_details` / `paid_leave_balances` 種別追加、社内確認用 個人カレンダーに「有休／有休（午前）／有休（午後）」表示、個人選択時ヘッダに「残有給：○日」表示。有休表示は ZIP 経由のみ。会計提出用・全体カレンダーには含めない。未着手
+  - 現況：**DB実行済み**（2026-07-02・Supabase SQL Editor。事後確認 D/E/E-2/F すべて期待どおり）＋`admin-app.html` ZIP拡張済み＋docs記録・静的確認まで完了。**PR #38 として merge 済み（2026-07-02・content commit `575bc5d`）**
+- **PR-B（viewer表示・DB非依存・✅ PR #39 merged・2026-07-02）**：`local-viewers/csv-viewer.html` に `paid_leave_details` / `paid_leave_balances` 種別追加、社内確認用 個人カレンダーに「有休／有休（午前）／有休（午後）」表示、個人選択時ヘッダに「残有給：○日」表示。有休表示は ZIP 経由のみ。会計提出用・全体カレンダーには含めない。
 
 ### 次候補（Phase 4-C 完了後の整理・他テーブル読み取り整理）
 

@@ -1568,7 +1568,7 @@ function onMyCalDay(dateStr){
   document.getElementById('detailTitle').textContent=`📋 ${dateStr}`;
   let msg='<div style="padding:8px 0;color:var(--text2);font-size:14px;">この日の日報はありません。</div>';
   if(cell&&cell.leave){const t=cell.leave.leave_type;msg=`<div style="padding:8px 0;color:var(--warn);font-size:14px;font-weight:700;">🌴 有給（${t==='full'?'全日':t==='am'?'午前休':'午後休'}）</div>`;}
-  msg+=`<button onclick="document.getElementById('detailModal').classList.remove('show');switchTab('report');" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">✏️ 日報入力へ</button>`;
+  msg+=`<button onclick="document.getElementById('detailModal').classList.remove('show');document.getElementById('reportDate').value='${dateStr}';switchTab('report');" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">✏️ 日報入力へ</button>`;
   document.getElementById('detailBody').innerHTML=msg;
   document.getElementById('detailModal').classList.add('show');
 }

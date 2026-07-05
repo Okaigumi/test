@@ -2325,7 +2325,7 @@ REVOKE SELECT ON public.reports FROM anon, authenticated;
 
 - `docs/sql/phase4c-2-admin-reports-read-rpc.sql`
 
-## 2026-07-06 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了
+## 2026-07-01 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了
 
 ### 目的
 
@@ -2350,7 +2350,7 @@ REVOKE SELECT ON public.reports FROM anon, authenticated;
 - ※SQL記録：`docs/sql/phase4c-3-genka-reports-read-rpc.sql`（PUBLIC EXECUTE を外し
   anon/authenticated/service_role に明示 GRANT）
 
-### 実行済み DB 変更（`docs/sql/phase4c-3-genka-reports-read-rpc.sql` を Supabase SQL Editor で実行・2026-07-06）
+### 実行済み DB 変更（`docs/sql/phase4c-3-genka-reports-read-rpc.sql` を Supabase SQL Editor で実行・2026-07-01）
 
 - `CREATE OR REPLACE FUNCTION public.list_genka_reports_secure(...)`（SECURITY DEFINER /
   `SET search_path = public, extensions` / STABLE）… Success. No rows returned

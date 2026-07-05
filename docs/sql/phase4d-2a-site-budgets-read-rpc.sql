@@ -2,6 +2,14 @@
 -- Phase 4-D-2a：site_budgets read RPC 追加
 --   list_site_budgets_secure / get_site_budget_secure
 -- ============================================================
+-- 【実行ステータス】★実行済み★（2026-07-03）
+--   Supabase SQL Editor で本番反映済み（PR #44 merge済み・merge commit 73668b7）。
+--   実行：CREATE FUNCTION ×2 / REVOKE EXECUTE FROM PUBLIC ×2 /
+--         GRANT EXECUTE TO anon,authenticated,service_role ×2
+--         （すべて Success. No rows returned）
+--   記録先：docs/db-migrations.md「2026-07-03 Phase 4-D-2a site_budgets read RPC 追加（★実行済み★）」/
+--     docs/roadmap.md「4-D-2a site_budgets read RPC 追加 ✅ 完了（2026-07-03）」参照。
+-- ============================================================
 -- 【このファイルの方針（重要）】
 --   - additive-only：新規 read RPC を2本 CREATE するだけ。
 --   - 既存テーブル / RLS / policy / 権限 / 既存RPC / ヘルパーは一切変更しない。

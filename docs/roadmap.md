@@ -229,7 +229,7 @@
 - SQL：`docs/sql/phase4c-2-admin-reports-read-rpc.sql`（実行済み）
 - 詳細は docs/db-migrations.md の「2026-07-01 Phase 4-C-2 index 管理系 report_summary 代替read RPC化 完了」を参照
 
-### 4-C-3 genka 原価系 report_summary 代替RPC化 ✅ 完了（2026-07-06）
+### 4-C-3 genka 原価系 report_summary 代替RPC化 ✅ 完了（2026-07-01）
 
 - genka-app.html の原価集計（`loadData`）の `report_summary` direct read を secure RPC 経由へ移行（View 封鎖前の段階として direct read を除去）
 - read RPC 1本追加（`list_genka_reports_secure(text, date, date, uuid)`・二経路の管理者セッション検証／`reports` 単独から原価関連9列を返すため View 非依存・employees JOIN も不要）
@@ -240,7 +240,7 @@
 - 本番確認OK（原価画面/月切替/現場フィルタ/原価サマリー、金額・件数異常なし。Console 赤エラーは favicon.ico 404 のみで本RPCと無関係）
 - `report_summary` View / `reports` 権限 / policy は未変更（View 封鎖・SELECT REVOKE は 4-C-4 対象）
 - SQL：`docs/sql/phase4c-3-genka-reports-read-rpc.sql`（実行済み）
-- 詳細は docs/db-migrations.md の「2026-07-06 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了」を参照
+- 詳細は docs/db-migrations.md の「2026-07-01 Phase 4-C-3 genka 原価系 report_summary 代替read RPC化 完了」を参照
 
 ### 4-C-4 report_summary View 封鎖・不要 GRANT 整理 ✅ 完了（2026-07-02）
 

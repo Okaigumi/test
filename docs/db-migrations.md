@@ -3081,3 +3081,42 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 - reports に列追加のみ。既存列・データ・RLS・policy・権限・既存RPC・トリガーは不変。
 - 既存行はすべて is_voided=false。**本PR単独では履歴・集計・CSVの結果は変わらない**
   （read/export RPC の除外フィルタは PR-B）。
+
+---
+
+## （未実行）日報無効化 PR-B: 無効化RPC追加・read/export の無効化除外（★未実行★）
+
+### 目的
+
+- PR-A で追加した `is_voided` を実運用するため、(A) 通常 read/export RPC に `is_voided=false` 除外、
+  (B) 管理者専用の無効化RPC `admin_void_report_secure`、(C) 無効化済み確認用
+  `list_admin_reports_with_voided_secure` を追加する。管理者UIは PR-C。
+
+### 変更・追加内容（SQL：`docs/sql/report-void-rpc.sql`・additive/本体再定義のみ）
+
+- **A. 既存 read/export に除外追加**（本体のみ CREATE OR REPLACE・引数/戻り列/権限/認可は不変）：
+  `list_my_reports_secure` / `list_admin_reports_secure` / `list_genka_reports_secure` /
+  `export_projects_summary_secure` / `export_attendance_details_secure` の各 WHERE に
+  `AND r.is_voided = false` を1行追加（原本との差分は当該1行のみ・diff 検証済み）。
+  `export_project_cost_details_secure` / `export_machine_details_secure` は reports を直接読まないため対象外。
+- **B. `admin_void_report_secure(text, uuid, text)`**：管理者二経路検証（employee_admin / genka_admin）、
+  理由必須（空白のみ不可）、`is_voided=true` / `voided_at=now()` / `voided_by`＝実行者id /
+  `voided_by_role`＝出所 / `void_reason=btrim(reason)`。既に無効化済みは 'Report already voided'、
+  存在しない id は 'Report not found'。`RETURNS TABLE`（report_id, is_voided, voided_at, voided_by,
+  voided_by_role, void_reason）で無効化結果を返す。物理削除しない・復元RPCは作らない。
+- **C. `list_admin_reports_with_voided_secure(text, date, date, boolean DEFAULT false)`**：
+  既存 `list_admin_reports_secure`（シグネチャ維持・通常集計用）とは別に新設。
+  `include_voided_input=false` で有効のみ、true で無効化済みも含め、監査列（is_voided/voided_*）を返す。PR-C の管理者UI用。
+- **D. 権限**：新設2関数のみ `REVOKE EXECUTE ... FROM PUBLIC` → `GRANT ... TO anon, authenticated, service_role`。
+  A の5関数は CREATE OR REPLACE で既存 ACL 保持（再GRANTなし）。reports への直接 UPDATE 権限は付与しない。RLS/policy 不変。
+
+### 実行ステータス
+
+- **未実行**。ユーザーが Supabase SQL Editor で実行予定。事前確認 P1/P2・事後確認 Q1〜Q4 を SQL 末尾に同梱。
+- 実行後、本エントリを「実行済み」へ更新する。
+
+### 影響範囲 / 非影響
+
+- 実行後：通常の本人履歴・本人カレンダー・管理集計・原価集計・CSV(projects_summary/attendance) から
+  `is_voided=true` の日報が除外される。有効日報の集計値・件数は不変（既存151件は is_voided=false）。
+- 既存の日報作成（create_report_secure）・編集（update_report_secure）は不変。UI 変更なし（PR-C で対応）。

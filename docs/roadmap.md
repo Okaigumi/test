@@ -404,9 +404,11 @@
   復元は MVP 非対象（is_voided フラグ方式で将来対応可）。UIは index.html の管理者エリア。
 - **PR-A（DBカラム追加・additive）**：reports に `is_voided`/`voided_at`/`voided_by`/`voided_by_role`/`void_reason` を追加＋CHECK 2本。
   SQL：`docs/sql/report-void-columns.sql`（**実行済み（2026-07-06）**・ユーザーが Supabase SQL Editor で実行。active_rows=151 / voided_rows=0 / total_rows=151、既存151件はすべて is_voided=false）。本PR単独では履歴・集計・CSVは不変。
-- **PR-B（RPC・read/export 除外）**：`admin_void_report_secure(session_token, report_id, reason)`（管理者二経路・理由必須・voided_by/by_role をサーバ確定）追加。
-  `list_my_reports_secure` / `list_admin_reports_secure`（include_voided 追加）/ `list_genka_reports_secure` /
-  `export_projects_summary_secure` / `export_attendance_details_secure` に `is_voided=false` 除外を追加。未着手。
+- **PR-B（RPC・read/export 除外）**：SQL `docs/sql/report-void-rpc.sql`（**作成済み・DB未実行**）。
+  `admin_void_report_secure(text, uuid, text)`（管理者二経路・理由必須・voided_by/by_role サーバ確定・無効化結果を RETURNS TABLE で返す）を追加。
+  `list_my_reports_secure` / `list_admin_reports_secure`（**シグネチャ維持**）/ `list_genka_reports_secure` /
+  `export_projects_summary_secure` / `export_attendance_details_secure` の各 WHERE に `is_voided=false` 除外を1行追加（本体のみ再定義・権限不変）。
+  無効化済み確認用は別RPC `list_admin_reports_with_voided_secure(..., include_voided_input DEFAULT false)`（監査列付き）を新設（PR-C用）。DB実行はユーザー。
 - **PR-C（管理者UI）**：index.html 管理者エリアに個別日報一覧＋無効化ボタン（理由入力必須モーダル）、
   「無効化済みも表示」トグル（理由/実行者/日時表示）。復元ボタンは非表示（将来）。未着手。
 

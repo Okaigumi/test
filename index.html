@@ -218,6 +218,19 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .stats-top-label{font-size:11px;color:var(--text3);margin-top:2px;}
 
 .empty-msg{text-align:center;color:var(--text3);padding:40px 0;font-size:14px;}
+.void-mgr{margin-bottom:8px;}
+.void-toggle-sec{width:100%;padding:11px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--text2);}
+.void-hint{font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:12px;}
+.void-range{display:flex;gap:10px;margin-bottom:10px;}
+.void-lbl{font-size:12px;color:var(--text2);margin-bottom:4px;}
+.void-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);margin-bottom:10px;cursor:pointer;}
+.void-warn{background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--warn);line-height:1.6;}
+.void-item{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:var(--surface);}
+.void-item.is-voided{opacity:.6;background:var(--surface2);}
+.void-item-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);}
+.void-item-meta{font-size:12px;color:var(--text3);margin-top:4px;line-height:1.6;}
+.void-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--danger);color:#fff;white-space:nowrap;}
+.void-btn{padding:6px 12px;background:var(--danger);color:#fff;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;}
 
 /* work type selector */
 .wtype-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -629,6 +642,20 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
   </div>
 
+  <!-- 日報無効化モーダル（管理者用） -->
+  <div class="modal-overlay" id="voidModal" onclick="if(event.target===this)this.classList.remove('show')">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">🚫 日報を無効化</div>
+      <div id="voidModalTarget" style="font-size:13px;color:var(--text2);margin-bottom:10px;"></div>
+      <div class="void-warn">この日報を無効化します。通常の履歴・集計・CSVから除外されます。データは削除されません。</div>
+      <div style="margin:14px 0 6px;font-size:13px;color:var(--text2);">無効化理由（必須）</div>
+      <textarea id="voidReason" class="date-input" rows="3" style="font-family:'Noto Sans JP',sans-serif;resize:vertical;" placeholder="例：重複作成のため／誤入力のため"></textarea>
+      <button class="submit-btn" id="voidConfirmBtn" onclick="confirmVoid()" style="margin-top:12px;">無効化する</button>
+      <button class="modal-close" onclick="document.getElementById('voidModal').classList.remove('show')">キャンセル</button>
+    </div>
+  </div>
+
   <!-- 管理 -->
   <div class="content" id="content-admin">
     <div class="admin-notice">📊 本日の提出状況</div>
@@ -638,6 +665,22 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div class="summary-stat"><div class="stat-num orange" id="pendingCount">-</div><div class="stat-label">未提出</div></div>
     </div>
     <div id="staffList"><div class="empty-msg">読み込み中...</div></div>
+
+    <!-- 🗂 日報管理（無効化）：管理者のみ・既定折りたたみ。集計/CSVとは分離 -->
+    <div class="stats-section-title">🗂 日報管理（無効化）</div>
+    <div class="void-mgr">
+      <button type="button" class="void-toggle-sec" id="voidSecToggle" onclick="toggleVoidSection()" aria-expanded="false">日報の無効化ツールを開く <span id="voidSecChevron">▾</span></button>
+      <div id="voidSecBody" style="display:none;margin-top:12px;">
+        <div class="void-hint">誤作成・不要になった日報を「無効化」します（物理削除ではありません）。無効化すると通常の履歴・集計・CSVから除外されます。管理者のみ操作できます。</div>
+        <div class="void-range">
+          <div style="flex:1;"><div class="void-lbl">開始日</div><input type="date" class="date-input" id="voidFrom"></div>
+          <div style="flex:1;"><div class="void-lbl">終了日</div><input type="date" class="date-input" id="voidTo"></div>
+        </div>
+        <label class="void-check"><input type="checkbox" id="voidIncludeVoided" onchange="loadVoidReports()"> 無効化済みも表示</label>
+        <button type="button" class="submit-btn" id="voidLoadBtn" onclick="loadVoidReports()" style="margin-top:4px;">🔍 読み込み</button>
+        <div id="voidReportList" style="margin-top:12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- 集計 -->
@@ -2418,6 +2461,91 @@ async function saveGrant(){
 }
 
 // ===== TAB =====
+// ===== 日報無効化（管理者UI・PR-C）=====
+// 一覧は list_admin_reports_with_voided_secure、無効化は admin_void_report_secure を使用。
+// 管理タブ内のみに表示（従業員には管理タブ自体が出ない）。物理削除はしない。
+let _voidData=[];
+let _voidTargetId=null;
+function toggleVoidSection(){
+  const body=document.getElementById('voidSecBody');
+  const chev=document.getElementById('voidSecChevron');
+  const btn=document.getElementById('voidSecToggle');
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  chev.textContent=open?'▴':'▾';
+  btn.setAttribute('aria-expanded',open?'true':'false');
+}
+async function loadVoidReports(){
+  const token=state.currentUser?.session_token;
+  const list=document.getElementById('voidReportList');
+  if(!token){list.innerHTML='<div class="empty-msg">セッションが無効です。</div>';return;}
+  const from=document.getElementById('voidFrom').value||null;
+  const to=document.getElementById('voidTo').value||null;
+  const includeVoided=document.getElementById('voidIncludeVoided').checked;
+  list.innerHTML='<div class="empty-msg">読み込み中...</div>';
+  const{data,error}=await sb.rpc('list_admin_reports_with_voided_secure',{
+    session_token_input:token,
+    from_date_input:from,
+    to_date_input:to,
+    include_voided_input:includeVoided
+  });
+  if(error){console.error('list_admin_reports_with_voided_secure error:',error);list.innerHTML='<div class="empty-msg">読み込みに失敗しました。</div>';return;}
+  _voidData=data||[];
+  renderVoidReports();
+}
+function renderVoidReports(){
+  const list=document.getElementById('voidReportList');
+  if(!_voidData.length){list.innerHTML='<div class="empty-msg">対象の日報がありません。</div>';return;}
+  list.innerHTML=_voidData.map((r,i)=>{
+    const siteNames=(r.site_ids||[]).map(id=>state.sites.find(s=>s.id===id)?.name||'').filter(Boolean).join('、');
+    const times=`${escapeHtml((r.start_time||'').slice(0,5))}〜${escapeHtml((r.end_time||'').slice(0,5))}`;
+    const roleLabel=r.voided_by_role==='genka_admin'?'原価管理者':r.voided_by_role==='employee_admin'?'管理者':escapeHtml(r.voided_by_role||'');
+    const voidedInfo=r.is_voided
+      ? `<div class="void-item-meta">🚫 無効化済み：${escapeHtml((r.voided_at||'').slice(0,16).replace('T',' '))} ／ ${roleLabel}<br>理由：${escapeHtml(r.void_reason||'')}</div>`
+      : '';
+    return `<div class="void-item ${r.is_voided?'is-voided':''}">
+      <div class="void-item-head">
+        <span>${escapeHtml(r.report_date||'')} ${escapeHtml(r.employee_name||'')}</span>
+        ${r.is_voided?'<span class="void-badge">無効化済み</span>':`<button class="void-btn" onclick="openVoidModal(${i})">🚫 無効化</button>`}
+      </div>
+      <div class="void-item-meta">🕒 ${times} ／ 🏗 ${escapeHtml(siteNames||'現場なし')}${r.memo?' ／ 📝 '+escapeHtml(r.memo):''}</div>
+      ${voidedInfo}
+    </div>`;
+  }).join('');
+}
+function openVoidModal(i){
+  const r=_voidData[i];
+  if(!r||r.is_voided)return;
+  _voidTargetId=r.report_id;
+  document.getElementById('voidModalTarget').textContent=`対象：${r.report_date||''} ／ ${r.employee_name||''}`;
+  document.getElementById('voidReason').value='';
+  const btn=document.getElementById('voidConfirmBtn');btn.disabled=false;btn.textContent='無効化する';
+  document.getElementById('voidModal').classList.add('show');
+}
+async function confirmVoid(){
+  const token=state.currentUser?.session_token;
+  if(!token){alert('セッションが無効です。再ログインしてください。');return;}
+  const reason=document.getElementById('voidReason').value.trim();
+  if(!reason){alert('無効化理由を入力してください。');return;}
+  if(!_voidTargetId)return;
+  const btn=document.getElementById('voidConfirmBtn');
+  btn.disabled=true;btn.textContent='送信中...';
+  const{error}=await sb.rpc('admin_void_report_secure',{
+    session_token_input:token,
+    report_id_input:_voidTargetId,
+    reason_input:reason
+  });
+  if(error){
+    console.error('admin_void_report_secure error:',error);
+    btn.disabled=false;btn.textContent='無効化する';
+    alert('無効化に失敗しました：'+(error.message||''));
+    return;
+  }
+  document.getElementById('voidModal').classList.remove('show');
+  _voidTargetId=null;
+  await loadVoidReports();
+  alert('日報を無効化しました。');
+}
 async function switchTab(name){
   document.querySelectorAll('.content').forEach(c=>c.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));

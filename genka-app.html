@@ -14,6 +14,7 @@
   --text:#1A1A18;--text2:#6B6960;--text3:#9E9C95;
   --border:#DEDAD2;--danger:#C84B31;--danger-bg:#FBE9E5;
   --warn:#B87A1A;--warn-bg:#FDF0D5;
+  --machine:#5B7085;--machine-bg:#E7EDF2;
   --radius:12px;--radius-sm:8px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -63,18 +64,18 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .sum-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
 .sum-card.c-green{border-left:4px solid var(--accent);}
 .sum-card.c-orange{border-left:4px solid var(--accent2);}
-.sum-card.c-warn{border-left:4px solid var(--warn);}
+.sum-card.c-machine{border-left:4px solid var(--machine);}
 .sum-card.c-purple{border-left:4px solid #7C3AED;}
 .sum-card.c-blue{border-left:4px solid #1D4ED8;}
-.sum-card.c-red{border-left:4px solid var(--danger);}
+.sum-card.c-ink{border-left:4px solid var(--text);}
 .sum-label{font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;}
 .sum-val{font-size:20px;font-weight:700;font-family:'DM Mono',monospace;}
 .sum-val.green{color:var(--accent);}
 .sum-val.orange{color:var(--accent2);}
-.sum-val.warn{color:var(--warn);}
+.sum-val.machine{color:var(--machine);}
 .sum-val.purple{color:#7C3AED;}
 .sum-val.blue{color:#1D4ED8;}
-.sum-val.red{color:var(--danger);}
+.sum-val.ink{color:var(--text);}
 .sum-sub{font-size:11px;color:var(--text3);margin-top:3px;}
 
 .tab-nav{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;}
@@ -94,7 +95,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .bi-val{font-size:15px;font-weight:700;font-family:'DM Mono',monospace;}
 .bi-val.labor{color:var(--accent);}
 .bi-val.sub{color:var(--accent2);}
-.bi-val.machine{color:var(--warn);}
+.bi-val.machine{color:var(--machine);}
 .bi-val.dump{color:#7C3AED;}
 .bi-val.guard{color:#1D4ED8;}
 .bi-sub{font-size:10px;color:var(--text3);margin-top:2px;}
@@ -222,10 +223,16 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="filter-label">現場</span>
-      <select class="filter-select" id="siteFilter"><option value="">全現場</option></select>
+      <select class="filter-select" id="siteFilter" onchange="scheduleLoad()"><option value="">全現場</option></select>
     </div>
-    <button class="btn-filter" onclick="loadData()">集計する</button>
+    <button class="btn-filter" onclick="loadData()">🔄 再読み込み</button>
   </div>
+
+  <!-- 読み込み状態（読み込み中／エラー／一部取得失敗） -->
+  <div id="loadStatus" class="no-print" style="display:none;margin-bottom:12px;"></div>
+
+  <!-- 危険現場アラート帯（超過／80%以上／予算確認が必要） -->
+  <div id="alertBand" class="no-print" style="display:none;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
 
   <!-- 現場選択時の予算ヒーローパネル -->
   <div id="siteBudgetHero" style="display:none;margin-bottom:20px;border-radius:var(--radius);overflow:hidden;">
@@ -236,10 +243,10 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <div class="summary-grid">
     <div class="sum-card c-green"><div class="sum-label">👷 労務費</div><div class="sum-val green" id="sumLabor">-</div><div class="sum-sub" id="sumLaborSub"></div></div>
     <div class="sum-card c-orange"><div class="sum-label">🧱 外注費</div><div class="sum-val orange" id="sumSub">-</div><div class="sum-sub" id="sumSubSub"></div></div>
-    <div class="sum-card c-warn"><div class="sum-label">🚜 重機リース</div><div class="sum-val warn" id="sumMachine">-</div></div>
+    <div class="sum-card c-machine"><div class="sum-label">🚜 重機リース</div><div class="sum-val machine" id="sumMachine">-</div></div>
     <div class="sum-card c-purple"><div class="sum-label">🚚 大型ダンプ</div><div class="sum-val purple" id="sumDump">-</div><div class="sum-sub" id="sumDumpSub"></div></div>
     <div class="sum-card c-blue"><div class="sum-label">🦺 警備員</div><div class="sum-val blue" id="sumGuard">-</div><div class="sum-sub" id="sumGuardSub"></div></div>
-    <div class="sum-card c-red"><div class="sum-label">💰 総原価</div><div class="sum-val red" id="sumTotal">-</div></div>
+    <div class="sum-card c-ink"><div class="sum-label">💰 総原価</div><div class="sum-val ink" id="sumTotal">-</div></div>
   </div>
 
   <div class="tab-nav no-print">
@@ -251,7 +258,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
   <div id="content-site">
     <div class="section-title">現場別 原価明細 <span class="badge" id="siteCount"></span></div>
-    <div id="siteList"><div class="empty-msg">集計ボタンを押してください</div></div>
+    <div id="siteList"><div class="empty-msg">読み込み中…</div></div>
   </div>
 
   <div id="content-employee" style="display:none;">
@@ -565,6 +572,7 @@ function updateMonthLabel(){
 function changeMonth(delta){
   currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+delta,1);
   updateMonthLabel();
+  scheduleLoad(); // 月切替で自動集計（連打はデバウンスで1回に集約）
 }
 function switchTab(name){
   ['site','employee','invoice','rate'].forEach(t=>{
@@ -652,7 +660,7 @@ let currentInvCat='subcontract';
 const catInfo={
   subcontract:{label:'🧱 外注費',color:'var(--accent2)',bg:'var(--accent2-light)'},
   material:{label:'📦 材料費',color:'#7C3AED',bg:'#EDE9FE'},
-  machine_lease:{label:'🚜 重機リース',color:'var(--warn)',bg:'var(--warn-bg)'},
+  machine_lease:{label:'🚜 重機リース',color:'var(--machine)',bg:'var(--machine-bg)'},
   other:{label:'📋 その他',color:'var(--text2)',bg:'var(--surface2)'}
 };
 
@@ -933,7 +941,41 @@ function siteCostOf(sd){
   return (sd.labor||0)+(sd.sub||0)+(sd.dump||0)+(sd.guard||0)+(sd.invSub||0)+(sd.invMaterial||0)+(sd.invMachine||0)+(sd.invOther||0);
 }
 
+// ===== 自動集計制御（デバウンス＋世代カウンタ） =====
+let loadTimer=null; // 連打対策：最後の操作から300ms後に1回だけ集計
+let loadGen=0;      // 競合対策：古いRPC応答が新しい表示を上書きしないようにする
+function scheduleLoad(){
+  if(loadTimer)clearTimeout(loadTimer);
+  loadTimer=setTimeout(()=>{loadTimer=null;loadData();},300);
+}
+function setLoadStatus(state,msg,detail){
+  const el=document.getElementById('loadStatus');
+  if(!state){el.style.display='none';el.innerHTML='';return;}
+  const styles={
+    loading:'background:var(--surface2);color:var(--text2);border:1px solid var(--border);',
+    error:'background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);',
+    session:'background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);',
+    partial:'background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);'
+  };
+  const btnStyle=`margin-left:8px;padding:3px 12px;font-size:12px;border:1px solid var(--danger);background:white;color:var(--danger);border-radius:var(--radius-sm);cursor:pointer;font-family:'Noto Sans JP',sans-serif;`;
+  const action=state==='error'?` <button onclick="loadData()" style="${btnStyle}">🔄 再読み込み</button>`
+    :state==='session'?` <button onclick="gLogout()" style="${btnStyle}">🔑 再ログイン</button>`:'';
+  // エラー原因の確認用に message を小さく表示（任意）
+  const detailHtml=detail?`<div style="font-size:11px;opacity:.7;margin-top:4px;font-family:'DM Mono',monospace;word-break:break-all;">${escapeHtml(detail)}</div>`:'';
+  el.innerHTML=`<div style="${styles[state]}border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;">${msg}${action}${detailHtml}</div>`;
+  el.style.display='block';
+}
+// エラー時に現場別一覧・件数を「読み込み中…」のまま残さず明確な空状態にする
+function clearSiteListOnError(){
+  document.getElementById('siteList').innerHTML='<div class="empty-msg">データを取得できませんでした</div>';
+  document.getElementById('siteCount').textContent='';
+  document.getElementById('alertBand').style.display='none';
+  document.getElementById('siteBudgetHero').style.display='none';
+}
+
 async function loadData(){
+  const gen=++loadGen;
+  if(loadTimer){clearTimeout(loadTimer);loadTimer=null;} // 手動再読み込み時は保留中の自動集計を取り消す
   const y=currentMonth.getFullYear();
   const m=String(currentMonth.getMonth()+1).padStart(2,'0');
   const from=`${y}-${m}-01`;
@@ -943,9 +985,11 @@ async function loadData(){
 
   const token=gCurrentUser?.session_token;
   if(!token)return;
+  setLoadStatus('loading','⏳ 読み込み中…');
 
   // 当月分／工事累計分（開始日を限定せず表示月末まで）／予算を並列取得
   // 請求書は confirmed/posted のみ原価に反映
+  // 累計は現場フィルタに関係なく全現場分を取得（危険現場アラート帯の判定に使うため）
   const invParams={
     session_token_input:token,
     statuses_input:['confirmed','posted'],
@@ -957,8 +1001,8 @@ async function loadData(){
   const[repsRes,invsRes,cumRepsRes,cumInvsRes,budgetsRes]=await Promise.all([
     sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to,site_id_input:siteId||null}),
     sb.rpc('list_invoices_secure',{...invParams,date_from_input:from}),
-    sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:null,to_date_input:to,site_id_input:siteId||null}),
-    sb.rpc('list_invoices_secure',{...invParams,date_from_input:null}),
+    sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:null,to_date_input:to,site_id_input:null}),
+    sb.rpc('list_invoices_secure',{...invParams,date_from_input:null,site_id_input:null}),
     // 予算データ取得（工事全体予算として登録年を問わず取得。month IS NULL の予算のみ）
     // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
     sb.rpc('list_site_budgets_secure',{
@@ -969,11 +1013,25 @@ async function loadData(){
       annual_only_input:true
     })
   ]);
-  if(repsRes.error){console.error('原価日報取得エラー:',repsRes.error);return;}
-  if(cumRepsRes.error){console.error('原価日報（累計）取得エラー:',cumRepsRes.error);return;}
-  if(invsRes.error)console.error('請求書取得エラー:',invsRes.error);
-  if(cumInvsRes.error)console.error('請求書（累計）取得エラー:',cumInvsRes.error);
-  if(budgetsRes.error)console.error('予算取得エラー:',budgetsRes.error);
+  if(gen!==loadGen)return; // より新しい読み込みが始まっている場合、この応答は破棄する
+
+  if(repsRes.error||cumRepsRes.error){
+    const err=repsRes.error||cumRepsRes.error;
+    console.error('原価日報取得エラー:',err);
+    // セッション期限切れ（RPCの 'Invalid or expired session' / 'セッションが無効または期限切れです'）を専用表示
+    const expired=/invalid or expired session|jwt|セッション|期限|無効/i.test(err.message||'');
+    if(expired){
+      setLoadStatus('session','🔑 セッションの有効期限が切れました。再ログインしてください。',err.message);
+    }else{
+      setLoadStatus('error','データを取得できませんでした。再読み込みしてください。',err.message);
+    }
+    clearSiteListOnError();
+    return;
+  }
+  let partialError=false;
+  if(invsRes.error){console.error('請求書取得エラー:',invsRes.error);partialError=true;}
+  if(cumInvsRes.error){console.error('請求書（累計）取得エラー:',cumInvsRes.error);partialError=true;}
+  if(budgetsRes.error){console.error('予算取得エラー:',budgetsRes.error);partialError=true;}
   const reps=repsRes.data||[];
   const invs=invsRes.data||[];
   const cumReps=cumRepsRes.data||[];
@@ -992,6 +1050,27 @@ async function loadData(){
   // 当月分と工事累計分をそれぞれ現場別に集計
   const{siteMap,totals}=buildSiteCostMap(reps,invs);
   const cumMap=buildSiteCostMap(cumReps,cumInvs).siteMap;
+
+  // 危険現場の判定（工事累計原価ベース。当月原価0円の現場も対象＝見逃し防止）
+  const pctOf=sid=>{const b=budgetMap[sid];return b>0?siteCostOf(cumMap[sid])/b:0;};
+  const alertOver=[],alertWarn=[],alertMulti=Object.keys(budgetMulti);
+  Object.keys(budgetMap).forEach(sid=>{
+    if(budgetMulti[sid])return; // 複数予算は「予算確認が必要」として別枠
+    const b=budgetMap[sid];
+    if(!(b>0))return;
+    const cum=siteCostOf(cumMap[sid]);
+    if(cum>b)alertOver.push(sid);
+    else if(cum/b>=0.8)alertWarn.push(sid);
+  });
+  alertOver.sort((a,b)=>pctOf(b)-pctOf(a));
+  alertWarn.sort((a,b)=>pctOf(b)-pctOf(a));
+  renderAlertBand(alertOver,alertWarn,alertMulti);
+
+  // 注意・超過・要確認の現場は当月データが無くてもカード一覧に出す（現場フィルタ中は対象現場のみ）
+  [...alertOver,...alertWarn,...alertMulti].forEach(sid=>{
+    if(siteId&&sid!==siteId)return;
+    if(!siteMap[sid])siteMap[sid]=emptySiteEntry();
+  });
 
   const totalLabor=totals.labor,totalLaborDays=totals.laborDays;
   const totalDump=totals.dump,totalDumpTai=totals.dumpTai;
@@ -1056,10 +1135,11 @@ async function loadData(){
       const siteBudget=budgetMap[selectedSiteId];
       const siteDiff=siteBudget-cumCost;
       const over=siteDiff<0;
+      const caution=!over&&siteBudget>0&&cumCost/siteBudget>=0.8; // 消化率80%以上は注意（琥珀）
       const pct=siteBudget>0?Math.min(Math.round(cumCost/siteBudget*100),999):0;
       const barW=Math.min(pct,100);
       document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
-        <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
+        <div style="background:${over?'var(--danger)':caution?'var(--warn)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
             <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px 6px;text-align:center;">
               <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
@@ -1075,12 +1155,12 @@ async function loadData(){
             </div>
           </div>
           <div style="background:rgba(255,255,255,.2);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
-            <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 工事予算残'}</div>
+            <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'🚨 予算超過':caution?'⚠️ 工事予算残（残りわずか）':'✅ 工事予算残'}</div>
             <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
             <span style="font-size:12px;opacity:.8;">消化率</span>
-            <span style="font-size:13px;font-weight:700;">${pct}%${over?' ⚠️ 超過':''}</span>
+            <span style="font-size:13px;font-weight:700;">${pct}%${over?' 🚨 超過':caution?' ⚠️ 注意':''}</span>
           </div>
           <div style="height:10px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden;margin-bottom:10px;">
             <div style="height:100%;width:${barW}%;background:white;border-radius:5px;transition:width .5s;"></div>
@@ -1103,13 +1183,60 @@ async function loadData(){
 
   renderSiteList(siteMap,cumMap,budgetMap,budgetMulti,dumpUnitSet,guardUnitSet);
   renderEmployeeList(reps);
+
+  // 読み込み状態を解除（請求書・予算の一部失敗時は警告を残す）
+  setLoadStatus(partialError?'partial':'',partialError?'⚠️ 一部のデータ（請求書または予算）を取得できませんでした。数字が不完全な可能性があります。':'');
+}
+
+// ===== 危険現場アラート帯 =====
+function renderAlertBand(over,warn,multi){
+  const el=document.getElementById('alertBand');
+  if(!over.length&&!warn.length&&!multi.length){el.style.display='none';el.innerHTML='';return;}
+  const chip=sid=>{
+    const s=sites.find(x=>x.id===sid);
+    if(!s)return '';
+    return `<button onclick="focusSite(this.dataset.siteId)" data-site-id="${sid}" style="padding:3px 10px;font-size:12px;font-weight:500;background:white;border:1px solid currentColor;border-radius:12px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;color:inherit;">${escapeHtml(s.name)}</button>`;
+  };
+  const row=(icon,label,ids,color,bg)=>`
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;background:${bg};border:1px solid ${color};border-radius:var(--radius-sm);color:${color};">
+      <span style="font-size:13px;font-weight:700;">${icon} ${label} ${ids.length}現場</span>
+      ${ids.map(chip).join('')}
+    </div>`;
+  el.innerHTML=[
+    over.length?row('🚨','予算超過',over,'var(--danger)','var(--danger-bg)'):'',
+    warn.length?row('⚠️','消化率80%以上',warn,'var(--warn)','var(--warn-bg)'):'',
+    multi.length?row('⚠️','予算確認が必要（複数予算）',multi,'var(--warn)','var(--warn-bg)'):''
+  ].join('');
+  el.style.display='flex';
+}
+
+// アラート帯の現場名クリック：その現場に絞って集計し、ヒーローパネルへスクロール
+async function focusSite(siteId){
+  document.getElementById('siteFilter').value=siteId;
+  switchTab('site');
+  await loadData();
+  const hero=document.getElementById('siteBudgetHero');
+  if(hero.style.display!=='none')hero.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 // ===== SITE LIST =====
 function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSet=false,guardUnitSet=false){
   const keys=Object.keys(siteMap);
   document.getElementById('siteCount').textContent=`${keys.length}現場`;
-  if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
+  if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">この月の日報・請求書はありません（月や現場を切り替えると自動で再集計されます）</div>';return;}
+
+  // 危険度順ソート：予算確認が必要 → 超過 → 80%以上 → 予算あり通常 → 予算未設定
+  // （グループ内は消化率の降順。予算未設定は当月原価の降順）
+  const sevOf=sid=>{
+    if(budgetMulti[sid])return{rank:0,val:0};
+    const b=budgetMap[sid]||0;
+    if(b>0){
+      const p=siteCostOf(cumMap[sid])/b;
+      return{rank:p>1?1:(p>=0.8?2:3),val:p};
+    }
+    return{rank:4,val:siteCostOf(siteMap[sid])};
+  };
+  keys.sort((a,b)=>{const A=sevOf(a),B=sevOf(b);return A.rank!==B.rank?A.rank-B.rank:B.val-A.val;});
 
   const machineCost=machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).reduce((s,m)=>s+m.lease_monthly,0);
   const totals=Object.values(siteMap).map(s=>s.labor+s.sub+s.invSub+s.dump+s.guard+(s.invMaterial||0)+(s.invMachine||0)+(s.invOther||0));
@@ -1164,13 +1291,15 @@ function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSe
     const invOth=s.invOther||0;
     const hasInv=(s.invSub||0)+(invMat)+(invMach)+(invOth)>0;
 
-    // 予算（実行予算＝工事全体予算、残・超過は工事累計原価ベース）
+    // 予算（実行予算＝工事全体予算、残・超過・注意は工事累計原価ベース）
     const budget=budgetMap[sid]||0;
     const cumTotal=cumMap[sid]?siteCostOf(cumMap[sid]):total;
     const diff=budget-cumTotal;
     const over=budget>0&&diff<0;
+    const caution=budget>0&&!over&&cumTotal/budget>=0.8; // 消化率80%以上は注意
+    const usePct=budget>0?Math.min(Math.round(cumTotal/budget*100),999):0;
     const multi=!!budgetMulti[sid];
-    const cardBorder=multi?'border:2px solid var(--warn);':(budget>0?(over?'border:2px solid var(--danger);':'border:2px solid var(--accent);'):'');
+    const cardBorder=multi?'border:2px solid var(--warn);':(budget>0?(over?'border:2px solid var(--danger);':caution?'border:2px solid var(--warn);':'border:2px solid var(--accent);'):'');
 
     const budgetBlock=multi?`
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--warn-bg);border-radius:var(--radius-sm);margin-bottom:10px;">
@@ -1178,14 +1307,16 @@ function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSe
         <span style="font-size:11px;color:var(--text2);">実行予算が複数登録されています</span>
       </div>`
     :budget>0?`
-      <div style="padding:8px 12px;background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);margin-bottom:10px;">
+      <div style="padding:8px 12px;background:${over?'var(--danger-bg)':caution?'var(--warn-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);margin-bottom:10px;">
+        ${over?`<div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:6px;">🚨 予算超過 消化率${usePct}%</div>`
+        :caution?`<div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px;">⚠️ 注意 消化率${usePct}%</div>`:''}
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
           <div style="display:flex;gap:14px;flex-wrap:wrap;">
             <span style="font-size:11px;color:var(--text2);">実行予算 <b style="font-family:'DM Mono',monospace;">${fmt(budget)}</b></span>
             <span style="font-size:11px;color:var(--text2);">当月原価 <b style="font-family:'DM Mono',monospace;">${fmt(total)}</b></span>
             <span style="font-size:11px;color:var(--text2);">工事累計原価 <b style="font-family:'DM Mono',monospace;">${fmt(cumTotal)}</b></span>
           </div>
-          <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${over?'超過':'工事予算残'} ${fmt(Math.abs(diff))}</span>
+          <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':caution?'var(--warn)':'var(--accent)'};">${over?'超過':'工事予算残'} ${fmt(Math.abs(diff))}</span>
         </div>
       </div>`
     :`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
@@ -1231,7 +1362,7 @@ function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSe
           ${invOth>0?`<div style="display:flex;justify-content:space-between;"><span>その他</span><span class="money">${fmt(invOth)}</span></div>`:''}
         </div>`:''}
       </div>
-      <button class="toggle-detail no-print" onclick="toggleDetail('${sid}')">明細を表示 ▾</button>
+      ${(s.reports.length||hasInv)?`<button class="toggle-detail no-print" onclick="toggleDetail('${sid}')">明細を表示 ▾</button>`:''}
     </div>`;
   }).join('');
 }

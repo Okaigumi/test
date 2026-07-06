@@ -3035,7 +3035,7 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 
 ---
 
-## （未実行）日報無効化 PR-A: reports に無効化カラム追加（★未実行★）
+## 2026-07-06 日報無効化 PR-A: reports に無効化カラム追加（★実行済み★）
 
 ### 目的
 
@@ -3062,12 +3062,19 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 
 ### 実行ステータス
 
-- **未実行**。SQL：`docs/sql/report-void-columns.sql`（additive-only）。
-  ユーザーが Supabase SQL Editor で実行予定。実行後に本エントリを「実行済み」へ更新する。
-- **★事後確認で必ず見ること★**：(1) 5カラム存在、(2) is_voided が NOT NULL、
-  (3) is_voided の DEFAULT が false、(4) CHECK 制約2本が存在、(5) 既存行がすべて
-  is_voided=false（active_rows = total_rows）。`ADD COLUMN IF NOT EXISTS` は既存の
-  中途半端な同名カラムがあるとスキップされ得るため、上記を SQL 末尾の事後確認 F〜H で必ず確認する。
+- **実行済み（2026-07-06）**。SQL：`docs/sql/report-void-columns.sql`（additive-only）を
+  ユーザーが Supabase SQL Editor で実行。
+- 事後確認 F〜H 結果（すべて期待どおり）：
+  - (1) 5カラム（`is_voided` / `voided_at` / `voided_by` / `voided_by_role` / `void_reason`）追加済み
+  - (2) `is_voided` が **NOT NULL**、(3) `is_voided` の **DEFAULT が false**（型 boolean）
+  - `void_reason` text / `voided_at` timestamptz / `voided_by` uuid / `voided_by_role` text（いずれも nullable）
+  - (4) CHECK 制約2本（`reports_void_consistency` / `reports_voided_by_role_valid`）作成済み
+  - (5) `active_rows=151` / `voided_rows=0` / `total_rows=151`（active_rows = total_rows・既存151件は
+    すべて `is_voided=false`）
+- PR-A 単独では履歴・集計・CSV の挙動は変わらない。**次工程 PR-B**：`admin_void_report_secure` 追加と、
+  read/export RPC（`list_my_reports_secure` / `list_admin_reports_secure`（include_voided 追加）/
+  `list_genka_reports_secure` / `export_projects_summary_secure` / `export_attendance_details_secure`）への
+  `is_voided=false` 除外。
 
 ### 影響範囲 / 非影響
 

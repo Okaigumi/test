@@ -15,9 +15,14 @@
 --   - voided_by の NOT NULL 強制 CHECK は今回入れない（PR-B の
 --     admin_void_report_secure 側で voided_by を確実にセットする設計とする）。
 --
--- 【実行ステータス】★未実行★
---   - ユーザーが Supabase SQL Editor で実行予定（Claude からの DB 実行なし）。
---   - 実行後、docs/db-migrations.md の該当エントリを「実行済み」に更新する。
+-- 【実行ステータス】★実行済み（2026-07-06）★
+--   - ユーザーが Supabase SQL Editor で実行（Claude からの DB 実行なし）。
+--   - 事後確認結果：5カラム追加済み／is_voided は boolean・NOT NULL・DEFAULT false／
+--     CHECK 制約2本（reports_void_consistency / reports_voided_by_role_valid）作成済み／
+--     active_rows=151・voided_rows=0・total_rows=151（active_rows = total_rows・既存151件は
+--     すべて is_voided=false）。
+--   - PR-A 単独では履歴・集計・CSV の挙動は変わらない。次工程 PR-B で
+--     read/export RPC への is_voided=false 除外・admin_void_report_secure を実装予定。
 --
 -- 【★事後確認で必ず見ること（重要）★】
 --   ADD COLUMN IF NOT EXISTS は、既存に「同名だが中途半端な定義」のカラムが

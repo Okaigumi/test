@@ -363,14 +363,14 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 <div id="budgetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeBudgetModal()">
   <div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:640px;padding:24px;animation:slideUp .25s ease;">
     <div style="width:40px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px;"></div>
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">📋 実行予算の設定（年間）</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">📋 実行予算の設定（工事全体）</div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:16px;" id="budgetModalSite"></div>
     <div style="margin-bottom:14px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">年度</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">登録年（既存予算がある場合は変更できません）</div>
       <input type="number" class="rate-input" id="budgetYear" style="width:100%;font-size:15px;">
     </div>
     <div style="margin-bottom:14px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">年間予算金額</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">実行予算金額（工事全体）</div>
       <input type="number" class="rate-input" id="budgetAmount" placeholder="0" step="100000" min="0" style="width:100%;font-size:16px;">
     </div>
     <div style="margin-bottom:16px;">
@@ -576,15 +576,16 @@ function switchTab(name){
 
 // ===== BUDGET =====
 let budgetSiteId=null;
+let budgetExistingYear=null; // 既存予算の登録年を保持（別年での重複作成を防止）
 
 async function openBudgetModal(siteId,siteName){
   budgetSiteId=siteId;
+  budgetExistingYear=null;
   document.getElementById('budgetModalSite').textContent=`🏗️ ${siteName}`;
-  document.getElementById('budgetYear').value=currentMonth.getFullYear();
   document.getElementById('budgetAmount').value='';
   document.getElementById('budgetMemo').value='';
 
-  // 既存の年間予算を読み込む（重複行があっても最新1件を採用）
+  // 既存の実行予算を登録年を問わず読み込む（工事全体予算として扱う）
   // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
   const token=gCurrentUser?.session_token;
   if(!token){alert('セッションが無効です。再ログインしてください。');return;}
@@ -592,14 +593,27 @@ async function openBudgetModal(siteId,siteName){
     session_token_input:token,
     is_active_input:true,
     site_id_input:siteId,
-    year_input:currentMonth.getFullYear(),
+    year_input:null,
     annual_only_input:true
   });
   if(error){alert('予算データの取得に失敗しました：'+error.message);return;}
-  const budget=data?.[0]||null;
+  const rows=data||[];
+  if(rows.length>1){
+    alert('この現場には実行予算が複数登録されています。管理画面で予算を整理してください。');
+    return;
+  }
+  const budget=rows[0]||null;
+  const yearInput=document.getElementById('budgetYear');
   if(budget){
+    // 既存予算の登録年をそのまま使う（upsert が同じ行に当たり、別年の重複行を作らない）
+    budgetExistingYear=budget.year;
+    yearInput.value=budget.year;
+    yearInput.readOnly=true;
     document.getElementById('budgetAmount').value=budget.budget;
     document.getElementById('budgetMemo').value=budget.memo||'';
+  }else{
+    yearInput.value=currentMonth.getFullYear();
+    yearInput.readOnly=false;
   }
   document.getElementById('budgetModal').style.display='flex';
 }
@@ -607,6 +621,7 @@ async function openBudgetModal(siteId,siteName){
 function closeBudgetModal(){
   document.getElementById('budgetModal').style.display='none';
   budgetSiteId=null;
+  budgetExistingYear=null;
 }
 
 async function saveBudget(){
@@ -614,7 +629,8 @@ async function saveBudget(){
   if(!token){alert('セッションが無効です。再ログインしてください。');return;}
   const amount=parseInt(document.getElementById('budgetAmount').value)||0;
   if(!amount){alert('予算金額を入力してください');return;}
-  const year=parseInt(document.getElementById('budgetYear').value);
+  // 既存予算がある場合はその登録年を必ず引き継ぐ（重複作成防止）
+  const year=budgetExistingYear!==null?budgetExistingYear:(parseInt(document.getElementById('budgetYear').value)||currentMonth.getFullYear());
   const memo=document.getElementById('budgetMemo').value||null;
 
   const{error}=await sb.rpc('upsert_site_budget_secure',{
@@ -846,54 +862,16 @@ function getGuardPrice(){return unitRates['guard:警備員']||0;}
 function getSubPrice(name){return unitRates[`subcontractor:${name}`]||0;}
 
 // ===== LOAD DATA =====
-async function loadData(){
-  const y=currentMonth.getFullYear();
-  const m=String(currentMonth.getMonth()+1).padStart(2,'0');
-  const from=`${y}-${m}-01`;
-  const last=new Date(y,currentMonth.getMonth()+1,0).getDate();
-  const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
-  const siteId=document.getElementById('siteFilter').value;
+// 現場別集計の空エントリ
+function emptySiteEntry(){
+  return {reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0,invSub:0,invMaterial:0,invMachine:0,invOther:0};
+}
 
-  const token=gCurrentUser?.session_token;
-  if(!token)return;
-  const{data:reports,error:reportsError}=await sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to,site_id_input:siteId||null});
-  if(reportsError){console.error('原価日報取得エラー:',reportsError);return;}
-  const reps=reports||[];
-
-  // 請求書データも取得（confirmed/posted のみ原価に反映）
-  const{data:invoicesData,error:invoicesError}=await sb.rpc('list_invoices_secure',{
-    session_token_input:token,
-    statuses_input:['confirmed','posted'],
-    exclude_status_input:null,
-    date_from_input:from,
-    date_to_input:to,
-    site_id_input:siteId||null,
-    limit_input:null
-  });
-  if(invoicesError)console.error('請求書取得エラー:',invoicesError);
-  const invs=invoicesData||[];
-
-  // 予算データ取得（年間のみ）
-  // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。annual_only で年間予算のみ。
-  const{data:budgetsData,error:budgetsError}=await sb.rpc('list_site_budgets_secure',{
-    session_token_input:token,
-    is_active_input:true,
-    site_id_input:null,
-    year_input:currentMonth.getFullYear(),
-    annual_only_input:true
-  });
-  if(budgetsError)console.error('予算取得エラー:',budgetsError);
-  const budgets=budgetsData||[];
-  const budgetMap={};
-  budgets.forEach(b=>{
-    if(b.month===null) budgetMap[b.site_id]=b.budget;
-  });
-
-  let totalLabor=0,totalSub=0,totalMachine=0,totalDump=0,totalGuard=0;
-  let totalLaborDays=0,totalDumpTai=0,totalGuardPpl=0;
-  let totalInvSub=0,totalInvMaterial=0,totalInvMachine=0,totalInvOther=0;
-
+// 日報・請求書を現場別に集計し、全体合計も返す。
+// 日報が無く請求書だけの現場も siteMap にエントリを作る（原価脱落防止）。
+function buildSiteCostMap(reps,invs){
   const siteMap={};
+  const totals={labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,guard:0,guardPpl:0,invSub:0,invMaterial:0,invMachine:0,invOther:0};
 
   reps.forEach(r=>{
     const dr=empRates[r.employee_id]||22000;
@@ -916,7 +894,7 @@ async function loadData(){
 
     const numSites=(r.site_ids||[]).length||1;
     (r.site_ids||[]).forEach(sid=>{
-      if(!siteMap[sid]) siteMap[sid]={reports:[],labor:0,laborDays:0,sub:0,dump:0,dumpTai:0,dumpDays:0,guard:0,guardPpl:0,guardDays:0,invSub:0,invMaterial:0,invMachine:0,invOther:0};
+      if(!siteMap[sid]) siteMap[sid]=emptySiteEntry();
       siteMap[sid].reports.push(r);
       if(nm>0){siteMap[sid].labor+=laborCost/numSites;siteMap[sid].laborDays+=1/numSites;}
       siteMap[sid].sub+=subCost/numSites;
@@ -924,33 +902,107 @@ async function loadData(){
       if(guardPpl>0){siteMap[sid].guard+=guardCost/numSites;siteMap[sid].guardPpl+=guardPpl/numSites;siteMap[sid].guardDays+=1/numSites;}
     });
 
-    if(nm>0){totalLabor+=laborCost;totalLaborDays++;}
-    totalSub+=subCost;
-    totalDump+=dumpCost;totalDumpTai+=dumpTai;
-    totalGuard+=guardCost;totalGuardPpl+=guardPpl;
+    if(nm>0){totals.labor+=laborCost;totals.laborDays++;}
+    totals.sub+=subCost;
+    totals.dump+=dumpCost;totals.dumpTai+=dumpTai;
+    totals.guard+=guardCost;totals.guardPpl+=guardPpl;
   });
 
-  // 請求書を現場別・カテゴリ別に集計
+  // 請求書を現場別・カテゴリ別に集計（現場指定なしは全体合計のみに加算）
   invs.forEach(inv=>{
     const amt=inv.amount||0;
-    if(inv.site_id&&siteMap[inv.site_id]){
+    if(inv.site_id){
+      if(!siteMap[inv.site_id]) siteMap[inv.site_id]=emptySiteEntry();
       if(inv.category==='subcontract') siteMap[inv.site_id].invSub+=amt;
       else if(inv.category==='material') siteMap[inv.site_id].invMaterial+=amt;
       else if(inv.category==='machine_lease') siteMap[inv.site_id].invMachine+=amt;
       else siteMap[inv.site_id].invOther+=amt;
-    } else if(!inv.site_id){
-      // 現場指定なしの場合はサマリーのみに加算
     }
-    if(inv.category==='subcontract') totalInvSub+=amt;
-    else if(inv.category==='material') totalInvMaterial+=amt;
-    else if(inv.category==='machine_lease') totalInvMachine+=amt;
-    else totalInvOther+=amt;
+    if(inv.category==='subcontract') totals.invSub+=amt;
+    else if(inv.category==='material') totals.invMaterial+=amt;
+    else if(inv.category==='machine_lease') totals.invMachine+=amt;
+    else totals.invOther+=amt;
   });
 
+  return {siteMap,totals};
+}
+
+// 現場1件分の原価合計（重機月額リースは含めない：従来どおり）
+function siteCostOf(sd){
+  if(!sd)return 0;
+  return (sd.labor||0)+(sd.sub||0)+(sd.dump||0)+(sd.guard||0)+(sd.invSub||0)+(sd.invMaterial||0)+(sd.invMachine||0)+(sd.invOther||0);
+}
+
+async function loadData(){
+  const y=currentMonth.getFullYear();
+  const m=String(currentMonth.getMonth()+1).padStart(2,'0');
+  const from=`${y}-${m}-01`;
+  const last=new Date(y,currentMonth.getMonth()+1,0).getDate();
+  const to=`${y}-${m}-${String(last).padStart(2,'0')}`;
+  const siteId=document.getElementById('siteFilter').value;
+
+  const token=gCurrentUser?.session_token;
+  if(!token)return;
+
+  // 当月分／工事累計分（開始日を限定せず表示月末まで）／予算を並列取得
+  // 請求書は confirmed/posted のみ原価に反映
+  const invParams={
+    session_token_input:token,
+    statuses_input:['confirmed','posted'],
+    exclude_status_input:null,
+    date_to_input:to,
+    site_id_input:siteId||null,
+    limit_input:null
+  };
+  const[repsRes,invsRes,cumRepsRes,cumInvsRes,budgetsRes]=await Promise.all([
+    sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to,site_id_input:siteId||null}),
+    sb.rpc('list_invoices_secure',{...invParams,date_from_input:from}),
+    sb.rpc('list_genka_reports_secure',{session_token_input:token,from_date_input:null,to_date_input:to,site_id_input:siteId||null}),
+    sb.rpc('list_invoices_secure',{...invParams,date_from_input:null}),
+    // 予算データ取得（工事全体予算として登録年を問わず取得。month IS NULL の予算のみ）
+    // Phase 4-D-2b：site_budgets は secure read RPC 経由（direct SELECT を置換）。
+    sb.rpc('list_site_budgets_secure',{
+      session_token_input:token,
+      is_active_input:true,
+      site_id_input:null,
+      year_input:null,
+      annual_only_input:true
+    })
+  ]);
+  if(repsRes.error){console.error('原価日報取得エラー:',repsRes.error);return;}
+  if(cumRepsRes.error){console.error('原価日報（累計）取得エラー:',cumRepsRes.error);return;}
+  if(invsRes.error)console.error('請求書取得エラー:',invsRes.error);
+  if(cumInvsRes.error)console.error('請求書（累計）取得エラー:',cumInvsRes.error);
+  if(budgetsRes.error)console.error('予算取得エラー:',budgetsRes.error);
+  const reps=repsRes.data||[];
+  const invs=invsRes.data||[];
+  const cumReps=cumRepsRes.data||[];
+  const cumInvs=cumInvsRes.data||[];
+
+  // 予算：1現場1件を想定。複数件ある現場は合算せず「予算確認が必要」扱いにする
+  const budgets=budgetsRes.data||[];
+  const budgetMap={};
+  const budgetMulti={};
+  budgets.forEach(b=>{
+    if(b.month!==null)return;
+    if(budgetMap[b.site_id]!==undefined){budgetMulti[b.site_id]=true;return;}
+    budgetMap[b.site_id]=b.budget;
+  });
+
+  // 当月分と工事累計分をそれぞれ現場別に集計
+  const{siteMap,totals}=buildSiteCostMap(reps,invs);
+  const cumMap=buildSiteCostMap(cumReps,cumInvs).siteMap;
+
+  const totalLabor=totals.labor,totalLaborDays=totals.laborDays;
+  const totalDump=totals.dump,totalDumpTai=totals.dumpTai;
+  const totalGuard=totals.guard,totalGuardPpl=totals.guardPpl;
+  const totalInvSub=totals.invSub,totalInvMaterial=totals.invMaterial,totalInvOther=totals.invOther;
+
   // 重機リース（月額合計）+ 請求書の重機リース
+  let totalMachine=0;
   machines.filter(m=>m.ownership==='lease'&&m.lease_monthly).forEach(m=>{totalMachine+=m.lease_monthly;});
-  totalMachine+=totalInvMachine;
-  totalSub+=totalInvSub;
+  totalMachine+=totals.invMachine;
+  const totalSub=totals.sub+totalInvSub;
 
   // サマリー
   document.getElementById('sumLabor').textContent=fmt(totalLabor);
@@ -987,28 +1039,43 @@ async function loadData(){
         ${period?`<div style="font-size:12px;color:var(--text3);">${escapeHtml(period)}</div>`:'<div style="font-size:12px;color:var(--text3);">工期：未設定</div>'}
       </div>`;
 
-    if(budgetMap[selectedSiteId]!==undefined){
+    const monthCost=siteCostOf(siteMap[selectedSiteId]);
+    const cumCost=siteCostOf(cumMap[selectedSiteId]);
+    if(budgetMulti[selectedSiteId]){
+      // 複数の有効予算がある現場：自動合算せず確認を促す（残・消化率は表示しない）
+      document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
+        <div style="background:var(--warn-bg);border:2px solid var(--warn);border-radius:var(--radius);padding:16px;">
+          <div style="font-size:14px;font-weight:700;color:var(--warn);margin-bottom:4px;">⚠️ 予算確認が必要</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">この現場には実行予算が複数登録されています。管理画面で予算を確認・整理してください。</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px;">当月原価</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(monthCost)}</div></div>
+            <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px;">工事累計原価</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(cumCost)}</div></div>
+          </div>
+        </div>`;
+    }else if(budgetMap[selectedSiteId]!==undefined){
       const siteBudget=budgetMap[selectedSiteId];
-      const sd=siteMap[selectedSiteId]||{};
-      const siteCost=(sd.labor||0)+(sd.sub||0)+(sd.dump||0)+(sd.guard||0)+(sd.invSub||0)+(sd.invMaterial||0)+(sd.invMachine||0)+(sd.invOther||0);
-      const siteDiff=siteBudget-siteCost;
+      const siteDiff=siteBudget-cumCost;
       const over=siteDiff<0;
-      const pct=siteBudget>0?Math.min(Math.round(siteCost/siteBudget*100),999):0;
+      const pct=siteBudget>0?Math.min(Math.round(cumCost/siteBudget*100),999):0;
       const barW=Math.min(pct,100);
       document.getElementById('siteBudgetHeroInner').innerHTML=siteInfoHtml+`
         <div style="background:${over?'var(--danger)':'var(--accent)'};padding:16px;color:white;border-radius:var(--radius);">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px 6px;text-align:center;">
               <div style="font-size:10px;opacity:.8;margin-bottom:4px;">実行予算</div>
-              <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
+              <div style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteBudget)}</div>
             </div>
-            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px;text-align:center;">
-              <div style="font-size:10px;opacity:.8;margin-bottom:4px;">現在原価</div>
-              <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(siteCost)}</div>
+            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px 6px;text-align:center;">
+              <div style="font-size:10px;opacity:.8;margin-bottom:4px;">当月原価</div>
+              <div style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(monthCost)}</div>
+            </div>
+            <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px 6px;text-align:center;">
+              <div style="font-size:10px;opacity:.8;margin-bottom:4px;">工事累計原価</div>
+              <div style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(cumCost)}</div>
             </div>
           </div>
           <div style="background:rgba(255,255,255,.2);border-radius:8px;padding:12px;text-align:center;margin-bottom:12px;">
-            <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 予算残'}</div>
+            <div style="font-size:11px;opacity:.8;margin-bottom:4px;">${over?'⚠️ 予算超過':'✅ 工事予算残'}</div>
             <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(Math.abs(siteDiff))}</div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -1034,12 +1101,12 @@ async function loadData(){
     hero.style.display='none';
   }
 
-  renderSiteList(siteMap,totalInvMaterial,totalInvOther,budgetMap,dumpUnitSet,guardUnitSet);
+  renderSiteList(siteMap,cumMap,budgetMap,budgetMulti,dumpUnitSet,guardUnitSet);
   renderEmployeeList(reps);
 }
 
 // ===== SITE LIST =====
-function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={},dumpUnitSet=false,guardUnitSet=false){
+function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSet=false,guardUnitSet=false){
   const keys=Object.keys(siteMap);
   document.getElementById('siteCount').textContent=`${keys.length}現場`;
   if(!keys.length){document.getElementById('siteList').innerHTML='<div class="empty-msg">対象期間のデータがありません</div>';return;}
@@ -1097,20 +1164,29 @@ function renderSiteList(siteMap,totalInvMaterial=0,totalInvOther=0,budgetMap={},
     const invOth=s.invOther||0;
     const hasInv=(s.invSub||0)+(invMat)+(invMach)+(invOth)>0;
 
-    // 予算
+    // 予算（実行予算＝工事全体予算、残・超過は工事累計原価ベース）
     const budget=budgetMap[sid]||0;
-    const diff=budget-total;
-    const budgetPct=budget>0?Math.min(Math.round(total/budget*100),100):0;
+    const cumTotal=cumMap[sid]?siteCostOf(cumMap[sid]):total;
+    const diff=budget-cumTotal;
     const over=budget>0&&diff<0;
-    const cardBorder=budget>0?(over?'border:2px solid var(--danger);':'border:2px solid var(--accent);'):'';
+    const multi=!!budgetMulti[sid];
+    const cardBorder=multi?'border:2px solid var(--warn);':(budget>0?(over?'border:2px solid var(--danger);':'border:2px solid var(--accent);'):'');
 
-    const budgetBlock=budget>0?`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);margin-bottom:10px;">
-        <div style="display:flex;gap:16px;align-items:center;">
-          <span style="font-size:11px;color:var(--text2);">予算 <b style="font-family:'DM Mono',monospace;">${fmt(budget)}</b></span>
-          <span style="font-size:11px;color:var(--text2);">原価 <b style="font-family:'DM Mono',monospace;">${fmt(total)}</b></span>
+    const budgetBlock=multi?`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--warn-bg);border-radius:var(--radius-sm);margin-bottom:10px;">
+        <span style="font-size:12px;font-weight:700;color:var(--warn);">⚠️ 予算確認が必要</span>
+        <span style="font-size:11px;color:var(--text2);">実行予算が複数登録されています</span>
+      </div>`
+    :budget>0?`
+      <div style="padding:8px 12px;background:${over?'var(--danger-bg)':'var(--accent-light)'};border-radius:var(--radius-sm);margin-bottom:10px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+          <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text2);">実行予算 <b style="font-family:'DM Mono',monospace;">${fmt(budget)}</b></span>
+            <span style="font-size:11px;color:var(--text2);">当月原価 <b style="font-family:'DM Mono',monospace;">${fmt(total)}</b></span>
+            <span style="font-size:11px;color:var(--text2);">工事累計原価 <b style="font-family:'DM Mono',monospace;">${fmt(cumTotal)}</b></span>
+          </div>
+          <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${over?'超過':'工事予算残'} ${fmt(Math.abs(diff))}</span>
         </div>
-        <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--accent)'};">${over?'超過':'残'} ${fmt(Math.abs(diff))}</span>
       </div>`
     :`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
         <span style="font-size:12px;color:var(--text3);">📋 実行予算未設定</span>

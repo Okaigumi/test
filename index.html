@@ -1385,6 +1385,22 @@ function cancelEdit(){
   setWorkType('normal');
   renderSiteChips();renderMaterialRows();renderPhotos();
 }
+// 履歴カレンダーの空き日から「日報入力へ」進む際は、直前の編集状態を必ずクリアして
+// 新規作成モードにする（editingReportId 残存による既存日報の誤更新を防ぐ）。日付はクリック日を維持。
+function startNewReportForDate(dateStr){
+  editingReportId=null;
+  state.selectedSites=[];state.materialQty={};state.photos=[];state.selectedSubs=[];state.subMachines={};
+  document.getElementById('memo').value='';
+  document.getElementById('photoInput').value='';
+  document.getElementById('reportDate').value=dateStr;
+  document.getElementById('editBanner').style.display='none';
+  document.getElementById('submitBtn').innerHTML='<span>✓</span> 日報を提出する';
+  setWorkType('normal');resetCounters();
+  renderSiteChips();renderMaterialRows();renderPhotos();renderSubChips();
+  document.getElementById('detailModal').classList.remove('show');
+  switchTab('report');
+  window.scrollTo(0,0);
+}
 
 // ===== SUBMIT =====
 async function submitReport(){
@@ -1568,7 +1584,7 @@ function onMyCalDay(dateStr){
   document.getElementById('detailTitle').textContent=`📋 ${dateStr}`;
   let msg='<div style="padding:8px 0;color:var(--text2);font-size:14px;">この日の日報はありません。</div>';
   if(cell&&cell.leave){const t=cell.leave.leave_type;msg=`<div style="padding:8px 0;color:var(--warn);font-size:14px;font-weight:700;">🌴 有給（${t==='full'?'全日':t==='am'?'午前休':'午後休'}）</div>`;}
-  msg+=`<button onclick="document.getElementById('detailModal').classList.remove('show');document.getElementById('reportDate').value='${dateStr}';switchTab('report');" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">✏️ 日報入力へ</button>`;
+  msg+=`<button onclick="startNewReportForDate('${dateStr}')" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;">✏️ 日報入力へ</button>`;
   document.getElementById('detailBody').innerHTML=msg;
   document.getElementById('detailModal').classList.add('show');
 }

@@ -397,13 +397,13 @@
   - 現況：**DB実行済み**（2026-07-02・Supabase SQL Editor。事後確認 D/E/E-2/F すべて期待どおり）＋`admin-app.html` ZIP拡張済み＋docs記録・静的確認まで完了。**PR #38 として merge 済み（2026-07-02・content commit `575bc5d`）**
 - **PR-B（viewer表示・DB非依存・✅ PR #39 merged・2026-07-02）**：`local-viewers/csv-viewer.html` に `paid_leave_details` / `paid_leave_balances` 種別追加、社内確認用 個人カレンダーに「有休／有休（午前）／有休（午後）」表示、個人選択時ヘッダに「残有給：○日」表示。有休表示は ZIP 経由のみ。会計提出用・全体カレンダーには含めない。
 
-### 日報無効化機能 🚧 進行中（PR-A: SQL作成・DB未実行 / PR-B・PR-C 未着手）
+### 日報無効化機能 🚧 進行中（PR-A: ✅ DB実行済み 2026-07-06 / PR-B・PR-C 未着手）
 
 - 誤作成・不要になった日報を物理削除せず「無効化（soft-void）」で通常の履歴・集計・CSVから
   除外する機能。無効化は管理者のみ・理由必須・監査用にデータは残す。従業員画面には操作を出さない。
   復元は MVP 非対象（is_voided フラグ方式で将来対応可）。UIは index.html の管理者エリア。
 - **PR-A（DBカラム追加・additive）**：reports に `is_voided`/`voided_at`/`voided_by`/`voided_by_role`/`void_reason` を追加＋CHECK 2本。
-  SQL：`docs/sql/report-void-columns.sql`（**未実行**・ユーザーが Supabase SQL Editor で実行予定）。既存行はすべて有効（is_voided=false）。本PR単独では履歴・集計・CSVは不変。
+  SQL：`docs/sql/report-void-columns.sql`（**実行済み（2026-07-06）**・ユーザーが Supabase SQL Editor で実行。active_rows=151 / voided_rows=0 / total_rows=151、既存151件はすべて is_voided=false）。本PR単独では履歴・集計・CSVは不変。
 - **PR-B（RPC・read/export 除外）**：`admin_void_report_secure(session_token, report_id, reason)`（管理者二経路・理由必須・voided_by/by_role をサーバ確定）追加。
   `list_my_reports_secure` / `list_admin_reports_secure`（include_voided 追加）/ `list_genka_reports_secure` /
   `export_projects_summary_secure` / `export_attendance_details_secure` に `is_voided=false` 除外を追加。未着手。

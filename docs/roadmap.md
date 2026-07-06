@@ -397,11 +397,15 @@
   - 現況：**DB実行済み**（2026-07-02・Supabase SQL Editor。事後確認 D/E/E-2/F すべて期待どおり）＋`admin-app.html` ZIP拡張済み＋docs記録・静的確認まで完了。**PR #38 として merge 済み（2026-07-02・content commit `575bc5d`）**
 - **PR-B（viewer表示・DB非依存・✅ PR #39 merged・2026-07-02）**：`local-viewers/csv-viewer.html` に `paid_leave_details` / `paid_leave_balances` 種別追加、社内確認用 個人カレンダーに「有休／有休（午前）／有休（午後）」表示、個人選択時ヘッダに「残有給：○日」表示。有休表示は ZIP 経由のみ。会計提出用・全体カレンダーには含めない。
 
-### 日報無効化機能 🚧 進行中（PR-A: ✅ DB実行済み 2026-07-06 / PR-B: ✅ DB実行済み 2026-07-06 / PR-C 未着手）
+### 日報無効化機能 ⏸ 保留（仕様再検討のため。DB下地は反映済み・本番UIは撤回）
 
+- **現況：仕様が固まりきっていないため後日対応。本番運用ではまだ使用しない。**
+  DB 下地（PR-A/B）は反映済みで**残す**が、本番画面に無効化操作が出ないよう **PR-C の管理者UI（index.html）は撤回**した
+  （PR #66 の追加分を revert）。DB / SQL / RPC / RLS の変更・ロールバックはしていない。
+  後日、仕様確定後に改めて「本人取消」「管理者無効化」の設計を行い、UI を再実装する。
 - 誤作成・不要になった日報を物理削除せず「無効化（soft-void）」で通常の履歴・集計・CSVから
-  除外する機能。無効化は管理者のみ・理由必須・監査用にデータは残す。従業員画面には操作を出さない。
-  復元は MVP 非対象（is_voided フラグ方式で将来対応可）。UIは index.html の管理者エリア。
+  除外する構想。無効化は管理者のみ・理由必須・監査用にデータは残す。従業員画面には操作を出さない。
+  復元は MVP 非対象（is_voided フラグ方式で将来対応可）。UIは index.html の管理者エリア（再実装時）。
 - **PR-A（DBカラム追加・additive）**：reports に `is_voided`/`voided_at`/`voided_by`/`voided_by_role`/`void_reason` を追加＋CHECK 2本。
   SQL：`docs/sql/report-void-columns.sql`（**実行済み（2026-07-06）**・ユーザーが Supabase SQL Editor で実行。active_rows=151 / voided_rows=0 / total_rows=151、既存151件はすべて is_voided=false）。本PR単独では履歴・集計・CSVは不変。
 - **PR-B（RPC・read/export 除外）**：SQL `docs/sql/report-void-rpc.sql`（**実行済み（2026-07-06）**・ユーザーが Supabase SQL Editor で実行。新設2関数とも SECURITY DEFINER・PUBLIC EXECUTE なし・reports 直接UPDATE なし・read/export 5本に is_voided=false 除外反映）。
@@ -410,7 +414,9 @@
   `export_projects_summary_secure` / `export_attendance_details_secure` の各 WHERE に `is_voided=false` 除外を1行追加（本体のみ再定義・権限不変）。
   無効化済み確認用は別RPC `list_admin_reports_with_voided_secure(..., include_voided_input DEFAULT false)`（監査列付き）を新設（PR-C用）。DB実行はユーザー。
 - **PR-C（管理者UI）**：index.html 管理者エリアに個別日報一覧＋無効化ボタン（理由入力必須モーダル）、
-  「無効化済みも表示」トグル（理由/実行者/日時表示）。復元ボタンは非表示（将来）。未着手。
+  「無効化済みも表示」トグル（理由/実行者/日時表示）。**一度 PR #66 で追加・merge したが、仕様再検討のため撤回（revert）**。
+  DB下地（PR-A/B の `admin_void_report_secure` / `list_admin_reports_with_voided_secure`・read/export の is_voided=false 除外）は
+  残っているため、仕様確定後は UI 再追加のみで復帰できる。**現状 UI は本番に出ない。**
 
 ### 次候補（Phase 4-C 完了後の整理・他テーブル読み取り整理）
 

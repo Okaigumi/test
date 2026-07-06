@@ -1273,7 +1273,7 @@ function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSe
         const wt=r.work_type==='night'?'🌙':r.work_type==='overtime'?'⏰':'🌞';
         return `<tr>
           <td>${date}</td>
-          <td>${r.employee_name} ${wt}</td>
+          <td>${empNameHtml(r.employee_id)} ${wt}</td>
           <td class="right money">${nm>0?fmt(lc):'-'}</td>
           <td class="right money">${subNames?fmt(subCost)+' ('+subNames+')':'-'}</td>
           <td class="right money">${dumpTai>0?fmt(dumpCost)+' '+dumpTai+'台 ('+dumpCo+')':'-'}</td>
@@ -1374,10 +1374,20 @@ function toggleDetail(sid){
 }
 
 // ===== EMPLOYEE LIST =====
+// employee_id → 従業員名（HTMLエスケープ済み文字列を返す）。
+// list_genka_reports_secure は employee_name を返さないため employees(is_active=true) から解決する。
+// 退職者など配列に無いIDは undefined を出さず「不明な従業員（ID: 先頭8桁）」と表示。
+function empNameHtml(id){
+  const e=employees.find(x=>x.id===id);
+  if(e)return escapeHtml(e.name);
+  const short=id?String(id).slice(0,8):'';
+  return short?`不明な従業員（ID: ${escapeHtml(short)}）`:'不明な従業員';
+}
+
 function renderEmployeeList(reps){
   const empMap={};
   reps.forEach(r=>{
-    if(!empMap[r.employee_id])empMap[r.employee_id]={name:r.employee_name,days:0,labor:0};
+    if(!empMap[r.employee_id])empMap[r.employee_id]={name:empNameHtml(r.employee_id),days:0,labor:0};
     const nm=r.normal_mins||0,ot=r.overtime_mins||0;
     if(nm>0){
       const dr=empRates[r.employee_id]||22000;

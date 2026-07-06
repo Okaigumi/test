@@ -3032,3 +3032,45 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 - DB：financial系4テーブルの anon/authenticated の TRUNCATE / REFERENCES / TRIGGER を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
 - フロント：変更なし。
 - これにより Phase 4-D-3c 以降に残課題としていた「financial系4テーブル共通の TRUNCATE / REFERENCES / TRIGGER 権限棚卸し」を解消。**Phase 4-D-4 完了**。
+
+---
+
+## （未実行）日報無効化 PR-A: reports に無効化カラム追加（★未実行★）
+
+### 目的
+
+- 日報を物理削除せず「無効化（soft-void）」で扱うための土台として、reports に
+  無効化用カラムを additive に追加する。無効化の実処理（admin RPC）と
+  read/export の除外は PR-B、管理者UIは PR-C で行う。
+
+### 追加カラム
+
+| カラム | 型 | 既定 | 用途 |
+|---|---|---|---|
+| `is_voided` | boolean NOT NULL | false | 無効化フラグ |
+| `voided_at` | timestamptz | NULL | 無効化日時 |
+| `voided_by` | uuid | NULL | 実行管理者の id（FKなし） |
+| `voided_by_role` | text | NULL | 出所（employee_admin / genka_admin） |
+| `void_reason` | text | NULL | 無効化理由（必須はRPC/CHECKで担保） |
+
+### CHECK 制約
+
+- `reports_void_consistency`：is_voided=false、または（voided_at IS NOT NULL かつ void_reason 非空）
+- `reports_voided_by_role_valid`：voided_by_role は NULL / 'employee_admin' / 'genka_admin'
+- ※ `is_voided=true ⇒ voided_by IS NOT NULL` の CHECK は今回入れない。PR-B の
+  `admin_void_report_secure` 側で voided_by を確実にセットする設計とする。
+
+### 実行ステータス
+
+- **未実行**。SQL：`docs/sql/report-void-columns.sql`（additive-only）。
+  ユーザーが Supabase SQL Editor で実行予定。実行後に本エントリを「実行済み」へ更新する。
+- **★事後確認で必ず見ること★**：(1) 5カラム存在、(2) is_voided が NOT NULL、
+  (3) is_voided の DEFAULT が false、(4) CHECK 制約2本が存在、(5) 既存行がすべて
+  is_voided=false（active_rows = total_rows）。`ADD COLUMN IF NOT EXISTS` は既存の
+  中途半端な同名カラムがあるとスキップされ得るため、上記を SQL 末尾の事後確認 F〜H で必ず確認する。
+
+### 影響範囲 / 非影響
+
+- reports に列追加のみ。既存列・データ・RLS・policy・権限・既存RPC・トリガーは不変。
+- 既存行はすべて is_voided=false。**本PR単独では履歴・集計・CSVの結果は変わらない**
+  （read/export RPC の除外フィルタは PR-B）。

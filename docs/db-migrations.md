@@ -3084,7 +3084,7 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 
 ---
 
-## （未実行）日報無効化 PR-B: 無効化RPC追加・read/export の無効化除外（★未実行★）
+## 2026-07-06 日報無効化 PR-B: 無効化RPC追加・read/export の無効化除外（★実行済み★）
 
 ### 目的
 
@@ -3112,8 +3112,17 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 
 ### 実行ステータス
 
-- **未実行**。ユーザーが Supabase SQL Editor で実行予定。事前確認 P1/P2・事後確認 Q1〜Q4 を SQL 末尾に同梱。
-- 実行後、本エントリを「実行済み」へ更新する。
+- **実行済み（2026-07-06）**。ユーザーが Supabase SQL Editor で実行。事前確認 P1/P2・事後確認 Q1〜Q4 実施。
+- 事後確認結果（すべて期待どおり）：
+  - Q1：`admin_void_report_secure` / `list_admin_reports_with_voided_secure` とも存在・
+    `SECURITY DEFINER=true`・`search_path=public, extensions`・引数想定どおり。
+  - Q2：新設2関数の `PUBLIC EXECUTE` なし（0行・Success. No rows returned）。
+  - Q3：`reports` への `anon` / `authenticated` 直接 UPDATE 権限なし（0行・Success. No rows returned）。
+  - 追加EXECUTE：新設2関数とも `anon` / `authenticated` / `service_role` に EXECUTE あり（can_execute=true）。
+  - A の5関数（`list_my_reports_secure` / `list_admin_reports_secure` / `list_genka_reports_secure` /
+    `export_projects_summary_secure` / `export_attendance_details_secure`）は `is_voided=false` 除外を反映済み。
+- PR-B 単独では UI はまだ無い。**次工程 PR-C**：index.html 管理者エリアに個別日報一覧＋無効化ボタン＋
+  「無効化済みも表示」トグルを追加（`admin_void_report_secure` / `list_admin_reports_with_voided_secure` を利用）。
 
 ### 影響範囲 / 非影響
 

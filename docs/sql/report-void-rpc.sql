@@ -20,9 +20,15 @@
 --   - 既存 list_admin_reports_secure はシグネチャ維持（通常集計用）。無効化済み確認は
 --     別関数 list_admin_reports_with_voided_secure（PR-C の管理者UI用）で行う。
 --
--- 【実行ステータス】★未実行★
---   - ユーザーが Supabase SQL Editor で実行予定（Claude からの DB 実行なし）。
---   - 実行後、docs/db-migrations.md の該当エントリを「実行済み」に更新する。
+-- 【実行ステータス】★実行済み（2026-07-06）★
+--   - ユーザーが Supabase SQL Editor で実行（Claude からの DB 実行なし）。
+--   - 事後確認結果：admin_void_report_secure / list_admin_reports_with_voided_secure とも
+--     作成済み・SECURITY DEFINER=true・search_path=public, extensions・引数想定どおり（Q1）。
+--     PUBLIC EXECUTE なし（Q2 0行）。reports への anon/authenticated 直接 UPDATE なし（Q3 0行）。
+--     新設2関数は anon/authenticated/service_role に EXECUTE あり。
+--     A の5関数（list_my/admin/genka reports・export projects_summary/attendance）は
+--     is_voided=false 除外を反映済み。
+--   - UI はまだ無い（PR-C で index.html 管理者UI を追加予定）。
 -- ============================================================
 
 

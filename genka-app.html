@@ -1270,10 +1270,9 @@ function renderSiteList(siteMap,cumMap={},budgetMap={},budgetMulti={},dumpUnitSe
         let subCost=0;
         (r.subcontractor_ids||[]).forEach(subId=>{const sub=subcontractors.find(s=>s.id===subId);if(sub)subCost+=getSubPrice(sub.name);});
         const subNames=(r.subcontractor_ids||[]).map(id=>subcontractors.find(s=>s.id===id)?.name).filter(Boolean).join('・');
-        const wt=r.work_type==='night'?'🌙':r.work_type==='overtime'?'⏰':'🌞';
         return `<tr>
           <td>${date}</td>
-          <td>${empNameHtml(r.employee_id)} ${wt}</td>
+          <td>${empNameHtml(r.employee_id)}</td>
           <td class="right money">${nm>0?fmt(lc):'-'}</td>
           <td class="right money">${subNames?fmt(subCost)+' ('+subNames+')':'-'}</td>
           <td class="right money">${dumpTai>0?fmt(dumpCost)+' '+dumpTai+'台 ('+dumpCo+')':'-'}</td>

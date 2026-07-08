@@ -27,13 +27,13 @@
 --     （verify_employee_pin / verify_admin_pin）を参照して復元する。
 --     ※ 復元時に anon/authenticated へ再 GRANT しないこと（平文PIN照合RPCを再び外部公開しないため）。
 --
--- 【実行ステータス】☆未実行☆
---   - DB実行はユーザーが Supabase SQL Editor で手動実行する。
---   - Claude からの DB 接続・SQL 実行・Supabase CLI / psql 使用は一切しない。
---   - 実行順序: (A) 実行前確認 → A-2 が 0 rows を確認 → (B) DROP → (C) 実行後確認。
---   - 実行後、本番3導線（/ 従業員・/admin 管理者・/genka 原価）のログインが
---     正常であること（create_*_session 利用のため影響しない想定）を目視確認する。
---   - 実行記録は後続PRで docs/db-migrations.md に追記する（このファイルでは追記しない）。
+-- 【実行ステータス】★実行済み（2026-07-08）★
+--   - ユーザーが Supabase SQL Editor で手動実行（Claude からの DB 実行・DB接続・
+--     Supabase CLI / psql 使用は一切なし）。
+--   - 実行結果：A-1 存在確認OK / A-2 依存確認 0 rows / A-3 anon・authenticated・public とも false
+--     → (B) DROP 実行（Success. No rows returned）→ (C) pg_proc 上 対象2関数 0 rows（消滅確認）。
+--   - 本番3導線ログイン確認（DROP 後も正常）：/ 従業員 OK / /admin 管理者 OK / /genka 原価 OK。
+--   - 実行記録は docs/db-migrations.md（2026-07-08 PR-4C-2 セクション）に記載済み。
 -- ============================================================
 
 

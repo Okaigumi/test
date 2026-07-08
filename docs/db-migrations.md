@@ -3172,3 +3172,43 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 - PR #75（`feature/revoke-old-pin-verify-rpcs`、merge commit `433300e`）。
 - SQL：`docs/sql/pr4c-revoke-old-pin-verify-rpcs.sql`。
 - 残課題：旧RPC2本の `DROP FUNCTION`（PR-4C-2 候補）。
+
+## 2026-07-08 PR-4C-2 旧PIN照合RPC verify_employee_pin / verify_admin_pin の DROP FUNCTION（★実行済み★）
+
+### 目的
+
+- PR-4C-1 で外部 EXECUTE を REVOKE 済みの旧RPC `verify_employee_pin(uuid, text)` /
+  `verify_admin_pin(uuid, text)`（SECURITY DEFINER・平文PIN照合 `pin = pin_input`）を
+  DB から完全撤去し、平文PIN照合ロジックの残存を無くす。
+- 現行ログインは `create_*_session` に統一済みで、フロントからの `verify_*_pin` 呼び出しはゼロ件。
+
+### 変更内容（SQL：`docs/sql/pr4c2-drop-old-pin-verify-rpcs.sql`・DROP のみ）
+
+- `verify_employee_pin(uuid, text)` / `verify_admin_pin(uuid, text)` を `DROP FUNCTION IF EXISTS ... RESTRICT`（2文）。
+- `CASCADE` は不使用（`RESTRICT` 明示）。A-2 依存確認が 0 rows のときのみ DROP 実行。
+- 関数の再作成・GRANT/ALTER/CREATE/REVOKE・RLS/policy 変更なし。HTML/JS/認証/PIN処理の変更なし。
+
+### 実行ステータス
+
+- **実行済み（2026-07-08）**。ユーザーが Supabase SQL Editor で実行。DROP 本体は `Success. No rows returned`。
+- 実行前確認（すべて期待どおり）：
+  - A-1：対象2関数の存在確認 OK。
+  - A-2：DB内依存確認（`pg_depend`）は 0 rows。
+  - A-3：`has_function_privilege` → `anon` / `authenticated` / `public` とも両関数 false。
+- 実行後確認：`pg_proc` 上で対象2関数は 0 rows（消滅を確認）。
+- 本番ログイン確認（DROP 後も正常）：
+  - `/` 従業員ログイン OK
+  - `/admin` 管理者ログイン OK
+  - `/genka` 原価管理ログイン OK
+
+### 影響範囲 / 非影響
+
+- 影響：旧RPC2本（平文PIN照合ロジック）が DB から消滅。PR-4C-1 の REVOKE と合わせ、旧RPC経由の
+  外部実行経路・平文照合ロジックともに完全撤去された。
+- 非影響：現行ログイン（`create_*_session` 経由）・その他の業務RPC・RLS/policy は不変。UI 変更なし。
+
+### 関連
+
+- PR #77（`feature/drop-old-pin-verify-rpcs`、merge commit `602594b`）。
+- SQL：`docs/sql/pr4c2-drop-old-pin-verify-rpcs.sql`。
+- 前段：PR-4C-1（EXECUTE REVOKE、PR #75 / merge `433300e`）。

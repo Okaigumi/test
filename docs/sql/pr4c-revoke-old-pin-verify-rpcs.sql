@@ -26,9 +26,16 @@
 --   - service_role は明示 GRANT していないため対象に含めない
 --     （フロント／業務コードは service_role で本RPCを呼んでいない）。
 --
--- 【実行ステータス】☆未実行（ユーザーが Supabase SQL Editor で手動実行）☆
---   - Claude からの DB 実行・DB接続・Supabase CLI / psql 使用は一切なし。
---   - 実行後の結果は別途 docs/db-migrations.md に記録予定（本PRでは記録しない）。
+-- 【実行ステータス】★実行済み（2026-07-08）★
+--   - ユーザーが Supabase SQL Editor で手動実行（Claude からの DB 実行・DB接続・
+--     Supabase CLI / psql 使用は一切なし）。
+--   - REVOKE本体は Success. No rows returned。実行後確認済み：
+--       has_function_privilege → verify_employee_pin / verify_admin_pin とも
+--         anon=false / authenticated=false / public=false。
+--       information_schema.routine_privileges → 対象3ロールの EXECUTE 行は 0 rows。
+--   - 本番3導線のログイン確認済み（REVOKE後も正常）：/ 従業員 OK / /admin 管理者 OK / /genka 原価 OK。
+--   - DROP FUNCTION は未実施（別PR: PR-4C-2 候補）。
+--   - 実行記録は docs/db-migrations.md（2026-07-08 セクション）に記載済み。
 -- ============================================================
 
 

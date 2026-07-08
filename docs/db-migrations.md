@@ -3129,3 +3129,46 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 - 実行後：通常の本人履歴・本人カレンダー・管理集計・原価集計・CSV(projects_summary/attendance) から
   `is_voided=true` の日報が除外される。有効日報の集計値・件数は不変（既存151件は is_voided=false）。
 - 既存の日報作成（create_report_secure）・編集（update_report_secure）は不変。UI 変更なし（PR-C で対応）。
+
+## 2026-07-08 PR-4C-1 旧PIN照合RPC verify_employee_pin / verify_admin_pin の EXECUTE REVOKE（★実行済み★）
+
+### 目的
+
+- PR-4A introspection で残存が判明した旧RPC `verify_employee_pin(uuid, text)` /
+  `verify_admin_pin(uuid, text)`（SECURITY DEFINER・平文PIN照合 `pin = pin_input`・
+  成功時にユーザー情報返却）から `PUBLIC` / `anon` / `authenticated` の EXECUTE を剥奪し、
+  anon からの PIN 総当たり・在籍/PIN一致判定に使える外部実行経路を遮断する。
+- 現行ログインは `create_*_session` に統一済みで、フロントからの `verify_*_pin` 呼び出しはゼロ件
+  （`index.html` / `admin-app.html` / `genka-app.html` はいずれも `create_*_session`）。
+
+### 変更内容（SQL：`docs/sql/pr4c-revoke-old-pin-verify-rpcs.sql`・REVOKE のみ）
+
+- `verify_employee_pin(uuid, text)` / `verify_admin_pin(uuid, text)` の EXECUTE を
+  `PUBLIC` / `anon` / `authenticated` から REVOKE（各3文・計6文）。
+- DROP はしない（可逆な REVOKE を優先。別PRでログイン3導線の動作確認後に DROP を検討）。
+- 関数定義・引数・戻り値・SECURITY DEFINER・RLS/policy は不変。GRANT/ALTER/CREATE/DROP なし。
+- 関数オーナー（postgres）の EXECUTE は対象外。service_role は明示GRANTなしのため対象外。
+
+### 実行ステータス
+
+- **実行済み（2026-07-08）**。ユーザーが Supabase SQL Editor で実行。REVOKE本体は `Success. No rows returned`。
+- 事後確認（すべて期待どおり）：
+  - `has_function_privilege`：`verify_employee_pin(uuid,text)` / `verify_admin_pin(uuid,text)` とも
+    anon=false / authenticated=false / public=false。
+  - `information_schema.routine_privileges`：対象3ロールの EXECUTE 行は 0 rows。
+- 本番ログイン確認（REVOKE 後も正常）：
+  - `/` 従業員ログイン OK
+  - `/admin` 管理者ログイン OK
+  - `/genka` 原価管理ログイン OK
+
+### 影響範囲 / 非影響
+
+- 影響：旧RPC2本は `PUBLIC` / `anon` / `authenticated` から実行不可になった。関数本体（平文照合ロジック）は
+  DB に残存（DROP は別PR）。オーナー実行経路は保持。
+- 非影響：現行ログイン（`create_*_session` 経由）・その他の業務RPC・RLS/policy は不変。UI 変更なし。
+
+### 関連
+
+- PR #75（`feature/revoke-old-pin-verify-rpcs`、merge commit `433300e`）。
+- SQL：`docs/sql/pr4c-revoke-old-pin-verify-rpcs.sql`。
+- 残課題：旧RPC2本の `DROP FUNCTION`（PR-4C-2 候補）。

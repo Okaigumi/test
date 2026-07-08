@@ -6,7 +6,7 @@
 --   - DB execution is performed manually by the user in Supabase SQL Editor.
 --   - No DB connection / SQL execution / Supabase CLI / psql from Claude Code CLI.
 --   - Run order: pre-check (A..F) -> confirm no STOP condition -> REVOKE body ->
---     post-check (G / G-2 / G-3) -> production 3-flow login check.
+--     post-check (G / G-2 / G-3 / G-4 / G-5) -> production 3-flow login check.
 --   - The execution record is added to docs/db-migrations.md in a later PR
 --     (not written in this file).
 --
@@ -45,10 +45,20 @@
 --   - anon / authenticated has table-level SELECT / INSERT / UPDATE / DELETE = true
 --     on employees or genka_admins  -> STOP
 --     (note: table-level SELECT should be false; column-level SELECT is separate and expected)
+--     (note: table-level TRUNCATE / REFERENCES / TRIGGER = true is EXPECTED here;
+--            they are exactly what this script revokes -> NOT a stop condition)
 --   - public has ANY privilege on employees or genka_admins  -> STOP
---   - pin column has SELECT or REFERENCES granted to anon / authenticated / PUBLIC  -> STOP
+--   - pin column has SELECT granted to anon / authenticated / PUBLIC  -> STOP
+--     (note: a REFERENCES row shown against pin in information_schema.column_privileges
+--            is very likely the TABLE-level REFERENCES reflected onto every column, NOT a
+--            real column-level grant; a REFERENCES row alone is therefore NOT a stop
+--            condition. The table-level REVOKE REFERENCES removes it. A REAL column-level
+--            REFERENCES grant lives in pg_attribute.attacl and is checked in A-5.)
+--   - A REAL column-level REFERENCES grant on any column (incl. pin) exists in
+--     pg_attribute.attacl for anon / authenticated  -> STOP (needs a column-level REVOKE too)
 --   - The column-level SELECT grant set differs from the expected set above
 --     (missing/extra columns, or pin present)  -> STOP
+--   - A column-level grant other than the expected SELECT set exists in attacl  -> STOP
 --   - RLS is disabled (relrowsecurity=false) on either table  -> STOP
 --   - Unexpected policy exists (e.g. employees_update_public reappeared, or any
 --     unknown policy)  -> STOP
@@ -70,6 +80,8 @@
 --    Expected: can_select=false / can_insert=false / can_update=false / can_delete=false
 --              can_truncate=true / can_references=true / can_trigger=true
 --    STOP if any of can_select / can_insert / can_update / can_delete is true.
+--    NOTE: can_truncate / can_references / can_trigger = true is EXPECTED (that is what
+--          this script revokes); it is NOT a stop condition.
 select
   role_name,
   object_name,
@@ -109,28 +121,80 @@ from (
 order by object_name;
 
 -- A-3. Column-level SELECT grant check (must be preserved by this REVOKE)
+--    NOTE: limited to privilege_type='SELECT' on purpose. information_schema.
+--          column_privileges reflects a TABLE-level REFERENCES grant onto EVERY column,
+--          so an unfiltered query would list REFERENCES on all columns (incl. pin) and
+--          pollute this SELECT-set check. Filtering to SELECT isolates the real
+--          column-level SELECT grants (which live in pg_attribute.attacl).
 --    Expected grant set (grantee in anon / authenticated):
 --      employees    : id, name, role, is_active, company_id, can_genka, can_admin
 --      genka_admins : id, name, is_active
---    STOP if the set differs (missing/extra columns), or if pin appears.
+--    STOP if the SELECT set differs (missing/extra columns), or if pin appears.
 select grantee, table_name, column_name, privilege_type
 from   information_schema.column_privileges
 where  table_schema = 'public'
   and  table_name in ('employees', 'genka_admins')
   and  grantee in ('anon', 'authenticated')
+  and  privilege_type = 'SELECT'
 order  by table_name, grantee, column_name;
 
--- A-4. pin column danger check (SELECT / REFERENCES on pin)
---    Expected: 0 rows (no pin column privilege for anon / authenticated / PUBLIC).
+-- A-4. pin column SELECT danger check (SELECT on pin only)
+--    NOTE: only SELECT is checked here. A REFERENCES row against pin in
+--          information_schema.column_privileges is very likely the table-level
+--          REFERENCES reflected onto every column (removed by the table-level REVOKE),
+--          not a real column-level grant. The real column-level REFERENCES check is A-5
+--          (pg_attribute.attacl). So do NOT treat a reflected REFERENCES as a stop here.
+--    Expected: 0 rows (no pin SELECT for anon / authenticated / PUBLIC).
 --    STOP if any row is returned.
 select grantee, table_name, column_name, privilege_type
 from   information_schema.column_privileges
 where  table_schema = 'public'
   and  table_name in ('employees', 'genka_admins')
   and  column_name = 'pin'
-  and  privilege_type in ('SELECT', 'REFERENCES')
+  and  privilege_type = 'SELECT'
   and  grantee in ('anon', 'authenticated', 'PUBLIC')
-order  by table_name, grantee, privilege_type;
+order  by table_name, grantee;
+
+-- A-5. relacl / attacl separation diagnostic (table-level vs REAL column-level)
+--    Purpose: distinguish a TABLE-level grant (pg_class.relacl, reflected onto all
+--    columns in information_schema.column_privileges) from a REAL column-level grant
+--    (pg_attribute.attacl). This is what A-3/A-4 cannot tell apart on their own.
+--
+-- A-5a. Table-level privileges from pg_class.relacl (anon / authenticated)
+--    Expected: TRUNCATE / REFERENCES / TRIGGER present at TABLE level (that is exactly
+--              what this script revokes). SELECT/INSERT/UPDATE should NOT be present at
+--              table level (SELECT is column-level; INSERT/UPDATE were revoked earlier).
+--    ACL letter map: r=SELECT a=INSERT w=UPDATE d=DELETE D=TRUNCATE x=REFERENCES t=TRIGGER
+select c.relname                         as table_name,
+       acl.grantee::regrole::text        as grantee,
+       acl.privilege_type
+from   pg_class c
+cross  join lateral aclexplode(c.relacl) as acl
+where  c.relnamespace = 'public'::regnamespace
+  and  c.relname in ('employees', 'genka_admins')
+  and  acl.grantee::regrole::text in ('anon', 'authenticated')
+order  by c.relname, grantee, acl.privilege_type;
+
+-- A-5b. REAL column-level privileges from pg_attribute.attacl (anon / authenticated)
+--    Expected: ONLY SELECT on the expected columns
+--      employees    : id, name, role, is_active, company_id, can_genka, can_admin
+--      genka_admins : id, name, is_active
+--    STOP if:
+--      - any REFERENCES (or any non-SELECT) appears at column level for anon/authenticated
+--      - pin has any column-level privilege
+--      - the column-level SELECT set differs from the expected set
+--    (0 rows here would mean SELECT is granted some other way; cross-check with A-3.)
+select c.relname                         as table_name,
+       a.attname                         as column_name,
+       acl.grantee::regrole::text        as grantee,
+       acl.privilege_type
+from   pg_class c
+join   pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+cross  join lateral aclexplode(a.attacl) as acl
+where  c.relnamespace = 'public'::regnamespace
+  and  c.relname in ('employees', 'genka_admins')
+  and  acl.grantee::regrole::text in ('anon', 'authenticated')
+order  by c.relname, a.attname, grantee, acl.privilege_type;
 
 -- B. RLS check (not changed; inspection only)
 --    Expected: both tables relrowsecurity=true.
@@ -265,7 +329,10 @@ from (
 order by object_name;
 
 -- G-3. Column-level SELECT grant re-check (must be UNCHANGED from A-3)
---    Expected: same grant set as A-3 (login screens keep working).
+--    NOTE: limited to privilege_type='SELECT' (same as A-3) so the table-level
+--          REFERENCES reflection does not pollute this check. After the REVOKE the
+--          reflected REFERENCES rows disappear anyway; here we only verify SELECT is intact.
+--    Expected: same SELECT set as A-3 (login screens keep working).
 --      employees    : id, name, role, is_active, company_id, can_genka, can_admin
 --      genka_admins : id, name, is_active
 --    This confirms the REVOKE did NOT remove the column-level SELECT grants.
@@ -274,7 +341,50 @@ from   information_schema.column_privileges
 where  table_schema = 'public'
   and  table_name in ('employees', 'genka_admins')
   and  grantee in ('anon', 'authenticated')
+  and  privilege_type = 'SELECT'
 order  by table_name, grantee, column_name;
+
+-- G-4. pin REFERENCES removal check (has_column_privilege)
+--    Confirms the reflected/any REFERENCES on pin is gone after the table-level REVOKE.
+--    Expected: pin_ref = false for all 4 rows (employees / genka_admins x anon / authenticated).
+select role_name,
+       object_name,
+       has_column_privilege(role_name, object_name, 'pin', 'REFERENCES') as pin_ref
+from (
+  values
+    ('anon',          'public.employees'),
+    ('authenticated', 'public.employees'),
+    ('anon',          'public.genka_admins'),
+    ('authenticated', 'public.genka_admins')
+) as v(role_name, object_name)
+order by object_name, role_name;
+
+-- G-5. attacl re-check (no REAL column-level pin/REFERENCES remains)
+--    Expected: only the SELECT set remains at column level (same as A-5b); NO REFERENCES,
+--              and pin has no column-level privilege, for anon / authenticated.
+--    Expected rows: exactly the column-level SELECT set and nothing else, i.e.
+--      employees    : id, name, role, is_active, company_id, can_genka, can_admin  (SELECT)
+--      genka_admins : id, name, is_active                                          (SELECT)
+--      -> any REFERENCES row, any pin row, or any non-SELECT row = STOP / investigate.
+--    Cross-check with G:
+--      - G shows can_references=false at TABLE level (relacl) after the REVOKE.
+--      - G-5 shows NO REFERENCES at COLUMN level (attacl).
+--      Both together prove the REFERENCES seen against pin in A-3/A-4 was only the
+--      table-level grant reflected onto every column (now removed by the table-level
+--      REVOKE), and that no REAL column-level REFERENCES was ever present / left behind.
+--      If G says can_references=false BUT G-5 still shows a REFERENCES row, that means a
+--      REAL column-level REFERENCES grant existed and a column-level REVOKE is still needed.
+select c.relname                         as table_name,
+       a.attname                         as column_name,
+       acl.grantee::regrole::text        as grantee,
+       acl.privilege_type
+from   pg_class c
+join   pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+cross  join lateral aclexplode(a.attacl) as acl
+where  c.relnamespace = 'public'::regnamespace
+  and  c.relname in ('employees', 'genka_admins')
+  and  acl.grantee::regrole::text in ('anon', 'authenticated')
+order  by c.relname, a.attname, grantee, acl.privilege_type;
 
 
 -- ============================================================

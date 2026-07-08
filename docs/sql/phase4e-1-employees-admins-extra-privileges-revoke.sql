@@ -2,13 +2,24 @@
 -- Phase 4-E-1: employees / genka_admins - cleanup of residual unneeded privileges
 --   (REVOKE TRUNCATE / REFERENCES / TRIGGER / MAINTAIN from anon / authenticated)
 -- ============================================================
--- [STATUS] NOT EXECUTED (☆未実行☆)
---   - DB execution is performed manually by the user in Supabase SQL Editor.
+-- [STATUS] EXECUTED (2026-07-08)
+--   - A-0: PostgreSQL 17.6 (server_version_num=170006) confirmed before running MAINTAIN.
+--   - Pre-check A-F: all OK, no STOP condition hit.
+--   - REVOKE body (2 statements) run manually in Supabase SQL Editor.
+--     Result: Success. No rows returned.
 --   - No DB connection / SQL execution / Supabase CLI / psql from Claude Code CLI.
---   - Run order: pre-check (A-0..F) -> confirm no STOP condition -> REVOKE body ->
---     post-check (G / G-2 / G-3 / G-4 / G-5) -> production 3-flow login check.
---   - The execution record is added to docs/db-migrations.md in a later PR
---     (not written in this file).
+--     DB execution was done manually by the user.
+--   - Post-check G: anon / authenticated all 8 table-level privileges = false on
+--     employees / genka_admins (incl. MAINTAIN).
+--   - Post-check G-2: public all privileges = false on both tables.
+--   - Post-check G-3: column-level SELECT set preserved (employees:
+--     id,name,role,is_active,company_id,can_genka,can_admin / genka_admins:
+--     id,name,is_active); pin not granted.
+--   - Post-check G-4: pin REFERENCES = false for all 4 role/table combinations.
+--   - Post-check G-5: attacl re-check — only the SELECT set remains at column level;
+--     no REFERENCES row, no pin row.
+--   - Production verification (/  /admin  /genka) OK.
+--   See docs/db-migrations.md for the full record (2026-07-08 Phase 4-E-1 section).
 --
 -- [PURPOSE]
 --   Revoke the residual, non-read, unneeded privileges (TRUNCATE / REFERENCES /

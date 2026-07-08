@@ -3212,3 +3212,94 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.unit_rates FROM anon, authe
 - PR #77（`feature/drop-old-pin-verify-rpcs`、merge commit `602594b`）。
 - SQL：`docs/sql/pr4c2-drop-old-pin-verify-rpcs.sql`。
 - 前段：PR-4C-1（EXECUTE REVOKE、PR #75 / merge `433300e`）。
+
+---
+
+## 2026-07-08 Phase 4-E-1 employees / genka_admins 残存不要権限（TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）REVOKE 完了（★実行済み★）
+
+### 目的
+
+- `employees` / `genka_admins` に残っていた `anon` / `authenticated` の非読み取り不要権限（TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）を REVOKE する。
+- SELECT は列レベル付与に限定済み（2026-05-28）、INSERT / UPDATE は REVOKE 済み（2026-05-30）。書き込みは `*_secure` RPC、ログインは `create_*_session` RPC 経由。本整理は Phase 4-D-4（financial系）と同種の、テーブルレベル残存権限の後片付け。
+- MAINTAIN は PostgreSQL 17 で追加されたテーブルレベル保守権限（VACUUM / ANALYZE / CLUSTER / REINDEX / REFRESH MATERIALIZED VIEW / LOCK TABLE）。Supabase の PG17 デフォルト GRANT ALL の副作用で `anon` / `authenticated` に付与されており、アプリ（PostgREST CRUD / RPC）は使わないため余剰権限として除去。先例 `docs/sql/phase4c-4-report-summary-revoke.sql` も MAINTAIN を REVOKE 済み。
+
+### 背景（Pre-check 調査結果・ユーザーが Supabase SQL Editor で手動確認）
+
+- A-0：PostgreSQL 17.6（`server_version_num` = 170006）。MAINTAIN キーワードが使える前提を確認。
+- A：`employees` / `genka_admins` とも `anon` / `authenticated` は SELECT/INSERT/UPDATE/DELETE=false・TRUNCATE/REFERENCES/TRIGGER/MAINTAIN=true（要除去）。
+- A-2：public は両テーブル全権限 false。
+- A-3〜A-5b：列レベル SELECT は期待セットのみ（下記 G-3 参照）。pin の SELECT なし・真の列単位 REFERENCES なし。
+- B：両テーブル `relrowsecurity=true`。C：想定外 policy なし。D：ユーザー定義トリガ 0 件。
+- E：既知 FK のみ、計9件（`employees` / `genka_admins` を参照先にする FK）。
+  - `employee_rates.employee_id -> employees`
+  - `employee_sessions.employee_id -> employees`
+  - `machine_locations.moved_by -> employees`
+  - `paid_leave_grants.employee_id -> employees`
+  - `paid_leave_requests.employee_id -> employees`
+  - `paid_leave_requests.reviewed_by -> employees`
+  - `reports.employee_id -> employees`
+  - `site_assignments.employee_id -> employees`
+  - `admin_sessions.admin_id -> genka_admins`
+  - ※ REFERENCES は新規 FK 作成権限であり、既存 FK 制約は REVOKE の影響を受けない。
+- F：session / secure RPC はすべて `prosecdef=true` / `owner=postgres`。
+- STOP 条件への該当なし。
+
+### 方針（確定）
+
+- 実行 SQL は REVOKE のみ（1テーブル1文×2本）。順番：employees → genka_admins。
+- RPC / RLS / policy / `postgres` / `service_role` / 列レベル SELECT / pin は一切変更しない。`index.html` / `admin-app.html` / `genka-app.html` も変更しない。
+
+### 実行済み SQL（`docs/sql/phase4e-1-employees-admins-extra-privileges-revoke.sql` を Supabase SQL Editor で実行・2026-07-08）
+
+```sql
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.employees FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.genka_admins FROM anon, authenticated;
+```
+
+- 実行結果：Success. No rows returned（2本とも）。
+- 危険SQL（DROP / DELETE / TRUNCATE 実行 / ALTER / UPDATE / INSERT / CREATE / GRANT）なし。変更は REVOKE 2本のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-08）
+
+- G（anon / authenticated）：`employees` / `genka_admins` とも SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN が全て false。期待どおり。
+- G-2（public）：両テーブルとも全権限 false（不変）。期待どおり。
+- G-3（列SELECT維持）：`employees`（id, name, role, is_active, company_id, can_genka, can_admin）/ `genka_admins`（id, name, is_active）を `anon` / `authenticated` とも維持。pin の SELECT なし。
+- G-4（pin REFERENCES）：`employees.pin` / `genka_admins.pin` とも `anon` / `authenticated` で false。
+- G-5（attacl 再確認）：真の列単位権限は既定の SELECT のみ。pin 行なし・REFERENCES 行なし・SELECT 以外なし。
+
+### 本番画面確認（REVOKE 後）
+
+今回 REVOKE した TRUNCATE / REFERENCES / TRIGGER / MAINTAIN はフロントの PostgREST クライアントが使わない DDL / 保守系権限のため、画面挙動への影響なし（リグレッションなしを確認）。
+
+- `/` 従業員ログイン OK
+- `/admin` 管理者ログイン OK
+- `/genka` 原価ログイン OK
+
+### 実行したSQLファイル
+
+| ファイル | 内容 |
+|---|---|
+| `docs/sql/phase4e-1-employees-admins-extra-privileges-revoke.sql` | A-0 バージョン確認 / 事前確認 A〜F / REVOKE TRUNCATE,REFERENCES,TRIGGER,MAINTAIN（2テーブル・1文ずつ）/ 事後確認 G・G-2・G-3・G-4・G-5 / rollback（GRANT・コメントアウト）。STATUS を EXECUTED に更新済み |
+
+### 触らなかったもの
+
+- RLS 有効状態・既存 policy（pre-check のみ）
+- read RPC / write RPC / session RPC（定義・EXECUTE・SECURITY DEFINER）
+- `service_role` / `postgres`(owner) の権限
+- 列レベル SELECT・pin（非付与のまま維持）
+- SELECT / INSERT / UPDATE / DELETE（既に遮断済み・本工程では未変更）
+- フロント（`index.html` / `admin-app.html` / `genka-app.html`）
+- rollback GRANT（未実行・コメントアウトのまま）
+
+### 影響範囲
+
+- DB：`employees` / `genka_admins` の `anon` / `authenticated` の TRUNCATE / REFERENCES / TRIGGER / MAINTAIN を REVOKE のみ。DROP POLICY / ALTER TABLE / DML / 他テーブル変更なし。
+- フロント：変更なし。
+- **Phase 4-E-1 完了**。
+
+### 関連
+
+- PR #79（script追加、merge commit `ac629cd`）/ PR #80（REFERENCES precheck 修正、merge commit `d8357a0`）/ PR #81（MAINTAIN 追加、merge commit `013b7d5`）。
+- SQL：`docs/sql/phase4e-1-employees-admins-extra-privileges-revoke.sql`。
+- 申し送り：financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）にも PG17 由来の MAINTAIN が残存している可能性（Phase 4-D-4 は MAINTAIN 未対応）。別工程で要確認（Phase 4-E-2 候補）。

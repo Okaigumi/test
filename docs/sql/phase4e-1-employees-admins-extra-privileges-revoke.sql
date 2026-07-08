@@ -1,23 +1,31 @@
 -- ============================================================
 -- Phase 4-E-1: employees / genka_admins - cleanup of residual unneeded privileges
---   (REVOKE TRUNCATE / REFERENCES / TRIGGER from anon / authenticated)
+--   (REVOKE TRUNCATE / REFERENCES / TRIGGER / MAINTAIN from anon / authenticated)
 -- ============================================================
 -- [STATUS] NOT EXECUTED (☆未実行☆)
 --   - DB execution is performed manually by the user in Supabase SQL Editor.
 --   - No DB connection / SQL execution / Supabase CLI / psql from Claude Code CLI.
---   - Run order: pre-check (A..F) -> confirm no STOP condition -> REVOKE body ->
+--   - Run order: pre-check (A-0..F) -> confirm no STOP condition -> REVOKE body ->
 --     post-check (G / G-2 / G-3 / G-4 / G-5) -> production 3-flow login check.
 --   - The execution record is added to docs/db-migrations.md in a later PR
 --     (not written in this file).
 --
 -- [PURPOSE]
 --   Revoke the residual, non-read, unneeded privileges (TRUNCATE / REFERENCES /
---   TRIGGER) held by anon / authenticated on public.employees / public.genka_admins.
+--   TRIGGER / MAINTAIN) held by anon / authenticated on public.employees /
+--   public.genka_admins.
 --   SELECT was already narrowed to column-level grants (2026-05-28) and INSERT /
 --   UPDATE were already revoked (2026-05-30); writes go through *_secure RPCs and
 --   login goes through create_*_session RPCs. This step is the cross-cutting cleanup
---   of the TRUNCATE / REFERENCES / TRIGGER privileges left behind on these two tables,
---   mirroring Phase 4-D-4 (financial tables).
+--   of the TRUNCATE / REFERENCES / TRIGGER / MAINTAIN privileges left behind on these
+--   two tables, mirroring Phase 4-D-4 (financial tables).
+--   NOTE on MAINTAIN: MAINTAIN is a table-level maintenance privilege added in
+--   PostgreSQL 17 (allows VACUUM / ANALYZE / CLUSTER / REINDEX /
+--   REFRESH MATERIALIZED VIEW / LOCK TABLE). It was granted to anon / authenticated
+--   as a side effect of Supabase's PG17 default GRANT ALL, is not used by the app
+--   (PostgREST CRUD / RPC never issues these commands), and is therefore treated as
+--   a residual unneeded privilege to be revoked here (same as the in-repo precedent
+--   docs/sql/phase4c-4-report-summary-revoke.sql, which revoked MAINTAIN too).
 --
 -- [SCOPE]
 --   Target tables:
@@ -27,6 +35,7 @@
 --     TRUNCATE
 --     REFERENCES
 --     TRIGGER
+--     MAINTAIN   (PostgreSQL 17 table-level maintenance privilege; see PURPOSE note)
 --   Target roles:
 --     anon
 --     authenticated
@@ -45,8 +54,8 @@
 --   - anon / authenticated has table-level SELECT / INSERT / UPDATE / DELETE = true
 --     on employees or genka_admins  -> STOP
 --     (note: table-level SELECT should be false; column-level SELECT is separate and expected)
---     (note: table-level TRUNCATE / REFERENCES / TRIGGER = true is EXPECTED here;
---            they are exactly what this script revokes -> NOT a stop condition)
+--     (note: table-level TRUNCATE / REFERENCES / TRIGGER / MAINTAIN = true is EXPECTED
+--            here; they are exactly what this script revokes -> NOT a stop condition)
 --   - public has ANY privilege on employees or genka_admins  -> STOP
 --   - pin column has SELECT granted to anon / authenticated / PUBLIC  -> STOP
 --     (note: a REFERENCES row shown against pin in information_schema.column_privileges
@@ -76,12 +85,24 @@
 -- Pre-check (SELECT only; does NOT modify DB state)
 -- ============================================================
 
+-- A-0. PostgreSQL version check (guard for the MAINTAIN privilege keyword)
+--    MAINTAIN is a table-level privilege introduced in PostgreSQL 17. The REVOKE body
+--    and the can_maintain / pub_maintain checks below use the 'MAINTAIN' keyword, which
+--    does NOT exist in PostgreSQL 16 or earlier (has_table_privilege / REVOKE would
+--    raise: unrecognized privilege type "MAINTAIN").
+--    Expected: PostgreSQL 17 or later (Supabase current).
+--    STOP if the server is PostgreSQL 16 or earlier -> do NOT run this script as-is
+--          (the MAINTAIN parts would error; re-scope before running).
+select version()             as pg_version,
+       current_setting('server_version_num')::int as server_version_num;
+-- (server_version_num >= 170000 means PostgreSQL 17+.)
+
 -- A. Table-level privilege check (anon / authenticated on the two tables)
 --    Expected: can_select=false / can_insert=false / can_update=false / can_delete=false
---              can_truncate=true / can_references=true / can_trigger=true
+--              can_truncate=true / can_references=true / can_trigger=true / can_maintain=true
 --    STOP if any of can_select / can_insert / can_update / can_delete is true.
---    NOTE: can_truncate / can_references / can_trigger = true is EXPECTED (that is what
---          this script revokes); it is NOT a stop condition.
+--    NOTE: can_truncate / can_references / can_trigger / can_maintain = true is EXPECTED
+--          (that is what this script revokes); it is NOT a stop condition.
 select
   role_name,
   object_name,
@@ -91,7 +112,8 @@ select
   has_table_privilege(role_name, object_name, 'DELETE')     as can_delete,
   has_table_privilege(role_name, object_name, 'TRUNCATE')   as can_truncate,
   has_table_privilege(role_name, object_name, 'REFERENCES') as can_references,
-  has_table_privilege(role_name, object_name, 'TRIGGER')    as can_trigger
+  has_table_privilege(role_name, object_name, 'TRIGGER')    as can_trigger,
+  has_table_privilege(role_name, object_name, 'MAINTAIN')   as can_maintain
 from (
   values
     ('anon',          'public.employees'),
@@ -102,8 +124,8 @@ from (
 order by object_name, role_name;
 
 -- A-2. public privilege check (for stop condition)
---    Expected: public has NO privilege on either table (all false).
---    STOP if any privilege is true.
+--    Expected: public has NO privilege on either table (all false, incl. pub_maintain).
+--    STOP if any privilege is true (including pub_maintain=true).
 select
   object_name,
   has_table_privilege('public', object_name, 'SELECT')     as pub_select,
@@ -112,7 +134,8 @@ select
   has_table_privilege('public', object_name, 'DELETE')     as pub_delete,
   has_table_privilege('public', object_name, 'TRUNCATE')   as pub_truncate,
   has_table_privilege('public', object_name, 'REFERENCES') as pub_references,
-  has_table_privilege('public', object_name, 'TRIGGER')    as pub_trigger
+  has_table_privilege('public', object_name, 'TRIGGER')    as pub_trigger,
+  has_table_privilege('public', object_name, 'MAINTAIN')   as pub_maintain
 from (
   values
     ('public.employees'),
@@ -161,10 +184,15 @@ order  by table_name, grantee;
 --    (pg_attribute.attacl). This is what A-3/A-4 cannot tell apart on their own.
 --
 -- A-5a. Table-level privileges from pg_class.relacl (anon / authenticated)
---    Expected: TRUNCATE / REFERENCES / TRIGGER present at TABLE level (that is exactly
---              what this script revokes). SELECT/INSERT/UPDATE should NOT be present at
---              table level (SELECT is column-level; INSERT/UPDATE were revoked earlier).
+--    Expected: TRUNCATE / REFERENCES / TRIGGER / MAINTAIN present at TABLE level (that is
+--              exactly what this script revokes). SELECT/INSERT/UPDATE should NOT be present
+--              at table level (SELECT is column-level; INSERT/UPDATE were revoked earlier).
+--    NOTE: MAINTAIN (letter m) is a PostgreSQL 17 table-level privilege and shows up here
+--          via aclexplode without any query change; this A-5a query is what detected the
+--          residual MAINTAIN in the first place. Seeing MAINTAIN here is EXPECTED (it is
+--          revoked by the REVOKE body) -> NOT a stop condition.
 --    ACL letter map: r=SELECT a=INSERT w=UPDATE d=DELETE D=TRUNCATE x=REFERENCES t=TRIGGER
+--                    m=MAINTAIN
 select c.relname                         as table_name,
        acl.grantee::regrole::text        as grantee,
        acl.privilege_type
@@ -176,6 +204,11 @@ where  c.relnamespace = 'public'::regnamespace
 order  by c.relname, grantee, acl.privilege_type;
 
 -- A-5b. REAL column-level privileges from pg_attribute.attacl (anon / authenticated)
+--    NOTE: MAINTAIN (like TRUNCATE / TRIGGER / DELETE) has NO column-level form in
+--          PostgreSQL; only SELECT / INSERT / UPDATE / REFERENCES can be column-level.
+--          So this attacl diagnostic concerns mainly the column-level SELECT set and any
+--          REAL column-level REFERENCES; MAINTAIN can never appear in attacl (it is
+--          table-level only, checked in A-5a / A / G).
 --    Expected: ONLY SELECT on the expected columns
 --      employees    : id, name, role, is_active, company_id, can_genka, can_admin
 --      genka_admins : id, name, is_active
@@ -274,12 +307,13 @@ order  by p.proname;
 --   NOTE: this is the first place that modifies DB state. Run only after
 --         pre-checks A..F all match expectations (and no STOP condition is hit).
 --   NOTE: one table per statement. Order: employees -> genka_admins.
---   NOTE: this touches ONLY table-level TRUNCATE / REFERENCES / TRIGGER.
---         Column-level SELECT grants are NOT affected.
+--   NOTE: this touches ONLY table-level TRUNCATE / REFERENCES / TRIGGER / MAINTAIN.
+--         Column-level SELECT grants are NOT affected (they live in pg_attribute.attacl,
+--         a separate ACL from the table-level pg_class.relacl revoked here).
 -- ============================================================
 
-REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.employees FROM anon, authenticated;
-REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.genka_admins FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.employees FROM anon, authenticated;
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.genka_admins FROM anon, authenticated;
 
 
 -- ============================================================
@@ -289,8 +323,9 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.genka_admins FROM anon, aut
 -- G. Table-level privilege check (same shape as A)
 --    Expected: for anon / authenticated on both tables,
 --      can_select=false / can_insert=false / can_update=false / can_delete=false /
---      can_truncate=false / can_references=false / can_trigger=false
---      (all 8 table-level privileges false).
+--      can_truncate=false / can_references=false / can_trigger=false / can_maintain=false
+--      (all 8 table-level privileges false:
+--       SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN).
 select
   role_name,
   object_name,
@@ -300,7 +335,8 @@ select
   has_table_privilege(role_name, object_name, 'DELETE')     as can_delete,
   has_table_privilege(role_name, object_name, 'TRUNCATE')   as can_truncate,
   has_table_privilege(role_name, object_name, 'REFERENCES') as can_references,
-  has_table_privilege(role_name, object_name, 'TRIGGER')    as can_trigger
+  has_table_privilege(role_name, object_name, 'TRIGGER')    as can_trigger,
+  has_table_privilege(role_name, object_name, 'MAINTAIN')   as can_maintain
 from (
   values
     ('anon',          'public.employees'),
@@ -311,7 +347,8 @@ from (
 order by object_name, role_name;
 
 -- G-2. public privileges post-check (same shape as A-2; must be unchanged)
---    Expected: public remains all false on both tables (public not touched here).
+--    Expected: public remains all false on both tables (public not touched here),
+--              including pub_maintain=false.
 select
   object_name,
   has_table_privilege('public', object_name, 'SELECT')     as pub_select,
@@ -320,7 +357,8 @@ select
   has_table_privilege('public', object_name, 'DELETE')     as pub_delete,
   has_table_privilege('public', object_name, 'TRUNCATE')   as pub_truncate,
   has_table_privilege('public', object_name, 'REFERENCES') as pub_references,
-  has_table_privilege('public', object_name, 'TRIGGER')    as pub_trigger
+  has_table_privilege('public', object_name, 'TRIGGER')    as pub_trigger,
+  has_table_privilege('public', object_name, 'MAINTAIN')   as pub_maintain
 from (
   values
     ('public.employees'),
@@ -360,6 +398,9 @@ from (
 order by object_name, role_name;
 
 -- G-5. attacl re-check (no REAL column-level pin/REFERENCES remains)
+--    NOTE: MAINTAIN is table-level only and never appears in attacl, so this column-level
+--          re-check concerns the column SELECT set and any REAL column-level REFERENCES;
+--          MAINTAIN removal is verified in G (table-level can_maintain=false), not here.
 --    Expected: only the SELECT set remains at column level (same as A-5b); NO REFERENCES,
 --              and pin has no column-level privilege, for anon / authenticated.
 --    Expected rows: exactly the column-level SELECT set and nothing else, i.e.
@@ -391,6 +432,10 @@ order  by c.relname, a.attname, grantee, acl.privilege_type;
 -- Production verification (app side; manual)
 --   After REVOKE, confirm all three login flows still work and the
 --   employee/admin lists still render (these use the column-level SELECT).
+--   Revoking TRUNCATE / REFERENCES / TRIGGER / MAINTAIN does NOT affect login or
+--   normal operations: login goes through create_*_session RPCs (EXECUTE grants,
+--   untouched here), reads use column-level SELECT, and MAINTAIN only governs
+--   VACUUM / ANALYZE / CLUSTER / REINDEX / LOCK TABLE, which the app never issues.
 --     - index.html      ... employee login (/)
 --     - admin-app.html   ... admin login   (/admin)
 --     - genka-app.html   ... genka login    (/genka)
@@ -405,6 +450,6 @@ order  by c.relname, a.attname, grantee, acl.privilege_type;
 --         after the REVOKE; restore the relevant table's line, find the cause, then
 --         REVOKE again.
 -- ============================================================
--- GRANT TRUNCATE, REFERENCES, TRIGGER ON TABLE public.employees TO anon, authenticated;
--- GRANT TRUNCATE, REFERENCES, TRIGGER ON TABLE public.genka_admins TO anon, authenticated;
+-- GRANT TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.employees TO anon, authenticated;
+-- GRANT TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.genka_admins TO anon, authenticated;
 -- ============================================================

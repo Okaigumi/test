@@ -3,14 +3,18 @@
 --   direct privileges for anon / authenticated
 --   (REVOKE TRUNCATE / REFERENCES / TRIGGER / MAINTAIN)
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This file is prepared for MANUAL execution by the user in the Supabase SQL
---     Editor. Nothing here has been run yet.
---   - DB execution is done by the user. No DB connection / SQL execution /
---     Supabase CLI / psql from Claude Code CLI. All checks (pre / post) are run
---     manually by the user in the Supabase SQL Editor.
---   - After the user runs the EXECUTION BODY and the post-checks pass, update this
---     STATUS header (and record in docs/db-migrations.md) in a separate step.
+-- [STATUS] EXECUTED (2026-07-09)
+--   - Manually executed by the user in the Supabase SQL Editor.
+--   - EXECUTION BODY (all 15 statements) returned "Success. No rows returned".
+--   - Pre-checks A-0 / A / A-2 / A-3 / A-4 / A-5 all passed.
+--   - Post-checks G / G-2 / G-3 all passed:
+--       * TRUNCATE / REFERENCES / TRIGGER / MAINTAIN are all false on all 15
+--         target tables for anon / authenticated.
+--       * SELECT / INSERT / UPDATE / DELETE unchanged from the A-4 pre-snapshot.
+--   - DB execution done by the user. No DB connection / Supabase CLI / psql from
+--     Claude Code CLI. All checks (pre / post) were run manually by the user in
+--     the Supabase SQL Editor.
+--   - Recorded in docs/db-migrations.md (2026-07-09 Phase 4-F-2A section).
 --
 -- [PURPOSE]
 --   Remove the residual non-CRUD "extra" privileges (TRUNCATE / REFERENCES /

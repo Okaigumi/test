@@ -3463,3 +3463,76 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - PR #85（`docs/sql/phase4f-1-public-default-privileges-revoke.sql` 追加、merge commit `fd8a3a3`）。
 - SQL：`docs/sql/phase4f-1-public-default-privileges-revoke.sql`（STATUS を `EXECUTED (2026-07-09)` に更新）。
 - Phase 4-E-2（本ファイル 2026-07-09 セクション）で確認した MAINTAIN 再付与源への対応。
+
+## 2026-07-09 Phase 4-F-2A existing public tables extra privileges cleanup（TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）（★実行済み★）
+
+### 目的
+
+- 既存 public テーブルの `anon` / `authenticated` に残る非CRUD系 direct grants（`pg_class.relacl`）を除去する。
+- 対象権限は `TRUNCATE / REFERENCES / TRIGGER / MAINTAIN`。Supabase PG17 の default GRANT ALL の残渣で、アプリは使用していない（読み取りは direct SELECT / secure read RPC、書き込みは secure RPC 経由）。
+- Phase 4-F-1 は future tables の default privileges が対象。今回 4-F-2A は existing tables の direct grants のみが対象（別オブジェクト・別メカニズム）。
+
+### 対象（全15テーブル・2バッチ・全15文）
+
+- Batch 1（4権限 REVOKE・13テーブル）：`admin_sessions` / `companies` / `company_categories` / `employee_sessions` / `machine_locations` / `machines` / `materials` / `paid_leave_grants` / `paid_leave_requests` / `site_assignments` / `site_categories` / `sites` / `subcontractors`
+- Batch 2（`MAINTAIN` のみ REVOKE・2テーブル）：`notices` / `reports`
+
+### 非対象
+
+- `SELECT / INSERT / UPDATE / DELETE`（CRUD は不変）
+- RLS / policy
+- RPC
+- HTML / JS / auth / PIN
+- default privileges（owner `postgres` / future tables は Phase 4-F-1 で対応済み）
+- owner `supabase_admin` 分の default privileges（別 backlog）
+- stale policies の DROP POLICY（Phase 4-F-3 候補）
+- `employees` / `genka_admins`（Phase 4-E-1 で対応済み）
+- financial 系4テーブル（Phase 4-D-4 / 4-E-2 で対応済み）
+- session テーブル（`admin_sessions` / `employee_sessions`）の CRUD grant（別工程で慎重に扱う）
+
+### Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-09）
+
+- A-0：PostgreSQL 17.6（`server_version_num` = 170006）、`is_pg17_or_newer` = true。
+- A：15テーブル × `anon` / `authenticated` × 8権限のマトリクスを確認。
+  - Batch 1 の13テーブルは `TRUNCATE / REFERENCES / TRIGGER / MAINTAIN` が true。
+  - `notices` / `reports` は `MAINTAIN` のみ true。
+  - CRUD（`SELECT / INSERT / UPDATE / DELETE`）はテーブルごとに既存状態を記録し、post-check で不変確認する前提。
+- A-2：対象15テーブル以外で4権限（`TRUNCATE / REFERENCES / TRIGGER / MAINTAIN`）を保持するテーブル = 0 rows（完全性ガード）。
+- A-3：REVOKE 対象権限の実在確認。
+- A-4：CRUD の pre 状態をスナップショット記録。
+- A-5：PUBLIC の該当権限 = 0 rows（情報確認）。
+- STOP 条件への該当なし。
+
+### 実行 SQL（`docs/sql/phase4f-2a-existing-extra-privileges-revoke.sql` を Supabase SQL Editor で実行・2026-07-09）
+
+- EXECUTION BODY 全15文（Batch 1：13文 / Batch 2：2文）を実行。
+- 実行結果：`Success. No rows returned`。
+- 危険 SQL（DROP / DELETE / TRUNCATE 実行 / DML / GRANT / ALTER DEFAULT PRIVILEGES / DROP POLICY）なし。変更は既存テーブル relacl からの非CRUD権限 REVOKE のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-09）
+
+- G：対象15テーブルで `TRUNCATE / REFERENCES / TRIGGER / MAINTAIN` が全て false、CRUD は A-4 スナップショットから不変。期待どおり。
+- G-2：public 全体で対象4権限を保持するテーブル = 0 rows。期待どおり。
+- G-3：対象15テーブルで対象4権限 = 0 rows。期待どおり。
+
+### 影響範囲
+
+- アプリ動作への影響なし（除去したのは未使用の非CRUD権限のみ）。CRUD / RLS / RPC は不変。
+
+### 触らなかったもの
+
+- CRUD grant（`SELECT / INSERT / UPDATE / DELETE`）、RLS / policy / RPC、列レベル権限。
+- default privileges（Phase 4-F-1 済み）、owner `supabase_admin` 分（別 backlog）。
+- stale policies、`employees` / `genka_admins`、financial 系4テーブル、session テーブルの CRUD grant。
+- HTML / JS / auth / PIN、`docs/roadmap.md`。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #87（`docs/sql/phase4f-2a-existing-extra-privileges-revoke.sql` 追加、merge commit `87b22d5`、commit `945d8ec`）。
+- SQL：`docs/sql/phase4f-2a-existing-extra-privileges-revoke.sql`（STATUS を `EXECUTED (2026-07-09)` に更新）。

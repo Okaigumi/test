@@ -3382,3 +3382,84 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.genka_admins FROM
 - SQL：`docs/sql/phase4e-2-financial-maintain-revoke.sql`（STATUS を `NOT EXECUTED - SKIPPED` に更新）。
 - Phase 4-E-1（本ファイル 2026-07-08 セクション）の申し送りをクローズ。
 - 別課題：`pg_default_acl` の default privileges 棚卸し（MAINTAIN 含む全権限の新規テーブル再付与）。
+
+
+## 2026-07-09 Phase 4-F-1 public default privileges cleanup（postgres owner / future tables）（★実行済み★）
+
+### 目的
+
+- owner `postgres` で `public` に今後作成される新規テーブルへ、`anon` / `authenticated` に広い default privileges が自動付与されるのを停止する。
+- Phase 4-E-2 で確認された「PG17 由来 MAINTAIN の再付与源」への対応（既存テーブルは clean だが、新規 public テーブルには MAINTAIN 含む全権限が再付与され得た）。
+
+### 対象
+
+- `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public`
+- `ON TABLES`
+- `FROM anon, authenticated`
+- 権限：SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN
+
+### 非対象
+
+- owner `supabase_admin` 分の default privileges（別課題・後述）
+- grantee `postgres` / `service_role`（温存）
+- 既存テーブルの relacl・direct grants
+- RLS / policy / RPC 定義
+- HTML / JS / auth / PIN
+- `public` 以外の schema（storage / auth / realtime / graphql / graphql_public / extensions 等）
+- sequences / functions / types / schemas への default privileges
+
+### Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-09）
+
+- A-0：PostgreSQL 17.6（`server_version_num` = 170006）、`is_pg17_or_newer` = true。
+- A：`postgres` / `public` / `r` に `anon=arwdDxtm`、`authenticated=arwdDxtm` を確認。`supabase_admin` / `public` / `r` にも同様の default privileges あり（ただし NON-SCOPE）。
+- B：owner `postgres` / `public` / `anon`, `authenticated` の default privileges = DELETE / INSERT / MAINTAIN / REFERENCES / SELECT / TRIGGER / TRUNCATE / UPDATE（8権限）。
+- C：global default privileges `(all schemas)`（`defaclnamespace = 0`）は 0 rows（per-schema REVOKE を打ち消す global default なし）。
+- D：`current_user` = postgres、`session_user` = postgres、`is_member_postgres` = true（実行可）。
+- STOP 条件への該当なし。
+
+### 実行 SQL（`docs/sql/phase4f-1-public-default-privileges-revoke.sql` を Supabase SQL Editor で実行・2026-07-09）
+
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
+  ON TABLES FROM anon, authenticated;
+```
+
+- 実行結果：`Success. No rows returned`。
+- 危険 SQL（DROP / DELETE / TRUNCATE 実行 / 既存テーブル ALTER / DML / GRANT）なし。変更は owner postgres 分の default privileges REVOKE 1文のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-09）
+
+- G：owner `postgres` / `public` / `anon`, `authenticated` は 0 rows（8権限が default から除去済み）。期待どおり。
+- G-2：owner `postgres` / `public` / `postgres`, `service_role` は8権限が残存（温存 OK）。期待どおり。
+- G-3：owner `supabase_admin` / `public` は `anon` / `authenticated` / `postgres` / `service_role` とも8権限が残存。今回 NON-SCOPE のため成功/失敗判定の対象外（backlog）。
+
+### 影響範囲
+
+- 既存テーブルには影響なし（default privileges は作成時点の付与ルールで、既存テーブルの relacl は不変）。
+- 以後、owner `postgres` で `public` に作成される **future tables** のみ対象（`anon` / `authenticated` への自動付与が止まる）。書き込み/読み取りは従来どおり secure RPC 経由。
+
+### 触らなかったもの
+
+- owner `supabase_admin` の default privileges（未変更）。
+- grantee `postgres` / `service_role` の default privileges（温存）。
+- 既存テーブルの relacl・direct grants、RLS / policy / RPC、列レベル権限。
+- HTML / JS / auth / PIN、`public` 以外の schema、sequences / functions。
+- `docs/roadmap.md`。
+
+### 申し送り（backlog）
+
+- owner `supabase_admin` 分の default privileges は残存（`anon` / `authenticated` に arwdDxtm）。実行ロールのメンバーシップ要件があるため Phase 4-F-1b 候補として別扱い。
+- 既存テーブルの direct grants / stale policies は Phase 4-F-2 以降で対応候補。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #85（`docs/sql/phase4f-1-public-default-privileges-revoke.sql` 追加、merge commit `fd8a3a3`）。
+- SQL：`docs/sql/phase4f-1-public-default-privileges-revoke.sql`（STATUS を `EXECUTED (2026-07-09)` に更新）。
+- Phase 4-E-2（本ファイル 2026-07-09 セクション）で確認した MAINTAIN 再付与源への対応。

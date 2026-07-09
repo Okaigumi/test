@@ -3,12 +3,26 @@
 --   for anon / authenticated (ALTER DEFAULT PRIVILEGES ... ON TABLES)
 --   Scope of THIS file: owner role `postgres` ONLY.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - SQL file created only. NOT run.
---   - To be executed manually by the user in Supabase SQL Editor, after pre-checks
---     A-0 / A / B / C / D pass (no STOP condition hit).
+-- [STATUS] EXECUTED (2026-07-09)
+--   - ALTER DEFAULT PRIVILEGES body (1 statement, owner postgres) run manually by the
+--     user in Supabase SQL Editor. Result: Success. No rows returned.
 --   - No DB connection / SQL execution / Supabase CLI / psql from Claude Code CLI.
---   - Post-check G / G-2 / G-3: to be run manually after execution.
+--   - Pre-check A-0/A/B/C/D all OK (no STOP condition hit):
+--       A-0: PostgreSQL 17.6 (server_version_num=170006), is_pg17_or_newer=true
+--       A  : owner postgres / public / 'r' had anon=arwdDxtm, authenticated=arwdDxtm
+--            (supabase_admin had the same defaults; NON-SCOPE)
+--       B  : owner postgres defaults for anon/authenticated =
+--            DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--       C  : global (all schemas) default privileges = 0 rows
+--       D  : current_user=postgres, session_user=postgres, is_member_postgres=true
+--   - Post-check after the ALTER:
+--       G  : owner postgres / public / anon, authenticated = 0 rows (8 privileges removed)
+--       G-2: owner postgres / public / postgres, service_role = 8 privileges retained (kept)
+--       G-3: owner supabase_admin / public still grants anon / authenticated / postgres /
+--            service_role the 8 privileges (NON-SCOPE; tracked as Phase 4-F-1b backlog)
+--   - Effect: FUTURE public tables created by owner postgres no longer auto-grant
+--     anon / authenticated. Existing tables unchanged.
+--   See docs/db-migrations.md (2026-07-09 Phase 4-F-1 section) for the full record.
 --
 -- [PURPOSE]
 --   Stop future public tables from auto-receiving broad privileges for anon /

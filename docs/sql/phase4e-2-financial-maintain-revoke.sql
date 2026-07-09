@@ -2,18 +2,36 @@
 -- Phase 4-E-2: financial tables - cleanup of residual PG17 MAINTAIN privilege
 --   (REVOKE MAINTAIN from anon / authenticated)
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - Pre-check A-0/A/A-2/A-5a already run manually in Supabase SQL Editor (2026-07-09):
+-- [STATUS] NOT EXECUTED - SKIPPED (target state already clean at execution-time and
+--           final re-check; REVOKE body not run by this workflow)
+--   - Initial pre-check (Supabase SQL Editor, manual, 2026-07-09) found the residual:
 --       A-0 : PostgreSQL 17.6 (server_version_num=170006), is_pg17_or_newer=true
 --       A   : anon/authenticated on all 4 tables -> SELECT/INSERT/UPDATE/DELETE/
---             TRUNCATE/REFERENCES/TRIGGER = false, MAINTAIN = true
+--             TRUNCATE/REFERENCES/TRIGGER = false, MAINTAIN = true (residual)
 --       A-2 : public = all false on all 4 tables
 --       A-5a: relacl shows MAINTAIN only (8 rows: 4 tables x anon/authenticated)
---     -> MAINTAIN residual confirmed; no STOP condition hit at pre-check.
---   - REVOKE body NOT yet run. To be executed manually by the user in Supabase SQL
---     Editor. No DB connection / SQL execution / Supabase CLI / psql from Claude Code.
---   - Post-check G/G-2/G-5 and production verification: PENDING (after execution).
---   - docs/db-migrations.md record: PENDING (separate step/PR after execution).
+--     -> MAINTAIN residual confirmed; this script was created for the cleanup.
+--   - SQL file created and merged via PR #83 (merge commit 9e6e209); STATUS was
+--     initially NOT EXECUTED.
+--   - Execution-time pre-check (Supabase SQL Editor, manual, 2026-07-09), immediately
+--     before running the REVOKE body, found the target already clean:
+--       A   : anon/authenticated on all 4 tables -> all 8 privileges
+--             (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN) = false
+--       A-5a: relacl = 0 rows for anon/authenticated
+--       A-2 : public = all false on all 4 tables
+--   - Final re-check (Supabase SQL Editor, manual, 2026-07-09) reconfirmed: all 8
+--     privileges = false for anon/authenticated on all 4 tables (stable / clean).
+--   - Therefore the REVOKE body (4 statements) was NOT run. No DB change was made.
+--   - Cause of the state change (initial MAINTAIN residual -> clean) is UNIDENTIFIED
+--     in this workflow (a REVOKE via some other path cannot be ruled out; this workflow
+--     did NOT run the REVOKE).
+--   - SEPARATE BACKLOG (default privileges): pg_default_acl still grants
+--     anon / authenticated `arwdDxtm` (a=INSERT r=SELECT w=UPDATE d=DELETE D=TRUNCATE
+--     x=REFERENCES t=TRIGGER m=MAINTAIN) on FUTURE public tables, so newly created
+--     public tables would receive all privileges (incl. MAINTAIN) again. Not changed
+--     here; tracked as a default-privileges cleanup candidate (out of scope for 4-E-2).
+--   - No DB connection / SQL execution / Supabase CLI / psql from Claude Code CLI;
+--     all DB checks were run manually by the user in Supabase SQL Editor.
 --
 -- [PURPOSE]
 --   Revoke the residual PG17 MAINTAIN privilege held by anon / authenticated on the

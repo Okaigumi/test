@@ -3303,3 +3303,82 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE public.genka_admins FROM
 - PR #79（script追加、merge commit `ac629cd`）/ PR #80（REFERENCES precheck 修正、merge commit `d8357a0`）/ PR #81（MAINTAIN 追加、merge commit `013b7d5`）。
 - SQL：`docs/sql/phase4e-1-employees-admins-extra-privileges-revoke.sql`。
 - 申し送り：financial系4テーブル（`unit_rates` / `employee_rates` / `site_budgets` / `invoices`）にも PG17 由来の MAINTAIN が残存している可能性（Phase 4-D-4 は MAINTAIN 未対応）。別工程で要確認（Phase 4-E-2 候補）。
+
+
+## 2026-07-09 Phase 4-E-2 financial系4テーブル MAINTAIN 残存確認 → pre-check クリーンにつき REVOKE 未実行（★DB変更なし★）
+
+### 目的
+
+- Phase 4-D-4 で未対応だった financial系4テーブルの PostgreSQL 17 由来 MAINTAIN 残存を確認し、残っていれば `anon` / `authenticated` から REVOKE するための確認工程（Phase 4-E-1 の申し送り「Phase 4-E-2 候補」の消化）。
+
+### 対象
+
+- `employee_rates`
+- `invoices`
+- `site_budgets`
+- `unit_rates`
+- 対象ロール：`anon` / `authenticated`
+- 対象権限：MAINTAIN のみ（SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER は Phase 4-D / 4-D-4 で対応済み）
+
+### 初回 Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-09）
+
+- A-0：PostgreSQL 17.6（`server_version_num` = 170006）。MAINTAIN キーワードが使える前提を確認。
+- A：4テーブルとも `anon` / `authenticated` は SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER=false・**MAINTAIN のみ true**（残存＝除去対象）。
+- A-5a：relacl に **MAINTAIN のみ 8行**（4テーブル × `anon` / `authenticated`）。
+- A-2：PUBLIC は4テーブルとも全権限 false。
+- → MAINTAIN 残存を確認し、除去用の SQL ファイルを作成する方針に。
+
+### SQLファイル作成・PR #83
+
+- `docs/sql/phase4e-2-financial-maintain-revoke.sql` を追加（A-0 / A / A-2 / A-5a 事前確認、REVOKE MAINTAIN 4文、G / G-2 / G-5 事後確認、rollback コメントの最小構成）。
+- merge commit `9e6e209`（PR #83）。作成時点の STATUS は `NOT EXECUTED`。
+
+### 実行直前 Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-09）
+
+- REVOKE 本体を流す直前に再確認したところ、対象は既にクリーンだった：
+  - A：4テーブル × `anon` / `authenticated` の8権限（SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN）が**全て false**。
+  - A-5a：relacl は `anon` / `authenticated` で **0 rows**。
+  - A-2：PUBLIC は4テーブルとも全権限 false。
+
+### 最終再確認（Supabase SQL Editor・ユーザー手動・2026-07-09）
+
+- 対象4テーブル × `anon` / `authenticated` の8権限が**全て false**であることを再確認（クリーンで安定）。
+
+### 判断
+
+- 目標状態（`anon` / `authenticated` に MAINTAIN が付いていない状態）を既に満たしていたため、**REVOKE 本体4文は未実行**。
+- **DB変更なし**。
+- **Phase 4-E-2 は「対応不要確認」としてクローズ**。
+
+### 未確定事項
+
+- 初回 pre-check（MAINTAIN 残存・relacl に MAINTAIN 8行）から、実行直前 pre-check / 最終再確認（全権限 false・relacl 0 rows）への**状態変化の契機は未特定**。
+- 別経路での REVOKE 実行の可能性を含むが、**このワークフローでは REVOKE を実行していない**。
+
+### pg_default_acl 申し送り（別課題・棚卸し候補）
+
+- `pg_default_acl` に、`public / postgres / r`（＝owner postgres、対象 relkind='r'=テーブル）と `public / supabase_admin / r` の default privileges として、`anon` / `authenticated` 向け `arwdDxtm` が残存。
+  - ACL 文字：a=INSERT r=SELECT w=UPDATE d=DELETE D=TRUNCATE x=REFERENCES t=TRIGGER **m=MAINTAIN**。
+- このため、**今後 public に新規作成されるテーブルには全権限（MAINTAIN 含む）が再付与される可能性**がある。
+- Phase 4-E-2 では変更せず、**default privileges の棚卸しを別課題（別工程）** として扱う（`ALTER DEFAULT PRIVILEGES` は未実行）。
+
+### 触らなかったもの
+
+- REVOKE 未実行（本体4文は SQL ファイル内に保持・未適用）。
+- RLS 有効状態・既存 policy・read/write RPC 定義・EXECUTE・SECURITY DEFINER。
+- 列レベル権限・`service_role` / `postgres`(owner) の権限。
+- `pg_default_acl`（`ALTER DEFAULT PRIVILEGES` 未実行）。
+- フロント（`admin-app.html` / `genka-app.html` 等 HTML/JS）・auth / PIN 処理。
+- `docs/roadmap.md`。
+
+### 確認手段
+
+- DB 確認はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #83（`docs/sql/phase4e-2-financial-maintain-revoke.sql` 追加、merge commit `9e6e209`）。
+- SQL：`docs/sql/phase4e-2-financial-maintain-revoke.sql`（STATUS を `NOT EXECUTED - SKIPPED` に更新）。
+- Phase 4-E-1（本ファイル 2026-07-08 セクション）の申し送りをクローズ。
+- 別課題：`pg_default_acl` の default privileges 棚卸し（MAINTAIN 含む全権限の新規テーブル再付与）。

@@ -3674,3 +3674,73 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #91（`docs/sql/phase4f-2b-2-companies-write-revoke.sql` 追加、merge commit `e18a9f3`、commit `d9f6f39`）。
 - SQL：`docs/sql/phase4f-2b-2-companies-write-revoke.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。
+
+---
+
+## 2026-07-10 Phase 4-F-3 category stale policy除去（★実行済み★）
+
+### 目的
+
+- `company_categories.cc_select` / `site_categories.sc_select` を除去する。
+- Phase 4-F-2B-1 で anon / authenticated の SELECT grant を除去済みのため、現在の grant 状態ではこの2 policy は実効上使われていない。
+- 将来 SELECT が再 GRANT された場合に再び許可経路となる潜在状態を解消する（policy 層の defense-in-depth 整理）。
+
+### 対象（2 policy・全2文）
+
+- `DROP POLICY cc_select ON public.company_categories;`
+- `DROP POLICY sc_select ON public.site_categories;`
+
+### 非対象
+
+- table grants
+- SELECT / INSERT / UPDATE / DELETE 権限
+- RLS enabled / FORCE RLS
+- RPC / function / EXECUTE grants
+- view / materialized view
+- HTML / JS / auth / PIN
+- default privileges
+- other tables
+- `employees_update_public`
+- その他すべての policy
+- `docs/roadmap.md`
+
+### Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-10）
+
+- D-1：`company_categories` / `site_categories` とも存在、`relkind = r`、RLS enabled = true、FORCE RLS = false。
+- D-2：両テーブル × `anon` / `authenticated` の SELECT table privilege = false。
+- D-3：対象テーブルの policy は `cc_select` / `sc_select` の2件のみ（PERMISSIVE / roles = {anon,authenticated} / cmd = SELECT / qual = true / with_check = null）。
+- D-4：`authenticator` と `supabase_storage_admin` は両テーブル SELECT = false。`postgres` は両テーブル SELECT = true だが、BYPASSRLS = true かつ両テーブルの owner のため、そのアクセスは `cc_select` / `sc_select` に依存しない。
+- D-5a：対象テーブルを参照する routine は `export_projects_summary_secure(...)` 1件のみ。SECURITY DEFINER = true、owner = `postgres`、owner は両テーブル SELECT 可能、BYPASSRLS = true、両テーブルの owner。policy 依存なし。
+- D-5b：view / materialized view 依存 = 0 rows。
+- STOP 条件への該当なし。
+
+### 実行 SQL（`docs/sql/phase4f-3-category-stale-policy-drop.sql` を Supabase SQL Editor で実行・2026-07-10）
+
+- `DROP POLICY cc_select ON public.company_categories;` → 実行結果：`Success. No rows returned`。
+- `DROP POLICY sc_select ON public.site_categories;` → 実行結果：`Success. No rows returned`。
+- `IF EXISTS` / `CASCADE` なし。grant 変更・RLS 状態変更・他 policy への干渉なし。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-10）
+
+- Q-1：対象2テーブルの policy = 0 rows（`cc_select` / `sc_select` 消失）。期待どおり。
+- Q-2：両テーブルとも RLS enabled = true、FORCE RLS = false を維持。期待どおり。
+- Q-3：両テーブル × `anon` / `authenticated` の CRUD table privilege（SELECT / INSERT / UPDATE / DELETE）は全て false。期待どおり。
+- Q-4：relacl 上の `anon` / `authenticated` 向け CRUD grant = 0 rows のまま不変。期待どおり。
+
+### 影響評価
+
+- table grants は不変。
+- RLS 状態（enabled / FORCE RLS）は不変。
+- SECURITY DEFINER routine（`export_projects_summary_secure(...)`）の定義・権限は不変。
+- 本工程では RPC スモークテスト・本番画面スモークテストは未実施。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #93（`docs/sql/phase4f-3-category-stale-policy-drop.sql` 追加、merge commit `8fbea4d`、commit `4d8866e`）。
+- SQL：`docs/sql/phase4f-3-category-stale-policy-drop.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。

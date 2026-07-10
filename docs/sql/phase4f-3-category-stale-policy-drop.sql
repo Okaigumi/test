@@ -2,16 +2,22 @@
 -- Phase 4-F-3: drop the STALE, currently-unused SELECT policies
 --   cc_select (public.company_categories) / sc_select (public.site_categories).
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This file is prepared for manual execution by the user in the Supabase SQL
---     Editor. The EXECUTION BODY (2 statements) has NOT been run yet.
---   - The PRE-CHECK results recorded below (D-1..D-5b) reflect the user's live
---     Supabase SQL Editor run against the current database; all checks PASSED and
---     no STOP condition was hit. The queries are kept re-runnable to re-confirm
---     immediately before executing the body.
---   - DB execution and all checks (pre / post) are performed manually by the user
---     in the Supabase SQL Editor. No DB connection / Supabase CLI / psql is used
+-- [STATUS] EXECUTED (2026-07-10)
+--   - Manually executed by the user in the Supabase SQL Editor.
+--   - EXECUTION BODY (2 statements) both returned "Success. No rows returned":
+--       * DROP POLICY cc_select ON public.company_categories; -> Success. No rows returned.
+--       * DROP POLICY sc_select ON public.site_categories;    -> Success. No rows returned.
+--   - Pre-checks D-1..D-5b all passed (no STOP condition hit); results are recorded
+--     inline in the PRE-CHECK section below. The queries are kept re-runnable.
+--   - Post-checks Q-1..Q-4 all passed:
+--       * Q-1: 0 policies remain on company_categories / site_categories.
+--       * Q-2: RLS enabled = true, FORCE RLS = false retained on both tables.
+--       * Q-3: anon / authenticated CRUD (SELECT/INSERT/UPDATE/DELETE) all false on both.
+--       * Q-4: relacl anon / authenticated CRUD grant = 0 rows (unchanged).
+--   - DB execution and all checks (pre / post) were performed manually by the user
+--     in the Supabase SQL Editor. No DB connection / Supabase CLI / psql was used
 --     from Claude Code CLI.
+--   - Recorded in docs/db-migrations.md (2026-07-10 Phase 4-F-3 section).
 --
 -- [PURPOSE]
 --   Remove the two SELECT policies cc_select / sc_select, which are STALE after

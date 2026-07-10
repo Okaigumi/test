@@ -2,17 +2,21 @@
 -- Phase 4-F-2B-2: remove residual direct INSERT / UPDATE grants on public.companies
 --   for anon / authenticated.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This file has NOT been run against any database.
---   - It is intended to be executed MANUALLY by the user in the Supabase SQL
---     Editor (pre-check -> body -> post-check, in order).
---   - Claude Code CLI does NOT connect to the DB and does NOT use the Supabase
---     CLI or psql. All DB execution and all checks (pre / post) are performed by
---     the user in the Supabase SQL Editor.
---   - The pre-check results recorded below (C-1..C-8) were produced by the user
---     running the read-only introspection in the Supabase SQL Editor prior to this
---     file. They are documented here as the basis for the REVOKE, and the same
---     queries are kept re-runnable so they can be re-confirmed before the body.
+-- [STATUS] EXECUTED (2026-07-10)
+--   - Manually executed by the user in the Supabase SQL Editor.
+--   - EXECUTION BODY (1 statement) returned "Success. No rows returned".
+--   - Pre-checks C-1..C-8 all passed (no STOP condition hit).
+--   - Post-checks Q-1..Q-4 all passed:
+--       * Q-1: SELECT = true, INSERT = false, UPDATE = false, DELETE = false (both roles).
+--       * Q-2: companies_select_public retained; no INSERT / UPDATE policy; no DROP POLICY.
+--       * Q-3: anon / authenticated INSERT / UPDATE direct grant now 0 rows.
+--       * Q-4: SELECT = true retained for both anon / authenticated.
+--   - DB execution done by the user. No DB connection / Supabase CLI / psql from
+--     Claude Code CLI. All DB execution and checks (pre / post) were performed
+--     manually by the user in the Supabase SQL Editor.
+--   - The pre-check results recorded below (C-1..C-8) reflect that Supabase SQL Editor
+--     run; the queries are kept re-runnable.
+--   - Recorded in docs/db-migrations.md (2026-07-10 Phase 4-F-2B-2 section).
 --
 -- [PURPOSE]
 --   Remove the direct INSERT / UPDATE grant currently held by anon / authenticated on

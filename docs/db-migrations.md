@@ -3744,3 +3744,74 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #93（`docs/sql/phase4f-3-category-stale-policy-drop.sql` 追加、merge commit `8fbea4d`、commit `4d8866e`）。
 - SQL：`docs/sql/phase4f-3-category-stale-policy-drop.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。
+
+## 2026-07-11 Phase 4-F-2B-3 session direct grant除去（★実行済み★）
+
+### 目的
+
+- `public.admin_sessions` / `public.employee_sessions` について、`anon` / `authenticated` に残存していた direct SELECT / INSERT / UPDATE grant を除去する。
+- session アクセスを SECURITY DEFINER RPC 経路のみに限定する。
+- DELETE は実行前から false のため対象外。
+
+### 対象SQL（EXECUTION BODY・2文・1文ずつ手動実行）
+
+- `REVOKE SELECT, INSERT, UPDATE ON TABLE public.admin_sessions FROM anon, authenticated;`
+- `REVOKE SELECT, INSERT, UPDATE ON TABLE public.employee_sessions FROM anon, authenticated;`
+
+### 非対象（本工程では触れない）
+
+- DELETE grant（実行前から false）。
+- postgres / service_role / table owner の権限。
+- RLS 設定。
+- policy。
+- RPC / function 定義。
+- EXECUTE grants。
+- trigger。
+- view / materialized view。
+- FK / constraint。
+- HTML / JS。
+- `docs/roadmap.md`。
+- default privileges。
+- その他すべての table / role / privilege。
+
+### 実行前確認結果（Pre-check S-1〜S-9・Supabase SQL Editor・2026-07-11）
+
+- S-1：両テーブル存在、relkind = `r`、RLS = true、FORCE RLS = false。
+- S-2：両テーブル × `anon` / `authenticated` で SELECT = true、INSERT = true、UPDATE = true、DELETE = false。
+- S-3：policy = 0 rows。
+- S-4：relacl 上、`anon` / `authenticated` は SELECT / INSERT / UPDATE のみ。DELETE なし。postgres / service_role は対象外。
+- S-5：session 参照 routine 42 本。全て SECURITY DEFINER = true、owner は全て postgres、owner の必要権限は全て true、RLS バイパス条件成立、search_path 固定。session INSERT routine 2 本、UPDATE routine 0 本、DELETE routine 4 本。
+- S-6：`create_admin_session` / `revoke_admin_session` / `create_employee_session` / `revoke_employee_session` の 4 本は `anon` / `authenticated` とも EXECUTE = true。
+- S-7：view / materialized view 依存 = 0 rows。
+- S-8：trigger 依存 = 0 rows。
+- S-9：`admin_sessions.admin_id → genka_admins(id) ON DELETE CASCADE`、`employee_sessions.employee_id → employees(id) ON DELETE CASCADE`、token_hash UNIQUE 各 1 件、session テーブルを参照する逆 FK なし。
+
+### 実行結果
+
+- admin_sessions REVOKE：`Success. No rows returned`。
+- employee_sessions REVOKE：`Success. No rows returned`。
+
+### 文間スモーク
+
+- admin_sessions 実行後：admin-app 新規ログイン OK / 画面表示 OK / RPC 利用 OK / logout OK、genka-app 新規ログイン OK / 画面表示 OK / RPC 利用 OK / logout OK。
+- employee_sessions 実行後：従業員画面 新規ログイン OK / 画面表示 OK / 日報系 RPC 利用 OK / logout OK。
+
+### 実行後確認結果（Post-check P-1〜P-7・Supabase SQL Editor・2026-07-11）
+
+- P-1：両テーブル × `anon` / `authenticated` の SELECT / INSERT / UPDATE / DELETE は全て false。
+- P-2：relacl 上の `anon` / `authenticated` 向け CRUD grant = 0 rows。
+- P-3：RLS = true、FORCE RLS = false を維持。
+- P-4：policy = 0 rows を維持。
+- P-5：login / logout RPC 4 本は存在。`anon` / `authenticated` の全 8 組み合わせで EXECUTE = true。
+- P-6：session 参照 routine 42 本。全て SECURITY DEFINER、owner は全て postgres、owner 権限・RLS bypass・search_path 固定を維持。INSERT 2 本、UPDATE 0 本、DELETE 4 本で不変。
+- P-7：postgres / service_role は両テーブルとも DELETE / INSERT / MAINTAIN / REFERENCES / SELECT / TRIGGER / TRUNCATE / UPDATE の 8 権限を維持（合計 32 行）。対象外権限に変化なし。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #95（`docs/sql/phase4f-2b-3-session-direct-grant-revoke.sql` 追加、merge commit `a9e6cd3`、SQL 追加 commit `c9c8e42`）。
+- SQL：`docs/sql/phase4f-2b-3-session-direct-grant-revoke.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。

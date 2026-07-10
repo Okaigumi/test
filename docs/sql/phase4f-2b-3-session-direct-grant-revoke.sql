@@ -2,16 +2,24 @@
 -- Phase 4-F-2B-3: remove residual direct SELECT / INSERT / UPDATE grants on
 --   public.admin_sessions and public.employee_sessions for anon / authenticated.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - Not yet run. This file records the read-only investigation and the live
---     pre-check (S-1..S-9) results, and defines the EXECUTION BODY (2 statements)
---     to be run MANUALLY by the user in the Supabase SQL Editor, ONE statement at
---     a time, with a login/logout smoke test between the two statements.
+-- [STATUS] EXECUTED (2026-07-11)
+--   - Manually executed by the user in the Supabase SQL Editor, ONE statement at a
+--     time, with a login/logout smoke test between the two statements.
+--       * admin_sessions REVOKE:    "Success. No rows returned".
+--       * employee_sessions REVOKE: "Success. No rows returned".
+--   - Pre-checks S-1..S-9 all passed (no STOP condition hit).
+--   - Inter-statement smoke tests all passed:
+--       * after admin_sessions: admin-app / genka-app new login, screen, RPC,
+--         logout all OK.
+--       * after employee_sessions: employee (index) new login, screen, daily-report
+--         (日報) RPC, logout all OK.
+--   - Post-checks P-1..P-7 all passed (see docs/db-migrations.md 2026-07-11 section).
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
 --     Claude Code CLI. All DB execution and checks (pre / post) are performed
 --     manually by the user in the Supabase SQL Editor.
 --   - The pre-check results recorded below (S-1..S-9) reflect the user's Supabase
 --     SQL Editor run; the queries are kept re-runnable.
+--   - Recorded in docs/db-migrations.md (2026-07-11 Phase 4-F-2B-3 section).
 --
 -- [PURPOSE]
 --   Remove the direct SELECT / INSERT / UPDATE grant currently held by

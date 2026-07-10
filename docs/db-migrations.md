@@ -3536,3 +3536,73 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #87（`docs/sql/phase4f-2a-existing-extra-privileges-revoke.sql` 追加、merge commit `87b22d5`、commit `945d8ec`）。
 - SQL：`docs/sql/phase4f-2a-existing-extra-privileges-revoke.sql`（STATUS を `EXECUTED (2026-07-09)` に更新）。
+
+## 2026-07-10 Phase 4-F-2B-1 未使用カテゴリテーブル direct SELECT grant 除去（★実行済み★）
+
+### 目的
+
+- 未使用のカテゴリマスタ2件について、`anon` / `authenticated` の direct SELECT grant（`pg_class.relacl`）を除去する。
+- フロント3ファイル（index.html / admin-app.html / genka-app.html）から対象2テーブルへの直接参照は 0 件（Phase 4-F-2B B-1..B-4 で確認済み）。
+
+### 対象（2テーブル・全2文）
+
+- `company_categories` / `site_categories`（各 `REVOKE SELECT ... FROM anon, authenticated;`・アルファベット順）
+
+### 非対象
+
+- `INSERT / UPDATE / DELETE`
+- RLS / policy（DROP POLICY なし）
+- RPC / function / EXECUTE grants
+- view definitions
+- HTML / JS / auth / PIN
+- default privileges
+- other tables
+
+### Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-10）
+
+- P-1a：両テーブル存在、RLS 有効、`anon` / `authenticated` の SELECT = true、INSERT / UPDATE / DELETE = false。
+- P-1b：SELECT policy `cc_select`（`company_categories`）/ `sc_select`（`site_categories`）の存在を確認。
+- P-2a：参照 routine は `export_projects_summary_secure(...)` のみ。SECURITY DEFINER = true、owner = `postgres`、owner は両テーブルを SELECT 可能。
+- P-2b：対象2テーブルを参照する view / materialized view = 0 rows。
+- P-3：relacl 上の明示的 SELECT grant = 4 rows。
+- STOP 条件への該当なし。
+
+### 実行 SQL（`docs/sql/phase4f-2b-1-unused-category-select-revoke.sql` を Supabase SQL Editor で実行・2026-07-10）
+
+- `REVOKE SELECT ON TABLE public.company_categories FROM anon, authenticated;`
+- `REVOKE SELECT ON TABLE public.site_categories FROM anon, authenticated;`
+- 実行結果：`Success. No rows returned`。
+- 危険 SQL（DROP / DELETE / TRUNCATE / DML / GRANT / ALTER DEFAULT PRIVILEGES / DROP POLICY）なし。変更は既存テーブル relacl からの SELECT grant 除去のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-10）
+
+- Q-1：両テーブル × `anon` / `authenticated` で SELECT = false。期待どおり。
+- Q-2a：INSERT / UPDATE / DELETE は全て false のまま不変。期待どおり。
+- Q-2b：`cc_select` / `sc_select` policy は残存（DROP POLICY なし）。期待どおり。
+- Q-3：relacl 上の明示的 SELECT grant = 0 rows。期待どおり。
+
+### 影響評価（設計上）
+
+- フロント3ファイルから対象2テーブルへの直接参照 0 件。
+- 実DBで検出された依存 routine は `export_projects_summary_secure(...)` のみで、SECURITY DEFINER・owner `postgres`・owner は両テーブルを SELECT 可能。
+- view / materialized view 依存は 0 件。
+- 以上から、設計上アプリ動作への影響はないと判断。
+- 本番画面のスモークテストは本工程では未実施。
+
+### policy 残存メモ（`cc_select` / `sc_select`）
+
+- policy は意図的に残置。
+- 現在は `anon` / `authenticated` の実効 SELECT 権限が false のため、現在の grant 状態では実効上使われない。
+- 将来 SELECT が再 GRANT された場合は再び評価対象になる。
+- Phase 4-F-3 の stale policy 掃除候補。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #89（`docs/sql/phase4f-2b-1-unused-category-select-revoke.sql` 追加、merge commit `a505948`、commit `03ccba1`）。
+- SQL：`docs/sql/phase4f-2b-1-unused-category-select-revoke.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。

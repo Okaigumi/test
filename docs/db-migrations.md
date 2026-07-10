@@ -3606,3 +3606,71 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #89（`docs/sql/phase4f-2b-1-unused-category-select-revoke.sql` 追加、merge commit `a505948`、commit `03ccba1`）。
 - SQL：`docs/sql/phase4f-2b-1-unused-category-select-revoke.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。
+
+## 2026-07-10 Phase 4-F-2B-2 companies direct INSERT / UPDATE grant 除去（★実行済み★）
+
+### 目的
+
+- `public.companies` に残存していた `anon` / `authenticated` の direct INSERT / UPDATE grant（`pg_class.relacl`）を除去する。
+
+### 対象（1テーブル・全1文）
+
+- `public.companies` の `anon` / `authenticated` の INSERT / UPDATE のみ。
+
+### 非対象
+
+- `SELECT`
+- `DELETE`
+- RLS
+- `companies_select_public` policy
+- RPC / function / EXECUTE grants
+- view / materialized view
+- trigger
+- foreign key / constraint
+- HTML / JS / auth / PIN
+- default privileges
+- other tables
+- `docs/roadmap.md`
+
+### Pre-check（Supabase SQL Editor・ユーザー手動・2026-07-10）
+
+- C-1：`companies` 存在、`relkind = r`、RLS enabled = true、FORCE RLS = false。
+- C-2：`anon` / `authenticated` とも SELECT / INSERT / UPDATE = true、DELETE = false。
+- C-3：`companies_select_public`（SELECT）policy 1件のみ。INSERT / UPDATE policy なし。
+- C-4：relacl 上の明示的 INSERT / UPDATE 直接 grant = 4 rows。
+- C-5：companies を参照する routine 7件（`create_machine_admin_secure` / `create_site_secure` / `export_machine_details_secure` / `export_project_cost_details_secure` / `export_projects_summary_secure` / `update_machine_admin_secure` / `update_site_secure`）。全件 SECURITY DEFINER = true、owner = `postgres`、companies への INSERT / UPDATE なし。
+- C-6：companies を参照する view / materialized view = 0 rows。
+- C-7：companies 上のユーザー定義 trigger・companies へ書き込む trigger 関数 = 0 rows。
+- C-8：companies を参照する FK = 7件（`employees` / `invoices` / `machines` / `site_budgets` / `sites` / `subcontractors` / `unit_rates`）。情報確認のみ。
+- STOP 条件への該当なし。
+
+### 実行 SQL（`docs/sql/phase4f-2b-2-companies-write-revoke.sql` を Supabase SQL Editor で実行・2026-07-10）
+
+- `REVOKE INSERT, UPDATE ON TABLE public.companies FROM anon, authenticated;`
+- 実行結果：`Success. No rows returned`。
+- 危険 SQL（DROP / DELETE / TRUNCATE / DML / GRANT / ALTER DEFAULT PRIVILEGES / DROP POLICY）なし。変更は既存テーブル relacl からの INSERT / UPDATE grant 除去のみ。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし（DB 実行はユーザーが手動）。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-10）
+
+- Q-1：`anon` / `authenticated` とも SELECT = true、INSERT = false、UPDATE = false、DELETE = false。期待どおり。
+- Q-2：`companies_select_public` policy 残存、INSERT / UPDATE policy なし（DROP POLICY なし）。期待どおり。
+- Q-3：relacl 上の明示的 INSERT / UPDATE 直接 grant = 0 rows。期待どおり。
+- Q-4：`anon` / `authenticated` とも SELECT = true を維持。期待どおり。
+
+### 影響評価
+
+- リポジトリ調査と実DB確認で、`anon` / `authenticated` を使う companies 書き込み経路は検出されなかった。
+- SELECT 権限と `companies_select_public` policy は維持。
+- 特権ロールによる DB 管理操作は今回の REVOKE 対象外。
+- 本工程では本番画面のスモークテスト未実施。
+
+### 確認手段
+
+- DB 確認・実行はすべてユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #91（`docs/sql/phase4f-2b-2-companies-write-revoke.sql` 追加、merge commit `e18a9f3`、commit `d9f6f39`）。
+- SQL：`docs/sql/phase4f-2b-2-companies-write-revoke.sql`（STATUS を `EXECUTED (2026-07-10)` に更新）。

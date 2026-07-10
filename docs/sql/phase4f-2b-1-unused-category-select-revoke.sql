@@ -2,13 +2,23 @@
 -- Phase 4-F-2B-1: remove UNUSED direct SELECT grants on the two category
 --   master tables (company_categories / site_categories) for anon / authenticated.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This file has NOT been run against any database.
---   - It is intended to be executed MANUALLY by the user in the Supabase SQL
---     Editor (pre-check -> body -> post-check, in order).
---   - Claude Code CLI does NOT connect to the DB and does NOT use the Supabase
---     CLI or psql. All DB execution and all checks (pre / post) are performed by
---     the user in the Supabase SQL Editor.
+-- [STATUS] EXECUTED (2026-07-10)
+--   - Manually executed by the user in the Supabase SQL Editor.
+--   - EXECUTION BODY (2 statements) returned "Success. No rows returned".
+--   - Pre-checks P-1a / P-1b / P-2a / P-2b / P-3 passed (no STOP hit):
+--       * P-2a: the only referencing routine was export_projects_summary_secure(...),
+--         SECURITY DEFINER = true, owner = postgres, owner can SELECT both tables.
+--       * P-2b: 0 views / materialized views reference the two tables.
+--       * P-3: the anon / authenticated SELECT direct grant existed (4 rows).
+--   - Post-checks Q-1 / Q-2a / Q-2b / Q-3 passed:
+--       * Q-1: company_categories / site_categories SELECT = false for anon / authenticated.
+--       * Q-2a: INSERT / UPDATE / DELETE unchanged (all false).
+--       * Q-2b: cc_select / sc_select SELECT policies retained (no DROP POLICY).
+--       * Q-3: anon / authenticated SELECT direct grant now 0 rows.
+--   - DB execution done by the user. No DB connection / Supabase CLI / psql from
+--     Claude Code CLI. All DB execution and checks (pre / post) were performed
+--     manually by the user in the Supabase SQL Editor.
+--   - Recorded in docs/db-migrations.md (2026-07-10 Phase 4-F-2B-1 section).
 --
 -- [PURPOSE]
 --   Remove the UNUSED direct SELECT grant held by anon / authenticated on the two

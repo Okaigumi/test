@@ -4140,3 +4140,113 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - PR #103（DB 実行記録）。
 - PR #104（frontend 移行、merge commit `bfe54da`）。
 - SQL：`docs/sql/phase4f-2b-4-materials-read-rpc.sql`。
+
+## 2026-07-11 Phase 4-F-2B-5 machines read RPC追加（★実行済み★）
+
+### 目的
+
+- machines direct read 撤廃の前段として、secure read RPC を2本追加。
+- index.html（従業員画面）用と、admin-app.html / genka-app.html（management 画面）用を分離。
+- この段階では frontend 移行・SELECT REVOKE・policy 削除は未実施（後続工程）。
+
+### 追加RPC
+
+1. `public.list_machines_secure(session_token_input text)`
+
+- employee session inline 検証（`list_materials_secure` と同型）。
+- active machines のみ（`is_active = true`）。
+- `ORDER BY name`。
+- `RETURNS TABLE (id uuid, name text, ownership text, lease_company text, lease_start date, lease_end date, lease_monthly integer)`。
+
+2. `public.list_machines_admin_secure(session_token_input text, include_inactive_input boolean DEFAULT false)`
+
+- `public._verify_management_session(text)` を再利用（無改変）。
+- `include_inactive_input` = false / NULL：active のみ。
+- `include_inactive_input` = true：inactive を含む全件。
+- `ORDER BY name`。
+- `RETURNS TABLE (id uuid, name text, company_id uuid, ownership text, lease_company text, lease_start date, lease_end date, lease_monthly integer, is_active boolean)`。
+
+### 認証・権限
+
+両 RPC とも：
+
+- SECURITY DEFINER。
+- STABLE。
+- owner = postgres。
+- `SET search_path = public, extensions`。
+- PUBLIC EXECUTE なし。
+- anon EXECUTE あり。
+- authenticated EXECUTE あり。
+- machines への write 処理なし（read-only）。
+
+### 関連PR
+
+- PR #106（`docs/sql/phase4f-2b-5-machines-read-rpc.sql` 追加、merge commit `00d35e8`、SQL 追加 commit `69f173a`）。
+- SQL：`docs/sql/phase4f-2b-5-machines-read-rpc.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-11）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を手動実行。
+- 結果：Success. No rows returned。
+- Supabase CLI / psql / 外部 DB 接続は未使用。
+
+### 実行前確認結果（Pre-check C-1〜C-9・Supabase SQL Editor・2026-07-11）
+
+- C-1〜C-9：全合格。
+- machines：schema = public、relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- anon / authenticated：SELECT = true、INSERT / UPDATE / DELETE = false。
+- RPC 前提の9列（id / name / company_id / ownership / lease_company / lease_start / lease_end / lease_monthly / is_active）の存在・型一致。
+- policy 3件：`machines_write` / `machines_read_all` / `machines_update`（記録のみ・無変更）。
+- employee session 検証カラム5件（employee_sessions.employee_id / token_hash / expires_at、employees.id / is_active）存在。
+- `_verify_management_session(text)`：SECURITY DEFINER = true、owner = postgres、search_path = public, extensions。
+- 新設予定 RPC 2本は事前に 0 件（未作成）。
+- machines 件数：total = 26、active = 22、inactive = 4、null_active = 0。
+- 既存 machines write RPC 5本の存在・属性確認済み（P-6 の基準スナップショット）。
+
+### 実行後確認結果（Post-check P-1〜P-6・Supabase SQL Editor・2026-07-11）
+
+- P-1〜P-6：全合格。
+- 新設 RPC 2本存在。
+- SECURITY DEFINER = true、STABLE、owner = postgres、search_path 固定。
+- RETURNS TABLE：employee 用 7列 / admin 用 9列（宣言どおり）。
+- anon / authenticated EXECUTE = true。
+- PUBLIC EXECUTE なし。
+- machines table 権限は事前値（C-2）から不変。
+- RLS / FORCE RLS 不変。
+- policy 3件不変。
+- 既存 write RPC 5本不変。
+
+### スモークテスト（有効な employee / management session・2026-07-11）
+
+- employee RPC（`list_machines_secure`）：error = null、count = 22。既存 active direct read count = 22。sameRows = true（集合一致）。
+- admin RPC（`list_machines_admin_secure`）：
+  - include_inactive = false：error = null、count = 22。
+  - include_inactive = true：error = null、count = 26。
+  - include_inactive = null：error = null、count = 22。
+- session token 実値は記録しない。
+
+### 最終状態
+
+- RPC 作成と DB 確認までは完了。
+- machines table の anon / authenticated SELECT 権限はまだ維持。
+- `machines_read_all` policy はまだ存在。
+- frontend はまだ direct read（5箇所）。
+- frontend 移行後に権限撤廃・policy 整理の判断へ進む。
+
+### 非対象（今回触れていない）
+
+- frontend 変更（index.html / admin-app.html / genka-app.html）。
+- anon / authenticated の machines SELECT REVOKE。
+- `machines_read_all` policy DROP。
+- `machines_update` / `machines_write` policy 変更。
+- 既存 machines write RPC 5本の変更。
+- machine_locations direct read 対応（別工程候補）。
+- docs/roadmap.md。
+- 他テーブル。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- スモークテストは Browser Console で実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-5-machines-read-rpc.sql` に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

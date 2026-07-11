@@ -3,15 +3,24 @@
 --   (list_companies_secure) so that admin-app.html can stop reading the companies
 --   table directly.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - Not yet run. This file ONLY adds a new read RPC (additive). It does NOT touch
---     any table grant, RLS, policy, existing routine, or the front-end.
---   - To be run MANUALLY by the user in the Supabase SQL Editor.
+-- [STATUS] EXECUTED (2026-07-11)
+--   - This file ONLY adds a new read RPC (additive). It does NOT touch any table
+--     grant, RLS, policy, existing routine, or the front-end.
+--   - Run MANUALLY by the user in the Supabase SQL Editor, one statement at a time.
+--   - Execution results (Supabase SQL Editor):
+--       * CREATE OR REPLACE FUNCTION ............ Success. No rows returned
+--       * REVOKE ALL ... FROM PUBLIC ............ Success. No rows returned
+--       * GRANT EXECUTE ... TO anon, authenticated  Success. No rows returned
+--   - Pre-check  C-1..C-8 : all passed.
+--   - Post-check P-1..P-5 : all passed.
+--   - Screen smoke test: NOT performed at this stage -- the front-end has not been
+--     migrated yet, so admin-app.html still uses the direct SELECT and
+--     list_companies_secure is not yet called by any screen.
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
---     Claude Code CLI. All DB execution and checks (pre / post) are performed
+--     Claude Code CLI. All DB execution and checks (pre / post) were performed
 --     manually by the user in the Supabase SQL Editor.
---   - The pre-check results recorded below (C-1..C-8) reflect the user's earlier
---     Supabase SQL Editor run; the queries are kept re-runnable.
+--   - The pre-check results recorded below (C-1..C-8) reflect the user's Supabase
+--     SQL Editor run; the queries are kept re-runnable.
 --
 -- [PURPOSE]
 --   admin-app.html currently reads public.companies via a direct SELECT

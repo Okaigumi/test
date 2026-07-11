@@ -3815,3 +3815,83 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #95（`docs/sql/phase4f-2b-3-session-direct-grant-revoke.sql` 追加、merge commit `a9e6cd3`、SQL 追加 commit `c9c8e42`）。
 - SQL：`docs/sql/phase4f-2b-3-session-direct-grant-revoke.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。
+
+## 2026-07-11 Phase 4-F-2B-4 companies read RPC追加（★実行済み★）
+
+### 目的
+
+- admin-app.html の companies direct SELECT を RPC へ移行する準備。
+- management session 検証付き read RPC を追加。
+- frontend 移行、SELECT REVOKE、policy DROP は後続工程。
+
+### 追加RPC
+
+- `public.list_companies_secure(session_token_input text)`
+- `RETURNS TABLE (id uuid, name text)`
+- `WHERE is_active = true`
+- `ORDER BY name`
+- `STABLE`
+- `SECURITY DEFINER`
+- `SET search_path = public, extensions`
+
+### 認証
+
+- `public._verify_management_session(text)` を内部利用。
+- helper は `anon` / `authenticated` から直接 EXECUTE 不可。
+
+### 実行結果（Supabase SQL Editor・1文ずつ手動実行・2026-07-11）
+
+- CREATE FUNCTION：Success. No rows returned
+- REVOKE ALL FROM PUBLIC：Success. No rows returned
+- GRANT EXECUTE TO anon, authenticated：Success. No rows returned
+
+### 実行前確認結果（Pre-check C-1〜C-8・Supabase SQL Editor・2026-07-11）
+
+- C-1〜C-8：全通過。
+- companies は RLS = true、FORCE RLS = false、owner = postgres。
+- `anon` / `authenticated` は SELECT = true。
+- relacl 上は SELECT のみ。
+- `companies_select_public` 存在。
+- companies 参照 routine 7 本は全て SECURITY DEFINER。
+- `_verify_management_session` は安全に流用可能。
+- frontend 実使用列は id / name のみ。
+- `list_companies_secure` は未作成だった。
+
+### 実行後確認結果（Post-check P-1〜P-5・Supabase SQL Editor・2026-07-11）
+
+- `list_companies_secure(text)` 存在。
+- 戻り値 `TABLE (id uuid, name text)`。
+- SECURITY DEFINER = true。
+- STABLE = true。
+- owner = postgres。
+- search_path 固定。
+- PUBLIC EXECUTE = false。
+- `anon` / `authenticated` EXECUTE = true。
+- companies table 権限不変。
+- RLS / FORCE RLS 不変。
+- `companies_select_public` 不変。
+- management session 検証あり。
+- `is_active = true`。
+- `ORDER BY name`。
+- companies への write なし。
+
+### 非対象（今回触れていない）
+
+- admin-app.html。
+- table SELECT REVOKE。
+- `companies_select_public` DROP。
+- companies データ。
+- RLS 変更。
+- docs/roadmap.md。
+- 他テーブル。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+- frontend 未移行のため画面スモークは未実施。
+
+### 関連
+
+- PR #97（`docs/sql/phase4f-2b-4-companies-read-rpc.sql` 追加、merge commit `1f015c4`、SQL 追加 commit `b71ec09`）。
+- SQL：`docs/sql/phase4f-2b-4-companies-read-rpc.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。

@@ -967,7 +967,9 @@ async function loadSites(){
   state.sites=data||[];renderSiteChips();renderMaster();
 }
 async function loadMaterials(){
-  const{data}=await sb.from('materials').select('*').eq('is_active',true).order('name');
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_materials_secure',{session_token_input:token});
+  if(error){console.error('list_materials_secure failed:',error);}
   state.materials=data||[];renderMaterialRows();renderMaster();
 }
 async function loadNotice(){

@@ -330,9 +330,10 @@ async function startApp(){
     sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
     sb.from('machines').select('*').eq('is_active',true).order('name'),
     sb.rpc('list_unit_rates_secure',{session_token_input:token}),
-    sb.from('companies').select('*').eq('is_active',true).order('name')
+    sb.rpc('list_companies_secure',{session_token_input:token})
   ]);
   if(urRes.error)console.error('単価取得エラー:',urRes.error);
+  if(cRes.error)console.error('会社取得エラー:',cRes.error);
   _sites=sRes.data||[];
   _employees=eRes.data||[];
   _subcontractors=subRes.data||[];

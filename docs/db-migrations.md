@@ -4046,3 +4046,97 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - PR #102（`docs/sql/phase4f-2b-4-materials-read-rpc.sql` 追加、merge commit `8fa4c82`、
   SQL 追加 commit `113f690`）。
 - SQL：`docs/sql/phase4f-2b-4-materials-read-rpc.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。
+
+## 2026-07-11 Phase 4-F-2B-4 materials frontend移行・最終権限確認（★完了★）
+
+### 目的
+
+- index.html の materials direct read を `list_materials_secure` RPC へ移行し、materials 読み取りを secure RPC 経由に一本化する。
+- 移行後の最終状態（frontend / 本番 / DB 権限）を確認し、materials 読み取り保護の完了を記録する。
+
+### 前提
+
+- materials read RPC 追加 PR #102（`list_materials_secure` 作成・実行済み）。
+- RPC 実行記録 PR #103。
+- 本エントリで frontend 移行 PR #104 と最終 DB post-check を記録する。
+
+### frontend移行
+
+- 対象: `index.html` のみ。
+- PR #104（merge commit `bfe54da`）。
+- `loadMaterials()` の materials direct read（`sb.from('materials').select('*').eq('is_active',true).order('name')`）を `sb.rpc('list_materials_secure', {session_token_input: token})` へ移行。
+- session token は既存の `state.currentUser?.session_token` を再利用（新規認証・token 保存処理の追加なし）。
+- `state.materials = data || []` を維持。
+- 後続の `renderMaterialRows()` / `renderMaster()` を維持。
+- RPC エラー時は `console.error('list_materials_secure failed:', error)` で記録。
+- `.from('materials')` 残存 0 件。
+- materials 利用カラムは `id` / `name` のみ（RPC 戻り値 `TABLE (id uuid, name text)` で成立）。
+
+### Preview・本番確認
+
+- 従業員ログイン OK。
+- 日報入力画面 OK。
+- 材料一覧 10 件表示。
+- 材料選択 OK。
+- Console エラーなし。
+- `list_materials_secure failed` なし。
+- Network で RPC 成功。
+- materials direct GET なし。
+- Vercel Production Ready。
+
+### 最終DB post-check（Supabase SQL Editor・read-only 確認）
+
+- RLS = true。
+- FORCE RLS = false。
+- anon / authenticated SELECT = false。
+- anon / authenticated INSERT / UPDATE / DELETE = false。
+- policies = []。
+- total_count = 12。
+- active_count = 10。
+- inactive_count = 2。
+- null_active_count = 0。
+- `list_materials_secure`：SECURITY DEFINER = true、STABLE = true、owner = postgres、`RETURNS TABLE (id uuid, name text)`、search_path = `public, extensions`。
+- anon / authenticated EXECUTE = true。
+- PUBLIC EXECUTE = false。
+
+### 画面10件とDB総数12件の整合
+
+- 画面表示は 10 件、materials 総数は 12 件。
+- `list_materials_secure` は `is_active = true` の active 10 件のみ返し、inactive 2 件を返さないため、画面 10 件と DB 総数 12 件は矛盾しない。
+
+### 権限変更SQLについて
+
+- 権限撤廃用 SQL は事前条件確認で `materials_read_all policy not found` により停止した。
+- `REVOKE SELECT` と `DROP POLICY` より前で停止したため、当該 SQL による DB 変更は実行されていない。
+- その後の read-only 確認で、SELECT 権限なし・policy なしの最終安全状態を確認した。
+- 追加 DB 変更は不要と判断した。
+- いつ、どの操作でその状態になったかは確定していないため記載しない。
+
+### 最終状態
+
+- frontend は `list_materials_secure` を使用（direct read なし）。
+- anon / authenticated の materials SELECT なし。
+- materials policy 0 件。
+- materials 読み取りは secure RPC（employee session 検証・SECURITY DEFINER）経由に一本化。
+- materials データ変更なし。
+
+### 非対象（今回触れていない）
+
+- docs/roadmap.md。
+- SQL ファイル新規作成。
+- SQL 実行 / DB 変更。
+- 他テーブル。
+- RPC 定義変更。
+- frontend 追加変更。
+
+### 確認手段
+
+- DB 確認はユーザーが Supabase SQL Editor で read-only 実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #102（materials read RPC SQL 追加）。
+- PR #103（DB 実行記録）。
+- PR #104（frontend 移行、merge commit `bfe54da`）。
+- SQL：`docs/sql/phase4f-2b-4-materials-read-rpc.sql`。

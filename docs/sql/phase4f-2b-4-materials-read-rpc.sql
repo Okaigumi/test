@@ -3,16 +3,57 @@
 --   (list_materials_secure) so that index.html can stop reading the materials
 --   table directly.
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED (2026-07-11)
 --   - This file ONLY adds a new read RPC (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
---   - Run MANUALLY by the user in the Supabase SQL Editor, one statement at a time.
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
 --     Claude Code CLI. All DB execution and checks (pre / post) are performed
 --     manually by the user in the Supabase SQL Editor.
---   - The pre-check results recorded below (C-1..C-7) reflect the user's Supabase
+--   - The pre-check results recorded below (C-1..C-8) reflect the user's Supabase
 --     SQL Editor pre-check run prior to this file; the queries are kept re-runnable
 --     to re-confirm before executing the body.
+--
+--   [DB EXECUTION] (Supabase SQL Editor, by the user, 2026-07-11)
+--     - The user ran the EXECUTION BODY's 3 statements as a SINGLE batch:
+--         * CREATE OR REPLACE FUNCTION public.list_materials_secure(text)
+--         * REVOKE ALL     ON FUNCTION ...(text) FROM PUBLIC
+--         * GRANT  EXECUTE ON FUNCTION ...(text) TO anon, authenticated
+--     - Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, consolidated, 2026-07-11 -- all passed)
+--     - function_signature = list_materials_secure(text)
+--     - result_type        = TABLE (id uuid, name text)
+--     - SECURITY DEFINER   = true
+--     - STABLE             = true (provolatile = 's')
+--     - owner              = postgres
+--     - search_path fixed  = true (public, extensions)
+--     - PUBLIC EXECUTE     = none
+--     - anon EXECUTE       = true
+--     - authenticated EXECUTE = true
+--     - employee_sessions referenced = true
+--     - employees referenced         = true
+--     - expires_at > now() check     = present
+--     - employees.is_active = true check = present
+--     - materials read     = present
+--     - materials.is_active = true (filter)
+--     - ORDER BY name      = present
+--     - materials write     = none
+--     - anon / authenticated materials table SELECT = still true (unchanged; REVOKE is
+--       a later step)
+--     - RLS = true, FORCE RLS = false, owner = postgres
+--     - policy_count = 1, materials_read_all policy unchanged
+--     - active_material_count = 10
+--
+--   [SMOKE TEST RESULT] (browser Console, valid employee session, 2026-07-11)
+--     - Called list_materials_secure with a valid employee session:
+--         error = null, count = 10, rows = Array(10).
+--     - No real session token value is recorded here.
+--
+--   [STILL NOT DONE] (separate, later steps)
+--     - index.html front-end migration (loadMaterials -> sb.rpc('list_materials_secure')).
+--     - REVOKE SELECT ON public.materials FROM anon, authenticated.
+--     - DROP POLICY materials_read_all.
 --
 -- [PURPOSE]
 --   index.html currently reads public.materials via a direct SELECT

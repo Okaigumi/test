@@ -4,22 +4,71 @@
 --   admin-app.html and genka-app.html can stop reading the machines table
 --   directly.
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED (2026-07-11)
 --   - This file ONLY adds two new read RPCs (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
 --     Claude Code CLI. All DB execution and checks (pre / post) are performed
 --     manually by the user in the Supabase SQL Editor.
---   - The actual machines table grants / policies / column types have NOT been
---     verified against the live DB at the time this file was written. The pre-check
---     queries below must be run first, and their results recorded, before executing
---     the body.
+--
+--   [DB EXECUTION] (Supabase SQL Editor, by the user, 2026-07-11)
+--     - The user ran the EXECUTION BODY manually in the Supabase SQL Editor.
+--     - Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [PRE-CHECK RESULT] (C-1..C-9, Supabase SQL Editor, 2026-07-11 -- all passed)
+--     - C-1: machines exists, schema = public, relkind = 'r', RLS = true,
+--       FORCE RLS = false, owner = postgres.
+--     - C-2: anon / authenticated SELECT = true;
+--       anon / authenticated INSERT / UPDATE / DELETE = false.
+--     - C-3: all 9 columns assumed by the RETURNS TABLE declarations exist with
+--       matching types (id uuid, name text, company_id uuid, ownership text,
+--       lease_company text, lease_start date, lease_end date,
+--       lease_monthly integer, is_active boolean).
+--     - C-4: 3 policies recorded -- machines_read_all / machines_update /
+--       machines_write (context only; left untouched by this file).
+--     - C-5: all 5 employee-session verification columns exist
+--       (employee_sessions.employee_id / token_hash / expires_at,
+--        employees.id / is_active).
+--     - C-6: _verify_management_session(text) exists, SECURITY DEFINER = true,
+--       owner = postgres, search_path = public, extensions.
+--     - C-7: list_machines_secure / list_machines_admin_secure did not exist
+--       beforehand (0 rows).
+--     - C-8: machines counts -- total = 26, active = 22, inactive = 4,
+--       null_active = 0.
+--     - C-9: all 5 existing machines write RPCs present, attributes confirmed
+--       (baseline snapshot for P-6).
+--
+--   [POST-CHECK RESULT] (P-1..P-6, Supabase SQL Editor, 2026-07-11 -- all passed)
+--     - P-1: both new RPCs exist; SECURITY DEFINER = true; STABLE
+--       (provolatile = 's'); owner = postgres; search_path = public, extensions.
+--     - P-2: return types as declared -- list_machines_secure(text): 7 TABLE
+--       columns; list_machines_admin_secure(text, boolean): 9 TABLE columns.
+--     - P-3: anon EXECUTE = true, authenticated EXECUTE = true (both functions).
+--     - P-3b: PUBLIC EXECUTE = none.
+--     - P-4: machines table grants unchanged from the C-2 snapshot.
+--     - P-5: RLS / FORCE RLS unchanged; policy list unchanged (3 policies,
+--       identical to the C-4 snapshot).
+--     - P-6: all 5 existing machines write RPCs unchanged from the C-9 snapshot.
+--
+--   [SMOKE TEST RESULT] (valid employee / management sessions, 2026-07-11)
+--     - employee RPC (list_machines_secure): error = null, count = 22;
+--       existing active direct read count = 22; sameRows = true (set equality).
+--     - admin RPC (list_machines_admin_secure):
+--         include_inactive = false -> error = null, count = 22.
+--         include_inactive = true  -> error = null, count = 26.
+--         include_inactive = null  -> error = null, count = 22.
+--     - No real session token value is recorded here.
 --
 --   [STILL NOT DONE] (separate, later steps)
 --     - front-end migration (index.html loadMachineLocations, admin-app.html
 --       startApp / pageMachines / openMachineModal, genka-app.html startApp).
---     - any machines table SELECT REVOKE / policy change (subject to a separate
---       decision AFTER the front-end migration is confirmed in production).
+--     - machines direct read shutdown (the five direct reads are still live).
+--     - REVOKE SELECT ON public.machines FROM anon, authenticated (NOT performed;
+--       SELECT is still granted).
+--     - DROP POLICY machines_read_all (NOT performed; the policy still exists).
+--     - front-end Preview check / production screen check (not performed; the
+--       front-end has not been migrated yet).
 --
 -- [PURPOSE]
 --   The three front-ends currently read public.machines via direct SELECTs:
@@ -114,8 +163,9 @@
 
 -- ============================================================
 -- PRE-CHECK (SELECT only; does NOT modify DB state)
---   To be run by the user in the Supabase SQL Editor BEFORE the body.
---   No live-DB results are recorded in this file yet.
+--   Run by the user in the Supabase SQL Editor BEFORE the body (2026-07-11).
+--   Results are recorded in [PRE-CHECK RESULT] in the header above; the queries
+--   are kept re-runnable.
 -- ============================================================
 
 -- C-1. machines existence + relkind + RLS state + owner.

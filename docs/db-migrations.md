@@ -3895,3 +3895,72 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 - PR #97（`docs/sql/phase4f-2b-4-companies-read-rpc.sql` 追加、merge commit `1f015c4`、SQL 追加 commit `b71ec09`）。
 - SQL：`docs/sql/phase4f-2b-4-companies-read-rpc.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。
+
+## 2026-07-11 Phase 4-F-2B-4 companies direct read撤廃（★実行済み★）
+
+### 目的
+
+- companies 取得を secure RPC へ完全移行。
+- anon / authenticated の direct SELECT を撤廃。
+- 不要な public SELECT policy を削除。
+
+### 前提
+
+- RPC 追加 PR #97。
+- RPC 実行記録 PR #98。
+- frontend 移行 PR #99。
+- PR #99 merge commit `defb0d8`。
+- 本番で会社ドロップダウン・会社名表示 確認済み。
+
+### 実行SQL
+
+- `REVOKE SELECT ON TABLE public.companies FROM anon, authenticated`
+- `DROP POLICY companies_select_public ON public.companies`
+
+### 実行結果（Supabase SQL Editor・1文ずつ手動実行・2026-07-11）
+
+- 2 文とも Success. No rows returned。
+- Supabase SQL Editor でユーザーが 1 文ずつ手動実行。
+
+### 実行前確認結果（Pre-check・Supabase SQL Editor・2026-07-11）
+
+- anon / authenticated SELECT = true。
+- INSERT / UPDATE / DELETE = false。
+- `companies_select_public` 1 件。
+- `is_active = true` の SELECT policy。
+
+### 実行後確認結果（Post-check・Supabase SQL Editor・2026-07-11）
+
+- anon / authenticated SELECT = false。
+- companies policy_count = 0。
+- 本番再ログイン後も会社ドロップダウン正常。
+- 最終本番スモーク正常。
+
+### 最終状態
+
+- frontend は `list_companies_secure` を使用。
+- companies direct SELECT なし。
+- anon / authenticated table SELECT 権限なし。
+- companies policy 0 件。
+- RLS = true。
+- FORCE RLS = false。
+- companies データ変更なし。
+
+### 非対象（今回触れていない）
+
+- INSERT / UPDATE / DELETE。
+- RPC 定義変更。
+- frontend 追加変更。
+- 他テーブル。
+- docs/roadmap.md。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #97 / PR #98 / PR #99（merge commit `defb0d8`）。
+- SQL：`docs/sql/phase4f-2b-4-companies-read-rpc.sql`。
+- SQL：`docs/sql/phase4f-2b-4-companies-direct-read-revoke.sql`（STATUS `EXECUTED (2026-07-11)`）。

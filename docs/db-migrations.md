@@ -3964,3 +3964,85 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - PR #97 / PR #98 / PR #99（merge commit `defb0d8`）。
 - SQL：`docs/sql/phase4f-2b-4-companies-read-rpc.sql`。
 - SQL：`docs/sql/phase4f-2b-4-companies-direct-read-revoke.sql`（STATUS `EXECUTED (2026-07-11)`）。
+
+## 2026-07-11 Phase 4-F-2B-4 materials read RPC追加（★実行済み★）
+
+### 目的
+
+- index.html の materials direct SELECT を secure RPC へ移行する準備。
+- employee session 検証付き read RPC を追加。
+- frontend 移行、SELECT REVOKE、policy DROP は後続工程。
+
+### 追加RPC
+
+- `public.list_materials_secure(session_token_input text)`
+- `RETURNS TABLE (id uuid, name text)`
+- `WHERE is_active = true`
+- `ORDER BY name`
+- `STABLE`
+- `SECURITY DEFINER`
+- `SET search_path = public, extensions`
+
+### 認証（session検証）
+
+- `public.employee_sessions` と `public.employees` を JOIN。
+- token hash 照合（`encode(digest(session_token_input, 'sha256'), 'hex')`）。
+- `expires_at > now()`。
+- `employees.is_active = true`。
+- 無効・期限切れ時は `Invalid or expired session` を RAISE。
+- 共通 helper は新設せず inline 検証（既存 employee-session RPC 踏襲）。
+
+### 実行結果（Supabase SQL Editor・1 batch で手動実行・2026-07-11）
+
+- CREATE FUNCTION / REVOKE ALL FROM PUBLIC / GRANT EXECUTE TO anon, authenticated を
+  1 つの batch として手動実行。
+- Success. No rows returned。
+
+### 実行後確認結果（統合 Post-check・Supabase SQL Editor・2026-07-11）
+
+- 関数属性・owner・search_path 正常（SECURITY DEFINER = true、STABLE = true、
+  owner = postgres、search_path 固定）。
+- PUBLIC EXECUTE なし。
+- `anon` / `authenticated` EXECUTE あり。
+- employee session 検証あり（employee_sessions / employees 参照、`expires_at > now()`、
+  `employees.is_active = true`）。
+- materials read-only（materials への write なし、`is_active = true`、`ORDER BY name`）。
+- active 10 件。
+- table grant / RLS / policy は現時点で不変（anon / authenticated の materials SELECT は
+  まだ true、RLS = true、FORCE RLS = false、owner = postgres、policy_count = 1、
+  `materials_read_all` 不変）。
+
+### スモークテスト（ブラウザ Console・有効 employee session・2026-07-11）
+
+- ブラウザ Console から有効な employee session で RPC 実行。
+- error = null、count = 10、rows = Array(10)。
+- session token 実値は記録しない。
+
+### 最終状態
+
+- RPC 作成済み。
+- frontend はまだ direct SELECT。
+- anon / authenticated の materials SELECT はまだ true。
+- `materials_read_all` policy はまだ存在。
+- materials データ変更なし。
+
+### 非対象（今回触れていない）
+
+- index.html。
+- table SELECT REVOKE。
+- `materials_read_all` policy DROP。
+- RLS 変更。
+- materials データ。
+- docs/roadmap.md。
+- 他テーブル。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+### 関連
+
+- PR #102（`docs/sql/phase4f-2b-4-materials-read-rpc.sql` 追加、merge commit `8fa4c82`、
+  SQL 追加 commit `113f690`）。
+- SQL：`docs/sql/phase4f-2b-4-materials-read-rpc.sql`（STATUS を `EXECUTED (2026-07-11)` に更新）。

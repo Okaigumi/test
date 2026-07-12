@@ -324,11 +324,10 @@ async function startApp(){
   // Phase 4-D-1b：単価（unit_rates）は secure read RPC 経由（direct SELECT を置換）。
   const token=currentUser?.session_token;
   if(!token){sessionStorage.removeItem('adminUser');location.reload();return;}
-  const[sRes,eRes,subRes,mRes,urRes,cRes]=await Promise.all([
+  const[sRes,eRes,subRes,urRes,cRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true).order('name'),
     sb.from('employees').select('id,name,role,company_id,is_active').eq('is_active',true).order('name'),
     sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
-    sb.from('machines').select('*').eq('is_active',true).order('name'),
     sb.rpc('list_unit_rates_secure',{session_token_input:token}),
     sb.rpc('list_companies_secure',{session_token_input:token})
   ]);
@@ -337,7 +336,6 @@ async function startApp(){
   _sites=sRes.data||[];
   _employees=eRes.data||[];
   _subcontractors=subRes.data||[];
-  _machines=mRes.data||[];
   _companies=cRes.data||[];
   (urRes.data||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
 
@@ -1454,7 +1452,8 @@ async function restoreBudget(id){
 // ===== MACHINES PAGE =====
 async function pageMachines(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openMachineModal()">＋ 重機を追加</button>`;
-  const{data}=await sb.from('machines').select('*').order('name');
+  const{data,error}=await sb.rpc('list_machines_admin_secure',{session_token_input:currentUser?.session_token,include_inactive_input:true});
+  if(error){console.error('list_machines_admin_secure failed:',error);}
   _machines=data||[];
   const html=`
     <div class="card">
@@ -1496,7 +1495,7 @@ async function pageMachines(){
 
 async function openMachineModal(machineId=null){
   let m=null;
-  if(machineId){const{data}=await sb.from('machines').select('*').eq('id',machineId).single();m=data;}
+  if(machineId){m=_machines.find(x=>x.id===machineId)||null;}
   _editMachineId=m?.id||null;
   const isLease=(m?.ownership==='lease');
   const body=`

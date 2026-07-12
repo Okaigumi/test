@@ -5,7 +5,7 @@
 --   policy, after the front-end has been migrated to the machines read RPCs
 --   (list_machines_secure / list_machines_admin_secure).
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED (2026-07-12)
 --   - This file removes exactly ONE privilege (SELECT for anon / authenticated on
 --     public.machines) and drops exactly ONE policy (machines_read_all). Nothing
 --     else is touched.
@@ -15,6 +15,78 @@
 --   - Run this file SECTION BY SECTION, one statement at a time, in this order:
 --     PRE-CHECK (C-1..C-7) -> EXECUTION BODY (2 statements) -> POST-CHECK
 --     (P-1..P-6) -> SMOKE TEST (browser) -> ROLLBACK only in an emergency.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-12)
+--     - The user ran the EXECUTION BODY manually, ONE statement at a time.
+--       * Statement 1:
+--           REVOKE SELECT ON TABLE public.machines FROM anon, authenticated;
+--         Result: Success. No rows returned.
+--       * Statement 2:
+--           DROP POLICY machines_read_all ON public.machines;
+--         Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [PRE-CHECK RESULT] (C-1..C-7, Supabase SQL Editor, 2026-07-12 -- all passed)
+--     - C-1: public.machines exists, relkind = 'r', RLS = true, FORCE RLS = false,
+--       owner = postgres.
+--     - C-2: anon / authenticated SELECT = true; both roles INSERT / UPDATE /
+--       DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN = false.
+--     - C-3: exactly 3 policies, matching the expected definitions:
+--       * machines_read_all : PERMISSIVE, {public}, SELECT, qual true,
+--         with_check null.
+--       * machines_update   : PERMISSIVE, {public}, UPDATE, qual true,
+--         with_check null.
+--       * machines_write    : PERMISSIVE, {public}, INSERT, qual null,
+--         with_check true.
+--     - C-4: list_machines_secure(text) and list_machines_admin_secure(text,
+--       boolean) both exist; SECURITY DEFINER = true, STABLE, owner = postgres,
+--       search_path = public, extensions.
+--     - C-4b: anon / authenticated EXECUTE = true on both read RPCs.
+--     - C-4c: PUBLIC EXECUTE = none on both read RPCs.
+--     - C-5: all 5 write RPCs present; SECURITY DEFINER = true, VOLATILE,
+--       owner = postgres, search_path = public, extensions.
+--     - C-6 (REFERENCE ONLY; not a pass / fail criterion): total = 26,
+--       active = 22, inactive = 4, null_active = 0.
+--     - C-7: `.from('machines')` = 0 hits repo-wide; front-end migration PR #108
+--       merged (merge commit 80ba140); Preview and production verified on all
+--       three screens.
+--
+--   [POST-CHECK RESULT] (P-1..P-6, Supabase SQL Editor, 2026-07-12 -- all passed)
+--     - P-1: anon / authenticated SELECT / INSERT / UPDATE / DELETE / TRUNCATE /
+--       REFERENCES / TRIGGER / MAINTAIN = false (all eight, both roles).
+--     - P-2: machines_read_all = gone; machines_update and machines_write remain
+--       unchanged; policy_count = 2.
+--     - P-3: relkind = 'r', RLS = true, FORCE RLS = false, owner = postgres
+--       (unchanged).
+--     - P-4: both read RPCs unchanged; anon / authenticated EXECUTE = true;
+--       PUBLIC EXECUTE = none.
+--     - P-5: all 5 write RPCs unchanged from the C-5 baseline.
+--     - P-6 (REFERENCE ONLY; not a pass / fail criterion): total = 26,
+--       active = 22, inactive = 4, null_active = 0.
+--
+--   [SMOKE TEST RESULT] (production browser, after the body + post-check,
+--     2026-07-12; no real session token value is recorded here)
+--     - Employee screen (index.html): machines list, current locations, move, and
+--       settings all working; list_machines_secure Status 200; NO machines direct
+--       read in Network; no Console errors.
+--     - Admin screen (admin-app.html): full list shows all 26 rows incl. 4
+--       inactive; edit and add modals working; list_machines_admin_secure
+--       Status 200; NO machines direct read in Network; no Console errors.
+--     - Genka screen (genka-app.html): cost summary and machine lease cost figures
+--       correct; list_machines_admin_secure Status 200; NO machines direct read in
+--       Network; no Console errors.
+--
+--   [FINAL STATE]
+--     - anon / authenticated SELECT on public.machines: revoked.
+--     - machines_read_all policy: dropped.
+--     - machines_update / machines_write policies: KEPT (unchanged; separate
+--       stale-policy decision).
+--     - read RPC 2 (list_machines_secure / list_machines_admin_secure): working.
+--     - write RPC 5: working, unchanged.
+--     - RLS / FORCE RLS / owner: unchanged.
+--     - machines reads are now unified through the secure read RPCs.
+--     - machine_locations: NOT in scope (unchanged).
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [PURPOSE]
 --   - All three front-ends have been migrated to the machines read RPCs

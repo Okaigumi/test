@@ -4250,3 +4250,111 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - スモークテストは Browser Console で実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-5-machines-read-rpc.sql` に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-12 Phase 4-F-2B-5 machines direct read撤廃（★実行済み★）
+
+### 目的
+
+- machines の読み取りを secure RPC 経由へ一本化。
+- frontend direct read 移行後、anon / authenticated の SELECT 権限を撤廃。
+- SELECT 用 policy `machines_read_all` を削除。
+
+### 前提
+
+- frontend 移行 PR #108 merge 済み（merge commit `80ba140`）。
+- frontend 3画面（index.html / admin-app.html / genka-app.html）を read RPC へ移行済み。
+- リポジトリ全体で `.from('machines')` は 0 件。
+- Preview・本番の3画面確認済み。
+- read RPC 2本（`list_machines_secure` / `list_machines_admin_secure`）が本番動作確認済み。
+
+### 関連PR・SQL
+
+- 撤廃 SQL PR #109（`docs/sql/phase4f-2b-5-machines-direct-read-revoke.sql` 追加、merge commit `ea4903a`（full: `ea4903ae68109b73643e7f9fe486ee276bc8e6ff`）、SQL 追加 commit `683112c`）。
+- SQL：`docs/sql/phase4f-2b-5-machines-direct-read-revoke.sql`（STATUS を `EXECUTED (2026-07-12)` に更新）。
+
+### 実行SQL（Supabase SQL Editor・1文ずつ手動実行・2026-07-12）
+
+1. `REVOKE SELECT ON TABLE public.machines FROM anon, authenticated;`
+2. `DROP POLICY machines_read_all ON public.machines;`
+
+### 実行結果
+
+- 2文とも Success. No rows returned。
+- Supabase SQL Editor でユーザーが 1 文ずつ手動実行。
+- DB 接続・Supabase CLI・psql は未使用。
+- rollback は未実行。
+
+### 実行前確認結果（Pre-check C-1〜C-7・Supabase SQL Editor・2026-07-12）
+
+- C-1〜C-7：全合格。
+- public.machines：relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- anon / authenticated：SELECT = true、INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN = false。
+- policy 3件（定義完全一致）：
+  - `machines_read_all`：PERMISSIVE / {public} / SELECT / qual = true / with_check = null。
+  - `machines_update`：PERMISSIVE / {public} / UPDATE / qual = true / with_check = null。
+  - `machines_write`：PERMISSIVE / {public} / INSERT / qual = null / with_check = true。
+- read RPC 2本（`list_machines_secure(text)` / `list_machines_admin_secure(text, boolean)`）：SECURITY DEFINER、STABLE、owner = postgres、search_path = public, extensions。anon / authenticated EXECUTE = true。PUBLIC EXECUTE なし。
+- write RPC 5本（`create_machine_secure` / `update_machine_secure` / `deactivate_machine_secure` / `create_machine_admin_secure` / `update_machine_admin_secure`）：SECURITY DEFINER、VOLATILE、owner = postgres、search_path = public, extensions。
+- 件数参考値：total = 26、active = 22、inactive = 4、null_active = 0（件数は合否基準ではない）。
+
+### 実行後確認結果（Post-check P-1〜P-6・Supabase SQL Editor・2026-07-12）
+
+- P-1〜P-6：全合格。
+- anon / authenticated：SELECT = false。その他7権限（INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）もすべて false。
+- policy：`machines_read_all` 削除済み。`machines_update` / `machines_write` 残存。policy 総数 = 2。
+- table 属性：relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres（不変）。
+- read RPC 2本：属性不変。anon / authenticated EXECUTE = true。PUBLIC EXECUTE なし。
+- write RPC 5本：属性不変。
+- 件数参考値：total = 26、active = 22、inactive = 4、null_active = 0（件数は合否基準ではない）。
+
+### 本番スモークテスト（Browser DevTools・2026-07-12・実 token 値は記録しない）
+
+#### 従業員画面（index.html）
+
+- 重機一覧・現在地・移動・設定 正常。
+- `list_machines_secure` Status 200。
+- machines direct read なし。
+- Console エラーなし。
+
+#### 管理画面（admin-app.html）
+
+- 全26件・無効4件の表示 正常。
+- 編集・新規追加モーダル 正常。
+- `list_machines_admin_secure` Status 200。
+- machines direct read なし。
+- Console エラーなし。
+
+#### 原価管理画面（genka-app.html）
+
+- 原価集計・リース料表示 正常。
+- `list_machines_admin_secure` Status 200。
+- machines direct read なし。
+- Console エラーなし。
+
+### 最終状態
+
+- anon / authenticated の machines SELECT 権限は撤廃済み。
+- `machines_read_all` policy は削除済み。
+- `machines_update` / `machines_write` policy は維持（変更なし）。
+- read RPC 2本は正常。
+- write RPC 5本は正常。
+- RLS / FORCE RLS / owner は不変。
+- machines の読み取りは secure RPC 経由へ一本化。
+- Phase 4-F-2B-5 machines read 保護工程（read RPC 追加 → frontend 移行 → direct read 撤廃）は完了。
+
+### 非対象（今回触れていない）
+
+- `machines_update` / `machines_write` policy の削除。
+- write RPC の変更。
+- machine_locations direct read 対応（別工程候補）。
+- frontend 追加変更。
+- docs/roadmap.md。
+- 他テーブル。
+- rollback 実行。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- スモークテストは本番3画面で Browser DevTools（Console / Network）により実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-5-machines-direct-read-revoke.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

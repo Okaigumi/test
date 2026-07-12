@@ -531,11 +531,12 @@ async function startApp(){
     sb.from('sites').select('*').eq('is_active',true),
     sb.from('employees').select('id,name,role,is_active').eq('is_active',true),
     sb.rpc('list_employee_rates_secure',{session_token_input:token}),
-    sb.from('machines').select('*').eq('is_active',true),
+    sb.rpc('list_machines_admin_secure',{session_token_input:token,include_inactive_input:false}),
     sb.from('subcontractors').select('*').eq('is_active',true),
     sb.rpc('list_unit_rates_secure',{session_token_input:token})
   ]);
   if(erRes.error)console.error('従業員日給取得エラー:',erRes.error);
+  if(mRes.error)console.error('list_machines_admin_secure failed:',mRes.error);
   if(urRes.error)console.error('単価取得エラー:',urRes.error);
   sites=sRes.data||[];
   employees=eRes.data||[];

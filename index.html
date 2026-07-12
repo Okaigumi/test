@@ -2059,7 +2059,9 @@ let selectedMachineId=null;
 let selectedMoveSiteId=null;
 
 async function loadMachineLocations(){
-  const{data:machines}=await sb.from('machines').select('*').eq('is_active',true).order('name');
+  const token=state.currentUser?.session_token;
+  const{data:machines,error}=await sb.rpc('list_machines_secure',{session_token_input:token});
+  if(error){console.error('list_machines_secure failed:',error);}
   machinesData=machines||[];
   machineLocations={};
   for(const m of machinesData){

@@ -5,7 +5,7 @@
 --   front-end (index.html) has been migrated to the machine_locations read RPCs
 --   (list_machine_current_locations_secure / list_machine_location_history_secure).
 -- ============================================================
--- [STATUS] NOT YET EXECUTED (created 2026-07-13)
+-- [STATUS] EXECUTED 2026-07-13
 --   - This file removes exactly ONE privilege (SELECT for anon / authenticated on
 --     public.machine_locations) and drops exactly ONE policy (ml_read). Nothing else
 --     is touched.
@@ -15,6 +15,87 @@
 --   - Run this file SECTION BY SECTION in this order:
 --     PRE-CHECK (C-1..C-7) -> EXECUTION BODY (single transaction) -> POST-CHECK
 --     (P-1..P-6) -> SMOKE TEST (browser) -> ROLLBACK only in an emergency.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-13)
+--     - The user ran the EXECUTION BODY manually (single transaction):
+--         BEGIN;
+--         REVOKE SELECT ON TABLE public.machine_locations FROM anon, authenticated;
+--         DROP POLICY ml_read ON public.machine_locations;
+--         COMMIT;
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [SIDE STEP -- already done before this body] the write RPC PUBLIC EXECUTE was
+--     found during this file's pre-check (C-5c) and revoked first, in
+--     docs/sql/phase4f-2b-6-machine-location-write-rpc-public-execute-revoke.sql
+--     (SQL PR #115 merge 2086f3f; record PR #116 merge 6f79dd3). create_machine_
+--     location_secure now has NO PUBLIC EXECUTE; anon / authenticated / postgres /
+--     service_role EXECUTE were kept; its attributes / definition are unchanged.
+--     C-5c / P-5 below reflect that 0-row PUBLIC EXECUTE state.
+--
+--   [PRE-CHECK RESULT] (C-1..C-7, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - C-1: machine_locations -- schema public, relkind 'r', RLS true, FORCE RLS
+--       false, owner postgres.
+--     - C-2: anon / authenticated SELECT = true; INSERT / UPDATE / DELETE / TRUNCATE /
+--       REFERENCES / TRIGGER / MAINTAIN = false (both roles).
+--     - C-2b: SELECT ACL -- anon and authenticated each SELECT, is_grantable = false;
+--       NO PUBLIC SELECT ACL.
+--     - C-3: policy_count = 2 -- ml_read (PERMISSIVE / {public} / SELECT / qual true /
+--       with_check null) and ml_write (PERMISSIVE / {public} / INSERT / qual null /
+--       with_check true).
+--     - C-4: both read RPCs SECURITY DEFINER = true, volatility 's' (STABLE),
+--       owner postgres, search_path public, extensions.
+--     - C-4b: both read RPCs return machine_id uuid / site_id uuid /
+--       moved_at timestamptz / memo text.
+--     - C-4c: anon / authenticated EXECUTE = true on both read RPCs.
+--     - C-4d: read RPC PUBLIC EXECUTE = 0 rows.
+--     - C-5: create_machine_location_secure(text, uuid, uuid, text) -- SECURITY
+--       DEFINER = true, volatility 'v' (VOLATILE), owner postgres, search_path public,
+--       extensions, result type TABLE(id uuid); args session_token_input text /
+--       machine_id_input uuid / site_id_input uuid / memo_input text.
+--     - C-5b: write RPC anon / authenticated EXECUTE = true.
+--     - C-5c: write RPC PUBLIC EXECUTE = 0 rows (side step already applied).
+--     - C-6: front-end application code machine_locations direct read = 0 and direct
+--       write = 0; read RPC 2 referenced; create_machine_location_secure referenced;
+--       Preview OK; Production OK.
+--     - C-7: machine_locations total_rows = 42 (data baseline for the P-6 invariant;
+--       up 1 from the earlier 41 due to write activity before the body; the cause was
+--       outside this revoke body and 42 is the value compared against P-6).
+--
+--   [POST-CHECK RESULT] (P-1..P-6, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - P-1: anon / authenticated -- all 8 privileges false (SELECT now revoked).
+--     - P-1b: SELECT ACL -- PUBLIC / anon / authenticated = 0 rows.
+--     - P-2: policy_count = 1 -- only ml_write remains, unchanged from C-3
+--       (PERMISSIVE / {public} / INSERT / qual null / with_check true); ml_read dropped.
+--     - P-3: RLS true, FORCE RLS false, owner postgres (unchanged).
+--     - P-4: both read RPCs unchanged -- SECURITY DEFINER, STABLE, owner postgres,
+--       fixed search_path, 4-column return type; anon / authenticated EXECUTE = true;
+--       PUBLIC EXECUTE = 0 rows.
+--     - P-5: create_machine_location_secure unchanged -- SECURITY DEFINER, VOLATILE,
+--       owner postgres, fixed search_path, result type TABLE(id uuid), args unchanged;
+--       anon / authenticated EXECUTE = true; PUBLIC EXECUTE = 0 rows.
+--     - P-6: total_rows = 42 -- equals C-7; the body made no data change.
+--
+--   [SMOKE TEST RESULT] (production browser, 2026-07-13; no real session token recorded)
+--     - Employee screen (index.html), machines tab: list, current location, and move
+--       history all render.
+--     - list_machine_current_locations_secure = 200; list_machine_location_history_
+--       secure = 200; NO /rest/v1/machine_locations direct read; no Console errors.
+--     - Write smoke test (recording a real move) NOT performed on purpose -- no
+--       throwaway move-history rows created; write RPC attributes / definition /
+--       EXECUTE intact is confirmed by P-5 (DB post-check).
+--
+--   [OUTCOME]
+--     - anon / authenticated SELECT on public.machine_locations: revoked.
+--     - ml_read policy: dropped. ml_write policy: KEPT (unchanged).
+--     - read RPC 2 (list_machine_current_locations_secure /
+--       list_machine_location_history_secure): kept, unchanged.
+--     - write RPC create_machine_location_secure: kept, unchanged (PUBLIC EXECUTE
+--       already removed in the side step).
+--     - RLS / FORCE RLS / owner: unchanged. data: 42 rows, unchanged by the body.
+--     - machine_locations reads are now unified through the secure read RPCs; Phase
+--       4-F-2B-6 machine_locations read protection is COMPLETE.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [PURPOSE]
 --   - index.html has been migrated to the machine_locations read RPCs

@@ -4358,3 +4358,138 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - スモークテストは本番3画面で Browser DevTools（Console / Network）により実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-5-machines-direct-read-revoke.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-13 Phase 4-F-2B-6 machine_locations read RPC追加（★実行済み★）
+
+### 目的
+
+- machine_locations direct read 撤廃の前段として、employee 用 secure read RPC を2本追加。
+- index.html（従業員画面）の重機タブが machine_locations を直接読まずに済むようにする。
+  - `loadMachineLocations()`：重機ごとの最新位置を取る N+1 direct read。
+  - `openMachineMove()`：指定重機の移動履歴10件の direct read。
+- この段階では frontend 移行・SELECT REVOKE・policy 削除は未実施（後続工程）。
+
+### Git / PR
+
+- Phase 4-F-2B-6 machine_locations read RPC追加。
+- PR #111。
+- merge commit：`5c74904`。
+- SQL source commit：`a186845`。
+- SQL：`docs/sql/phase4f-2b-6-machine-locations-read-rpc.sql`（STATUS を `EXECUTED (2026-07-13)` に更新）。
+
+### 追加RPC
+
+1. `public.list_machine_current_locations_secure(session_token_input text)`
+
+- employee session inline 検証（`list_machines_secure` と同型）。
+- active machines のみ（`JOIN machines ON is_active = true`）。
+- active machine ごとの最新位置を最大1件（`DISTINCT ON (machine_id)`）。
+- 位置履歴のない active machine は返却行なし。
+- `ORDER BY machine_id, moved_at DESC, id DESC`。
+- `RETURNS TABLE (machine_id uuid, site_id uuid, moved_at timestamptz, memo text)`。
+
+2. `public.list_machine_location_history_secure(session_token_input text, machine_id_input uuid)`
+
+- employee session inline 検証（RPC 1 と同型）。
+- active machines のみ（`JOIN machines ON is_active = true`）。
+- 指定 machine の移動履歴を最大10件。
+- 不存在・inactive machine は 0件。
+- `ORDER BY moved_at DESC, id DESC`、`LIMIT 10`。
+- `RETURNS TABLE (machine_id uuid, site_id uuid, moved_at timestamptz, memo text)`。
+
+### 認証・権限
+
+両 RPC とも：
+
+- SECURITY DEFINER = true。
+- STABLE。
+- owner = postgres。
+- `SET search_path = public, extensions`。
+- PUBLIC EXECUTE なし。
+- anon EXECUTE あり。
+- authenticated EXECUTE あり。
+- machine_locations への write 処理なし（read-only）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-13）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を手動実行。
+- 結果：Success. No rows returned。
+- `public.list_machine_current_locations_secure(text)` 作成済み。
+- `public.list_machine_location_history_secure(text, uuid)` 作成済み。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 実行前確認結果（Pre-check C-1〜C-12・Supabase SQL Editor・2026-07-13）
+
+- C-1〜C-12：全合格。
+- machine_locations：relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- total rows = 41。
+- distinct machine_id = 20。
+- active machines = 22。
+- active machine で最新位置あり = 20。
+- active machine で履歴なし = 2。
+- orphan machine_id = 0。
+- orphan site_id = 0。
+- duplicate (machine_id, moved_at) = 0。
+- DISTINCT ON と従来の machine 別 LIMIT 1 の mismatch = 0。
+- 新規 RPC 名衝突 = 0。
+- 複合 index なし（現件数では index 追加なし）。
+
+### 実行後確認結果（Post-check P-1〜P-7・Supabase SQL Editor・2026-07-13）
+
+- P-1〜P-7：全合格。
+- 新設 RPC 2本存在。
+- signature 正常（`(text)` / `(text, uuid)`）。
+- RETURNS TABLE 正常（両 RPC とも machine_id uuid / site_id uuid / moved_at timestamptz / memo text の4列）。
+- SECURITY DEFINER = true、STABLE、owner = postgres、search_path 固定。
+- anon / authenticated EXECUTE = true。
+- PUBLIC EXECUTE なし。
+- machine_locations table 権限は事前値（C-3）から不変。
+- RLS / FORCE RLS 不変。
+- policy 2件不変（`ml_read` / `ml_write`）。
+- `create_machine_location_secure` 不変。
+
+### スモークテスト（有効な employee session・2026-07-13）
+
+- `list_machine_current_locations_secure`：error = null、count = 20、返却列正常。
+- `list_machine_location_history_secure`：error = null、tested machine の履歴取得（当該 machine 1件）、10件上限 OK、moved_at 降順 OK。
+- negative（無効 token）：両 RPC とも `Invalid or expired session`。HTTP 400 は意図した RPC 例外。
+- negative（存在しない machine UUID）：error = null、0件（smoke test 実測済み）。
+- inactive machine：RPC 設計上は 0件になるが（`JOIN machines ON is_active = true`）、個別の smoke test は未実施。
+- session token 実値は記録しない。
+
+### 最終状態
+
+- RPC 作成と DB 確認までは完了。
+- machine_locations table の anon / authenticated SELECT 権限はまだ維持。
+- `ml_read` / `ml_write` policy はまだ存在。
+- frontend はまだ direct read（index.html 2箇所）。
+- frontend 移行後に権限撤廃・policy 整理の判断へ進む。
+
+### 非変更事項（今回の DB 実行で触れていない）
+
+- machine_locations の anon / authenticated SELECT grant。
+- `ml_read` policy。
+- `ml_write` policy。
+- RLS / FORCE RLS。
+- `create_machine_location_secure`。
+- frontend（index.html の direct read 2件）。
+- machine_locations の SELECT REVOKE。
+- policy 削除。
+- docs/roadmap.md。
+- 他テーブル。
+
+### 次工程（未完了）
+
+- frontend 移行（index.html の direct read 2件を RPC へ移行）。
+- N+1 解消。
+- Preview / Production 確認。
+- machine_locations の SELECT REVOKE。
+- `ml_read` 削除。
+- Phase 4-F-2B-6 の最終クローズ。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- スモークテストは有効な employee session で実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-locations-read-rpc.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

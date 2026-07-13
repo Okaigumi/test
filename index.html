@@ -2064,9 +2064,10 @@ async function loadMachineLocations(){
   if(error){console.error('list_machines_secure failed:',error);}
   machinesData=machines||[];
   machineLocations={};
-  for(const m of machinesData){
-    const{data}=await sb.from('machine_locations').select('*').eq('machine_id',m.id).order('moved_at',{ascending:false}).limit(1);
-    if(data&&data.length>0) machineLocations[m.id]=data[0];
+  const{data:locs,error:locErr}=await sb.rpc('list_machine_current_locations_secure',{session_token_input:token});
+  if(locErr){console.error('list_machine_current_locations_secure failed:',locErr);}
+  for(const loc of (locs||[])){
+    machineLocations[loc.machine_id]=loc;
   }
 }
 
@@ -2170,7 +2171,8 @@ async function openMachineMove(machineId){
   ).join('');
 
   // 移動履歴を取得
-  const{data:hist}=await sb.from('machine_locations').select('*').eq('machine_id',machineId).order('moved_at',{ascending:false}).limit(10);
+  const token=state.currentUser?.session_token;
+  const{data:hist}=await sb.rpc('list_machine_location_history_secure',{session_token_input:token,machine_id_input:machineId});
   document.getElementById('machineHistory').innerHTML=(hist||[]).map(h=>{
     const siteName=h.site_id?state.sites.find(s=>s.id===h.site_id)?.name||'不明':'ヤード';
     const d=new Date(h.moved_at);

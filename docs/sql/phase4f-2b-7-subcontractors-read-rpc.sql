@@ -5,40 +5,58 @@
 --   directly (admin-app.html's direct read is dead code and will simply be
 --   removed in the front-end step).
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED 2026-07-13
 --   - This file ONLY adds two new read RPCs (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
 --     Claude Code CLI. All DB execution and checks (pre / post) are performed
 --     manually by the user in the Supabase SQL Editor.
 --
+--   [DB EXECUTION] (Supabase SQL Editor, by the user, 2026-07-13)
+--     - The user ran the EXECUTION BODY manually in the Supabase SQL Editor,
+--       ONCE only (the two plain CREATE FUNCTION statements were executed a
+--       single time; the body was NOT re-run afterwards).
+--     - Result: Success. No rows returned.
+--     - Both functions created:
+--         public.list_subcontractors_secure(text)
+--         public.list_subcontractors_admin_secure(text)
+--     - Delivered via PR #118 (merge commit f832954).
+--     - ROLLBACK section: NOT executed (kept for reference only).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
 --   [PRE-CHECK RESULT] (C-1..C-12, Supabase SQL Editor, 2026-07-13 -- all passed,
---    measured by the user BEFORE this file was written)
+--    measured by the user BEFORE this file was written; C-8 was re-confirmed
+--    immediately before running the body, still 0 rows)
 --     - C-1: subcontractors exists, schema = public, relkind = 'r', RLS = true,
 --       FORCE RLS = false, owner = postgres.
 --     - C-2: anon / authenticated SELECT = true;
 --       INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN =
 --       false for both roles. (context only; left untouched by this file.)
 --     - C-2b: ACL -- anon = SELECT only, authenticated = SELECT only, no PUBLIC
---       grant, no grant option.
+--       grant, no grant option (is_grantable = false). Raw ACL:
+--       {postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,
+--        service_role=arwdDxtm/postgres}.
 --     - C-3: columns / types as assumed --
 --       id uuid NOT NULL DEFAULT gen_random_uuid(), name text NOT NULL,
 --       is_active boolean NOT NULL DEFAULT true,
 --       created_at timestamptz NOT NULL DEFAULT now(), company_id uuid NULL.
 --       The front-end consumes only id / name.
---     - C-4: PK = subcontractors_pkey(id) (unique / valid / ready);
---       FK company_id -> companies(id); all constraints validated.
+--     - C-4: PK = subcontractors_pkey(id) (primary / unique / valid / ready);
+--       FK subcontractors_company_id_fkey: company_id -> companies(id);
+--       all constraints validated = true.
 --     - C-5: policy count = 1 -- sub_read (PERMISSIVE, roles {public}, SELECT,
 --       USING true, no WITH CHECK). (context only; left untouched by this file.)
 --     - C-6: all employee-session verification columns exist
 --       (employee_sessions.employee_id uuid / token_hash text /
 --        expires_at timestamptz, employees.id / is_active).
---     - C-7: public._verify_management_session(text) exists, SECURITY DEFINER,
---       owner = postgres, search_path = public, extensions. It verifies BOTH
---       admin sessions and admin-role employee sessions (token hash, expiry,
---       active, admin role) and raises on an invalid session. Reused as-is here.
+--     - C-7: public._verify_management_session(text) exists, SECURITY DEFINER =
+--       true, VOLATILE, owner = postgres, search_path = public, extensions. It
+--       verifies BOTH admin sessions and admin-role employee sessions (token
+--       hash, expiry, active, admin role) and raises on an invalid session.
+--       Reused as-is here.
 --     - C-8: list_subcontractors_secure / list_subcontractors_admin_secure did
---       not exist beforehand (0 rows; no name collision).
+--       not exist beforehand (0 rows; no name collision). Re-confirmed
+--       immediately before running the body: still 0 rows.
 --     - C-9: existing RPC baseline -- export_projects_summary_secure:
 --       SECURITY DEFINER, STABLE, owner postgres, fixed search_path, reads
 --       subcontractors read-only, no PUBLIC EXECUTE, EXECUTE for anon /
@@ -54,7 +72,54 @@
 --     - C-12: subcontractors.name duplicates = 0; all 3 subcontractors have exactly one
 --       matching unit_rates row (category = 'subcontractor', name match):
 --       大須賀商店 / 岡井重機 / 高瀬興行, each 0円/式 (the 0-yen rates are the
---       intended operation, not an anomaly).
+--       intended operation, not an anomaly). Also measured: unit_rates has NO
+--       is_active column.
+--
+--   [POST-CHECK RESULT] (P-1..P-8, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - P-1: both new RPCs exist with the expected attributes --
+--       identity_arguments = "session_token_input text",
+--       RETURNS TABLE (id uuid, name text), SECURITY DEFINER = true, STABLE,
+--       owner = postgres, search_path = public, extensions.
+--     - P-2: exactly one function per name --
+--       list_subcontractors_secure(text) x1,
+--       list_subcontractors_admin_secure(text) x1; no unexpected overload.
+--     - P-3: return columns for BOTH functions: (1) id uuid, (2) name text.
+--     - P-4 / P-4b: EXECUTE for anon / authenticated / postgres / service_role =
+--       true (both functions); NO PUBLIC row; explicit ACL; is_grantable = false.
+--       Raw ACL (both functions):
+--       {postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,
+--        service_role=X/postgres}.
+--     - P-5: subcontractors table grants UNCHANGED from the C-2 snapshot
+--       (anon / authenticated SELECT = true; the other 7 privileges = false).
+--     - P-6: RLS = true, FORCE RLS = false, owner = postgres (unchanged);
+--       policy_count = 1 -- sub_read (PERMISSIVE, {public}, SELECT, qual = true,
+--       with_check = null) unchanged.
+--     - P-7 / P-7b: export_projects_summary_secure UNCHANGED from the C-9 / C-9b
+--       snapshot (SECURITY DEFINER = true, STABLE, owner = postgres, fixed
+--       search_path, identity arguments unchanged; EXECUTE for anon /
+--       authenticated / postgres / service_role = true; no PUBLIC EXECUTE;
+--       explicit ACL unchanged; is_grantable = false).
+--     - P-8 (negative): list_subcontractors_secure rejects an invalid employee
+--       session; list_subcontractors_admin_secure rejects an invalid management
+--       session. Both checks PASSED (Success. No rows returned).
+--
+--   [SMOKE TEST RESULT] (browser DevTools Console, production, valid sessions,
+--    2026-07-13 -- no real session token value is recorded here)
+--     - Worker screen (index.html, valid employee session),
+--       list_subcontractors_secure: rpc_error = null, direct_error = null,
+--       rpc_count = 3, direct_count = 3, rpc_columns = ['id','name'],
+--       columns_ok = true, set_match = true (set equality vs the current direct
+--       read select id,name / is_active = true / order name).
+--     - Cost-management screen (genka-app.html, valid management session),
+--       list_subcontractors_admin_secure: rpc_error = null, direct_error = null,
+--       rpc_count = 3, direct_count = 3, rpc_columns = ['id','name'],
+--       columns_ok = true, set_match = true.
+--
+--   [CURRENT POSITION] (what this file's execution did and did NOT close)
+--     - DONE at this point: read RPC SQL merged to main (PR #118), DB execution,
+--       DB post-check, and the RPC-only smoke tests above.
+--     - This completes ONLY the "read RPC DB execution" stage of Phase 4-F-2B-7.
+--       Phase 4-F-2B-7 as a whole is NOT complete (see [STILL NOT DONE]).
 --
 --   [STILL NOT DONE] (separate, later steps)
 --     - front-end migration:

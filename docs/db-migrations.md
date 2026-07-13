@@ -4657,3 +4657,123 @@ COMMIT;
 - 本番スモークテストは Browser DevTools（Console / Network）で実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-13 Phase 4-F-2B-7 subcontractors read RPC追加（★実行済み★・read RPCのDB実行工程完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-7 subcontractors read 保護（read RPC 追加 → frontend 移行 → direct read 撤廃）の第1工程。
+- 本記録で完了したのは **read RPC の DB 実行工程のみ**。Phase 4-F-2B-7 全体はまだ完了していない（次工程は後述）。
+
+### 目的
+
+- subcontractors direct read 撤廃の前段として、secure read RPC を2本追加。
+- index.html（従業員画面）と genka-app.html（原価管理画面）が subcontractors を直接読まずに済むようにする。
+- admin-app.html:330 の direct read は代入のみで未使用（死にコード）のため、frontend 工程では移行でなく削除予定。
+- この段階では frontend 移行・SELECT REVOKE・policy 削除は未実施（後続工程）。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-2b-7-subcontractors-read-rpc.sql`（STATUS を `EXECUTED 2026-07-13` に更新）。
+- SQL source PR：#118（merge commit `f832954`）。
+
+### 追加RPC
+
+1. `public.list_subcontractors_secure(session_token_input text)`
+
+- employee session inline 検証（`list_machines_secure` / `list_materials_secure` と同型）。
+- active subcontractors のみ。
+- `ORDER BY name, id`（id は決定的順序のための第2キー）。
+- `RETURNS TABLE (id uuid, name text)`。
+
+2. `public.list_subcontractors_admin_secure(session_token_input text)`
+
+- 既存 helper `public._verify_management_session(text)` を再利用（`list_companies_secure` / `list_machines_admin_secure` と同型）。
+- active subcontractors のみ。`ORDER BY name, id`。
+- `RETURNS TABLE (id uuid, name text)`。
+- include_inactive 引数なし（inactive を表示する画面が存在しないため意図的に省略）。
+
+### 認証・権限
+
+両 RPC とも：
+
+- SECURITY DEFINER = true。
+- STABLE。
+- owner = postgres。
+- `SET search_path = public, extensions`。
+- PUBLIC EXECUTE なし。
+- anon / authenticated EXECUTE あり（postgres / service_role も EXECUTE = true）。
+- is_grantable = false・explicit ACL。
+- subcontractors への write 処理なし（read-only）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-13）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY（plain CREATE FUNCTION 2本・BEGIN/COMMIT 単一トランザクション）を1回だけ手動実行。
+- 結果：Success. No rows returned。
+- `public.list_subcontractors_secure(text)` 作成済み。
+- `public.list_subcontractors_admin_secure(text)` 作成済み。
+- 同じ BODY の再実行なし。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 実行前確認結果（Pre-check C-1〜C-12・Supabase SQL Editor・2026-07-13）
+
+- C-1〜C-12：全合格。
+- C-1：relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- C-2 / C-2b：anon / authenticated は SELECT のみ true（他7権限 false）。PUBLIC 権限なし・is_grantable = false。raw ACL = `{postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=arwdDxtm/postgres}`。
+- C-3：id uuid NOT NULL DEFAULT gen_random_uuid() / name text NOT NULL / is_active boolean NOT NULL DEFAULT true / created_at timestamptz NOT NULL DEFAULT now() / company_id uuid NULL。
+- C-4：PK = subcontractors_pkey(id)（primary / unique / valid / ready）、FK = subcontractors_company_id_fkey（company_id → companies(id)）、constraints validated = true。
+- C-5：policy_count = 1（sub_read / PERMISSIVE / {public} / SELECT / qual = true / with_check = null）。
+- C-6：employee_sessions（employee_id uuid / token_hash text / expires_at timestamptz）確認済み。既存 secure RPC と同じ session 検証方式を使用可能。
+- C-7：`_verify_management_session(text)` = SECURITY DEFINER true / VOLATILE / owner postgres / search_path = public, extensions。admin session と admin-role employee session の両方を検証（token hash / expiry / active / admin role、無効 session は例外）。
+- C-8：新 RPC 名衝突 0件（実行直前の再確認でも 0件）。
+- C-9 / C-9b：`export_projects_summary_secure` baseline 記録（SECURITY DEFINER / STABLE / owner postgres / search_path 固定 / subcontractors read-only 参照 / PUBLIC EXECUTE なし / anon・authenticated・postgres・service_role EXECUTE = true / explicit ACL / is_grantable = false）。
+- C-10：total = 3、active = 3、inactive = 0、is_active null = 0。
+- C-11：company_id orphan = 0、reports.subcontractor_ids orphan = 0。
+- C-12：name 重複 0。unit_rates(category='subcontractor') と名前一致：大須賀商店 / 岡井重機 / 高瀬興行 各1件・いずれも 0円/式（0円は意図した運用）。unit_rates に is_active 列は存在しないことも実測済み。
+
+### 実行後確認結果（Post-check P-1〜P-8・Supabase SQL Editor・2026-07-13）
+
+- P-1〜P-8：全合格。
+- P-1：両 RPC とも identity_arguments = `session_token_input text`、RETURNS TABLE(id uuid, name text)、SECURITY DEFINER = true、STABLE、owner = postgres、search_path = public, extensions。
+- P-2：各名前とも1本のみ。想定外 overload なし。
+- P-3：返却列は両 RPC とも (1) id uuid、(2) name text。
+- P-4 / P-4b：anon / authenticated / postgres / service_role EXECUTE = true、PUBLIC 行なし、explicit ACL、is_grantable = false。raw ACL = `{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}`。
+- P-5：subcontractors table 権限は事前値（C-2）から不変（SELECT true・他7権限 false）。
+- P-6：RLS = true / FORCE RLS = false / owner = postgres 不変。policy_count = 1（sub_read 定義不変）。
+- P-7 / P-7b：`export_projects_summary_secure` 不変（属性・identity arguments・EXECUTE・explicit ACL・is_grantable = false）。
+- P-8（negative）：`list_subcontractors_secure` は invalid employee session を拒否、`list_subcontractors_admin_secure` は invalid management session を拒否。両方 PASS。
+
+### ブラウザConsoleスモークテスト（本番・有効session・2026-07-13・実 token 値は記録しない）
+
+- 従業員画面（index.html・employee session）`list_subcontractors_secure`：
+  rpc_error = null、direct_error = null、rpc_count = 3、direct_count = 3、rpc_columns = ['id','name']、columns_ok = true、set_match = true（現行 direct read `select id,name / is_active=true / order name` と集合一致）。
+- 原価管理画面（genka-app.html・management session）`list_subcontractors_admin_secure`：
+  rpc_error = null、direct_error = null、rpc_count = 3、direct_count = 3、rpc_columns = ['id','name']、columns_ok = true、set_match = true。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。
+
+### 最終状態（この工程の到達点）
+
+- read RPC 2本の作成と DB 確認・RPC 単体スモークまでは完了（read RPC の DB 実行工程完了）。
+- subcontractors table の anon / authenticated SELECT 権限はまだ維持。
+- `sub_read` policy はまだ存在。
+- frontend はまだ direct read（index.html / admin-app.html / genka-app.html の3件）。
+- **Phase 4-F-2B-7 全体はまだ完了していない。**
+
+### 次工程（未完了）
+
+- frontend RPC 移行（index.html:998 → `list_subcontractors_secure`、genka-app.html:535 → `list_subcontractors_admin_secure`）。
+- admin-app.html:330 の死にコード削除（`_subcontractors` ごと除去）。
+- 本番 frontend 確認（direct read 0件化の確認を含む）。
+- subcontractors の SELECT REVOKE。
+- `sub_read` policy DROP。
+- Phase 4-F-2B-7 の最終クローズ。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- スモークテストは本番 Browser DevTools Console で有効 session により実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-7-subcontractors-read-rpc.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

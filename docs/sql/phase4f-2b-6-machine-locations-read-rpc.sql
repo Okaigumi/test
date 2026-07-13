@@ -4,12 +4,21 @@
 --    list_machine_location_history_secure) so that index.html can stop
 --   reading the machine_locations table directly.
 -- ============================================================
--- [STATUS] NOT YET EXECUTED (created 2026-07-13)
+-- [STATUS] EXECUTED (2026-07-13)
 --   - This file ONLY adds two new read RPCs (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
 --   - DB execution is done by the user. No DB connection / Supabase CLI / psql from
 --     Claude Code CLI. All DB execution and checks (pre / post) are performed
 --     manually by the user in the Supabase SQL Editor.
+--
+--   [DB EXECUTION] (Supabase SQL Editor, by the user, 2026-07-13)
+--     - The user ran the EXECUTION BODY manually in the Supabase SQL Editor.
+--     - Result: Success. No rows returned.
+--     - Both functions created:
+--         public.list_machine_current_locations_secure(text)
+--         public.list_machine_location_history_secure(text, uuid)
+--     - Delivered via PR #111 (merge commit 5c74904; SQL source commit a186845).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
 --
 --   [PRE-CHECK RESULT] (C-1..C-12, Supabase SQL Editor, 2026-07-13 -- all passed)
 --     - C-1: machine_locations exists, schema = public, relkind = 'r', RLS = true,
@@ -44,6 +53,36 @@
 --     - C-12: active machines = 22, with a latest location = 20,
 --       active machines without any location = 2;
 --       DISTINCT ON vs per-machine LIMIT 1 mismatch = 0.
+--
+--   [POST-CHECK RESULT] (P-1..P-7, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - P-1: both new RPCs exist; SECURITY DEFINER = true; STABLE
+--       (provolatile = 's'); owner = postgres; search_path = public, extensions.
+--     - P-2: identity arguments as declared --
+--       list_machine_current_locations_secure(session_token_input text);
+--       list_machine_location_history_secure(session_token_input text,
+--                                            machine_id_input uuid).
+--     - P-3: both functions return 4 TABLE columns
+--       (machine_id uuid, site_id uuid, moved_at timestamptz, memo text).
+--     - P-4: anon EXECUTE = true, authenticated EXECUTE = true (both functions).
+--     - P-4b: PUBLIC EXECUTE = none.
+--     - P-5: machine_locations table grants unchanged from the C-3 snapshot
+--       (SELECT still granted; the other 7 privileges still not).
+--     - P-6: RLS / FORCE RLS unchanged; policy list unchanged (ml_read / ml_write).
+--     - P-7: create_machine_location_secure unchanged from the C-8 snapshot.
+--
+--   [SMOKE TEST RESULT] (valid employee session, 2026-07-13)
+--     - list_machine_current_locations_secure: error = null, count = 20;
+--       return columns correct.
+--     - list_machine_location_history_secure: error = null; the tested machine
+--       returned its history (1 row for that machine); 10-row cap OK; moved_at DESC OK.
+--     - Negative (invalid / expired token): both functions raise
+--       'Invalid or expired session' (surfaced as an HTTP 400 RPC exception, as
+--       intended).
+--     - Negative (non-existent machine UUID): error = null, 0 rows (smoke tested).
+--       An inactive machine also yields 0 rows by design (the JOIN to machines with
+--       is_active = true filters it out), but that specific case was NOT separately
+--       smoke tested.
+--     - No real session token value is recorded here.
 --
 --   [STILL NOT DONE] (separate, later steps)
 --     - front-end migration (index.html loadMachineLocations : N+1 direct read ->

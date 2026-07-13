@@ -4570,3 +4570,90 @@ COMMIT;
 - DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-location-write-rpc-public-execute-revoke.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-13 Phase 4-F-2B-6 machine_locations direct read撤廃（★実行済み★・machine_locations read保護 完了）
+
+### 目的
+
+- machine_locations の読み取りを secure read RPC 経由へ一本化し、anon / authenticated の直接 SELECT 経路を閉じる。
+- frontend 移行・本番確認の完了後に、direct SELECT grant と `ml_read` policy を撤廃。
+
+### 対象
+
+- `public.machine_locations`
+
+### Git / PR
+
+- frontend read RPC 移行：PR #113（merge commit `d50d585`）。
+- direct read 撤廃 SQL：`docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql`（PR #114・merge commit `6fd9673`。STATUS を `EXECUTED 2026-07-13` に更新）。
+- side step（write RPC PUBLIC EXECUTE 撤廃）：SQL PR #115（merge commit `2086f3f`）／ 実行記録 PR #116（merge commit `6f79dd3`）。
+  ※ PR #114 の merge commit は `6fd9673`、PR #116 の merge commit は `6f79dd3`。別物のため混同しない。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-13）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を手動実行（単一トランザクション）：
+
+```sql
+BEGIN;
+REVOKE SELECT ON TABLE public.machine_locations FROM anon, authenticated;
+DROP POLICY ml_read ON public.machine_locations;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 変更内容
+
+- anon / authenticated の machine_locations SELECT を REVOKE。
+- `ml_read` policy を DROP。
+
+### 保持（非変更）
+
+- `ml_write` policy は維持（PERMISSIVE / {public} / INSERT / with_check true）。
+- RLS / FORCE RLS / owner は不変（true / false / postgres）。
+- read RPC 2本（`list_machine_current_locations_secure` / `list_machine_location_history_secure`）は不変。
+- write RPC `create_machine_location_secure(text, uuid, uuid, text)` は不変（PUBLIC EXECUTE は side step で撤廃済み）。
+
+### 実行前確認結果（Pre-check C-1〜C-7・2026-07-13）
+
+- C-1〜C-7：全合格。
+- C-2b：anon / authenticated の SELECT ACL（is_grantable=false）・PUBLIC SELECT なし。
+- C-3：policy_count = 2（ml_read + ml_write）。
+- C-4c/C-4d：read RPC の anon/authenticated EXECUTE=true・PUBLIC EXECUTE=0行。
+- C-5c：write RPC PUBLIC EXECUTE=0行（side step 撤廃結果を確認）。
+- C-7：total_rows = 42（過去記録41件から実データ1件増。BODY 実行前の増加で問題なし。P-6 との不変比較には42件を使用）。
+
+### 実行後確認結果（Post-check P-1〜P-6・2026-07-13）
+
+- P-1〜P-6：全合格。
+- P-1：anon / authenticated とも8権限すべて false（SELECT 撤廃）。
+- P-1b：PUBLIC / anon / authenticated の SELECT ACL = 0行。
+- P-2：policy_count = 1（ml_write のみ・定義不変）。ml_read 削除済み。
+- P-3：RLS true / FORCE RLS false / owner postgres（不変）。
+- P-4：read RPC 2本不変（属性・返却列4件・EXECUTE・PUBLIC EXECUTE 0行）。
+- P-5：write RPC 不変（属性・result type=TABLE(id uuid)・args・EXECUTE・PUBLIC EXECUTE 0行）。
+- P-6：total_rows = 42（C-7 と一致。BODY による data 変更なし）。
+
+### 本番スモークテスト（2026-07-13・実 token 値は記録しない）
+
+- 重機一覧・現在地・移動履歴の表示 OK。
+- `list_machine_current_locations_secure` = 200、`list_machine_location_history_secure` = 200。
+- `/rest/v1/machine_locations` direct read = 0件。Console 赤エラーなし。
+- 実データを追加する write smoke test は未実施（不要な移動履歴を作成しない方針）。write RPC 属性・定義・EXECUTE 維持は DB post-check（P-5）で確認済み。
+
+### rollback
+
+- 未実施（コメントの参照用のみ）。
+
+### 最終状態
+
+- machine_locations の読み取りは secure read RPC 経由へ一本化。direct read 0件。
+- **Phase 4-F-2B-6 machine_locations read 保護工程（read RPC 追加 → frontend 移行 → direct read 撤廃、および side step の write RPC PUBLIC EXECUTE 撤廃）は完了。**
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- 本番スモークテストは Browser DevTools（Console / Network）で実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

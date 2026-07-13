@@ -9,7 +9,7 @@
 --   session -- but PUBLIC EXECUTE is unnecessary excess privilege. anon and
 --   authenticated keep their own explicit EXECUTE, so only PUBLIC is removed.
 -- ============================================================
--- [STATUS] NOT YET EXECUTED (created 2026-07-13)
+-- [STATUS] EXECUTED 2026-07-13
 --   - This file removes exactly ONE privilege: EXECUTE for PUBLIC on
 --     public.create_machine_location_secure(text, uuid, uuid, text). Nothing else is
 --     touched.
@@ -22,6 +22,57 @@
 --   - This is a SIDE STEP of Phase 4-F-2B-6. The machine_locations direct-read-revoke
 --     BODY (docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql) has NOT
 --     been run yet; return to that pre-check after this file is executed / verified.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-13)
+--     - The user ran the EXECUTION BODY manually:
+--         BEGIN;
+--         REVOKE EXECUTE ON FUNCTION
+--           public.create_machine_location_secure(text, uuid, uuid, text) FROM PUBLIC;
+--         COMMIT;
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [PRE-CHECK RESULT] (C-1..C-4, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - C-1: create_machine_location_secure(text, uuid, uuid, text) present;
+--       SECURITY DEFINER = true, volatility = 'v' (VOLATILE), owner = postgres,
+--       search_path = public, extensions, result type = TABLE(id uuid);
+--       args = session_token_input text / machine_id_input uuid / site_id_input uuid /
+--       memo_input text.
+--     - C-2: effective EXECUTE -- anon / authenticated / postgres / service_role = true.
+--     - C-3: EXECUTE ACL -- PUBLIC / anon / authenticated / postgres / service_role,
+--       each is_grantable = false.
+--     - C-3b: execute_acl_count = 5;
+--       grantees = {PUBLIC, anon, authenticated, postgres, service_role};
+--       grantable_count = 0.
+--     - C-4: function definition confirmed to contain the security controls
+--       (employee_sessions.token_hash match, expires_at > now(),
+--        employees.is_active = true, RAISE 'Invalid or expired session',
+--        moved_by from the verified session, INSERT into public.machine_locations).
+--
+--   [POST-CHECK RESULT] (P-1..P-5, Supabase SQL Editor, 2026-07-13 -- all passed)
+--     - P-1: effective EXECUTE -- anon / authenticated / postgres / service_role = true.
+--     - P-2: EXECUTE ACL -- NO PUBLIC row; anon / authenticated / postgres /
+--       service_role remain, each is_grantable = false.
+--     - P-2b: PUBLIC EXECUTE = 0 rows.
+--     - P-2c: execute_acl_count = 4;
+--       grantees = {anon, authenticated, postgres, service_role}; grantable_count = 0.
+--     - P-3: function attributes unchanged from C-1.
+--     - P-4: function definition unchanged from C-4.
+--     - P-5 (non-scope, all unchanged): machine_locations data / table grants /
+--       ml_read / ml_write / RLS / FORCE RLS / read RPC 2 / anon / authenticated /
+--       postgres / service_role EXECUTE.
+--
+--   [OUTCOME]
+--     - PUBLIC EXECUTE on the write RPC: revoked.
+--     - anon / authenticated / postgres / service_role EXECUTE: KEPT (unchanged).
+--     - Function attributes / definition: unchanged.
+--     - table / policy / RLS / data: unchanged.
+--     - Write smoke test (recording a real move): NOT performed on purpose -- no
+--       throwaway move-history rows created; the write path is confirmed intact by
+--       P-3 / P-4 (attributes / definition) and P-1 / P-2 (per-role EXECUTE).
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--     - The machine_locations direct-read-revoke BODY is still NOT run; return to that
+--       pre-check after this record is merged.
 --
 -- [PURPOSE]
 --   - Remove the redundant PUBLIC EXECUTE grant on the write RPC. The app calls the

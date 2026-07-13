@@ -4493,3 +4493,80 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 - スモークテストは有効な employee session で実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-locations-read-rpc.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-13 Phase 4-F-2B-6（side step）machine_locations write RPC PUBLIC EXECUTE 撤廃（★実行済み★）
+
+### 位置づけ
+
+- Phase 4-F-2B-6 の side step。machine_locations direct read 撤廃の pre-check 中に、write RPC へ明示的な PUBLIC EXECUTE 付与が判明したため、先に PUBLIC のみ撤廃した。
+- 本記録の merge 後、元の machine_locations direct read 撤廃の pre-check に復帰する（direct read 撤廃 BODY はまだ未実行）。
+
+### 発見経緯
+
+- `docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql` の pre-check（write RPC baseline）実行中に、`create_machine_location_secure` の ACL に明示 PUBLIC EXECUTE を検出。
+- 関数内部で employee session を検証しており認証バイパスは確認されていないが、PUBLIC EXECUTE は不要な過剰権限のため撤廃。
+
+### 対象
+
+- `public.create_machine_location_secure(text, uuid, uuid, text)`
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-2b-6-machine-location-write-rpc-public-execute-revoke.sql`（STATUS を `EXECUTED 2026-07-13` に更新）。
+- SQL source PR：#115（merge commit `2086f3f`）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-13）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を手動実行：
+
+```sql
+BEGIN;
+REVOKE EXECUTE
+ON FUNCTION public.create_machine_location_secure(text, uuid, uuid, text)
+FROM PUBLIC;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 変更内容
+
+- PUBLIC EXECUTE のみ REVOKE。
+
+### 保持（非変更）
+
+- anon / authenticated / postgres / service_role の EXECUTE は維持。
+- 関数定義・属性（SECURITY DEFINER / VOLATILE / owner postgres / search_path / result type = TABLE(id uuid)）は不変。
+- machine_locations data / table grants / `ml_read` / `ml_write` / RLS / FORCE RLS は不変。
+- read RPC 2本（`list_machine_current_locations_secure` / `list_machine_location_history_secure`）は不変。
+
+### 実行前確認結果（Pre-check C-1〜C-4 + C-3b・2026-07-13）
+
+- C-1〜C-4 + C-3b：全合格。
+- C-3b：execute_acl_count = 5、grantees = {PUBLIC, anon, authenticated, postgres, service_role}、grantable_count = 0。
+
+### 実行後確認結果（Post-check P-1〜P-5 + P-2b / P-2c・2026-07-13）
+
+- P-1〜P-5 + P-2b / P-2c：全合格。
+- P-2b：PUBLIC EXECUTE = 0行。
+- P-2c：execute_acl_count = 4、grantees = {anon, authenticated, postgres, service_role}、grantable_count = 0。
+- P-3 / P-4：関数属性・定義とも C-1 / C-4 から不変。
+
+### スモークテスト
+
+- 実データを追加する write smoke test は実施していない（不要な移動履歴を作成しない方針）。write path 健全性は P-3 / P-4（属性・定義不変）と P-1 / P-2（ロール別 EXECUTE 維持）で担保。
+
+### rollback
+
+- 未実施（コメントの参照用のみ）。
+
+### 次工程
+
+- 元の machine_locations direct read 撤廃（`docs/sql/phase4f-2b-6-machine-locations-direct-read-revoke.sql`）の pre-check に復帰。BODY はまだ未実行。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-6-machine-location-write-rpc-public-execute-revoke.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

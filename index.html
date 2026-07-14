@@ -963,7 +963,9 @@ function show(id,visible){
 
 // ===== DATA LOAD =====
 async function loadSites(){
-  const{data}=await sb.from('sites').select('*').eq('is_active',true).order('name');
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_sites_secure',{session_token_input:token});
+  if(error){console.error('list_sites_secure failed:',error);}
   state.sites=data||[];renderSiteChips();renderMaster();
 }
 async function loadMaterials(){
@@ -1698,7 +1700,9 @@ async function loadAllEmployees(){
 }
 
 async function loadSiteAssignments(){
-  const{data}=await sb.from('site_assignments').select('*').eq('is_active',true);
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_site_assignments_secure',{session_token_input:token});
+  if(error){console.error('list_site_assignments_secure failed:',error);}
   siteAssignments={};
   (data||[]).forEach(a=>{
     if(!siteAssignments[a.site_id])siteAssignments[a.site_id]=[];

@@ -4777,3 +4777,106 @@ COMMIT;
 - スモークテストは本番 Browser DevTools Console で有効 session により実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-7-subcontractors-read-rpc.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-14 Phase 4-F-2B-7 subcontractors direct read撤廃（★実行済み★・subcontractors read保護 完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-7 subcontractors read 保護（read RPC 追加 → frontend 移行 → direct read 撤廃）の最終工程。
+- read RPC 追加（2026-07-13）・frontend 移行（PR #120）・本番確認の完了後に、direct SELECT grant と `sub_read` policy を撤廃。
+- **本工程で Phase 4-F-2B-7 全体が完了。**
+
+### 目的
+
+- subcontractors の読み取りを secure read RPC 経由へ一本化し、anon / authenticated の直接 SELECT 経路を閉じる。
+- frontend 移行・本番確認の完了後に、direct SELECT grant と `sub_read` policy を撤廃。
+
+### 対象
+
+- `public.subcontractors`
+
+### Git / PR
+
+- frontend read RPC 移行：PR #120（merge commit `025a173`）。
+- direct read 撤廃 SQL：`docs/sql/phase4f-2b-7-subcontractors-direct-read-revoke.sql`（PR #121・merge commit `852e653`。STATUS を `EXECUTED 2026-07-14` に更新）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-14）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を手動実行（単一トランザクション）：
+
+```sql
+BEGIN;
+REVOKE SELECT
+ON TABLE public.subcontractors
+FROM anon, authenticated;
+DROP POLICY sub_read
+ON public.subcontractors;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 変更内容
+
+- anon / authenticated の subcontractors SELECT を REVOKE。
+- `sub_read` policy を DROP。
+
+### 保持（非変更）
+
+- RLS / FORCE RLS / owner は不変（true / false / postgres）。
+- read RPC 2本（`list_subcontractors_secure` / `list_subcontractors_admin_secure`）は不変。
+- `export_projects_summary_secure`（subcontractors を SECURITY DEFINER で read-only 参照）は不変。
+- subcontractors データは不変（total = 3 / active = 3 / inactive = 0 / null = 0）。
+- write 系権限（anon / authenticated の INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）は引き続き全て false。
+
+### 実行前確認結果（Pre-check C-1〜C-8・2026-07-14）
+
+- C-1〜C-8：全合格。
+- C-1：relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- C-2：anon / authenticated は SELECT のみ true（他7権限 false）。
+- C-2b：anon / authenticated の SELECT ACL のみ（is_grantable = false）・PUBLIC 権限なし・grant option なし。
+- C-3：policy_count = 1（sub_read / PERMISSIVE / {public} / SELECT / qual = true / with_check = null）。
+- C-4：read RPC 2本とも RETURNS TABLE(id uuid, name text)・SECURITY DEFINER・STABLE・owner postgres・search_path = public, extensions。
+- C-4b：read RPC 2本とも PUBLIC EXECUTE なし・anon / authenticated / postgres / service_role EXECUTE = true。
+- C-5 / C-5b：`export_projects_summary_secure` の属性・EXECUTE・ACL は baseline どおり（不変確認用の基準値）。
+- C-6：total = 3、active = 3、inactive = 0、null = 0。
+- C-7：frontend direct read は3画面（index.html / genka-app.html / admin-app.html）とも 0件（repo 確認済み）。
+- C-8：anon / authenticated の write 系7権限すべて false。
+
+### 実行後確認結果（Post-check P-1〜P-11・2026-07-14）
+
+- P-1〜P-11：全合格。
+- P-1：anon / authenticated とも SELECT を含む8権限すべて false。
+- P-1b：ACL から anon / authenticated / PUBLIC の SELECT 権限が消えている（0行）。
+- P-2：policy_count = 0・sub_read_count = 0（sub_read 削除済み・残存 policy なし）。
+- P-3：RLS = true / FORCE RLS = false / owner = postgres（不変）。
+- P-4：read RPC 2本の signature・戻り値（id uuid, name text）・SECURITY DEFINER・STABLE・owner・search_path すべて不変。
+- P-4b：read RPC 2本の EXECUTE 権限・ACL は不変。
+- P-5 / P-5b：`export_projects_summary_secure` の属性・EXECUTE 権限・ACL は不変。
+- P-6：total = 3 / active = 3 / inactive = 0 / null = 0（C-6 と一致。BODY による data 変更なし）。
+- P-7：anon / authenticated の write 系権限は引き続き全て false。
+- P-9（negative）：無効 employee session は `list_subcontractors_secure` で、無効 management session は `list_subcontractors_admin_secure` で、いずれも `Invalid or expired session` により拒否。
+
+### 本番スモークテスト（2026-07-14・実 token 値は記録しない）
+
+- 従業員画面（index.html）：外注業者3件表示・`list_subcontractors_secure` = 200・`/rest/v1/subcontractors` direct GET 0件・Console 赤エラーなし。
+- 原価管理画面（genka-app.html）：外注業者3件表示・`list_subcontractors_admin_secure` = 200・`/rest/v1/subcontractors` direct GET 0件・Console 赤エラーなし。
+- 管理コンソール（admin-app.html）：初期表示・画面遷移正常・`/rest/v1/subcontractors` direct GET 0件・Console 赤エラーなし。
+- `export_projects_summary_secure` = 200・CSV / ZIP 生成正常・Console 赤エラーなし。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。セキュリティを弱める（direct read 再開）ため緊急復旧時のみ使用。
+
+### 最終状態
+
+- subcontractors の読み取りは secure read RPC 経由へ一本化。direct read 0件。anon / authenticated の SELECT 権限なし・`sub_read` policy なし。
+- **Phase 4-F-2B-7 subcontractors read 保護工程（read RPC 追加 → frontend 移行 → direct read 撤廃）は完了。**
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- 本番スモークテストは Browser DevTools（Console / Network）で実施（実 token 値は記録しない）。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-7-subcontractors-direct-read-revoke.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

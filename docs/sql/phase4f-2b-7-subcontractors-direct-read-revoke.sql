@@ -6,16 +6,88 @@
 --   read RPCs (list_subcontractors_secure / list_subcontractors_admin_secure) and
 --   admin-app.html's dead direct read has been removed.
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED 2026-07-14
 --   - This file removes exactly ONE privilege (SELECT for anon / authenticated on
 --     public.subcontractors) and drops exactly ONE policy (sub_read). Nothing else is
 --     touched.
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. All pre-check / body / post-check are run by the user.
---   - Run this file SECTION BY SECTION in this order:
---     PRE-CHECK (C-1..C-8) -> EXECUTION BODY (single transaction) -> POST-CHECK
---     (P-1..P-11) -> SMOKE TEST (browser) -> ROLLBACK only in an emergency.
+--     NO psql. All pre-check / body / post-check were run by the user.
+--   - Run order was: PRE-CHECK (C-1..C-8) -> EXECUTION BODY (single transaction) ->
+--     POST-CHECK (P-1..P-11) -> SMOKE TEST (browser). ROLLBACK not used.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-14)
+--     - The user ran the EXECUTION BODY manually (single transaction):
+--         BEGIN;
+--         REVOKE SELECT ON TABLE public.subcontractors FROM anon, authenticated;
+--         DROP POLICY sub_read ON public.subcontractors;
+--         COMMIT;
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [PRE-CHECK RESULT] (C-1..C-8, Supabase SQL Editor, 2026-07-14 -- all passed)
+--     - C-1: subcontractors -- schema public, relkind 'r', RLS true, FORCE RLS false,
+--       owner postgres.
+--     - C-2: anon / authenticated SELECT = true; INSERT / UPDATE / DELETE / TRUNCATE /
+--       REFERENCES / TRIGGER / MAINTAIN = false (both roles).
+--     - C-2b: SELECT ACL -- anon and authenticated each SELECT, is_grantable = false;
+--       NO PUBLIC SELECT ACL; no grant option.
+--     - C-3: policy_count = 1 -- sub_read (PERMISSIVE / {public} / SELECT / qual true /
+--       with_check null).
+--     - C-4: both read RPCs -- list_subcontractors_secure(text) /
+--       list_subcontractors_admin_secure(text), RETURNS TABLE(id uuid, name text),
+--       SECURITY DEFINER = true, STABLE, owner postgres, search_path public, extensions.
+--     - C-4b: read RPC PUBLIC EXECUTE = none; anon / authenticated / postgres /
+--       service_role EXECUTE = true (both functions).
+--     - C-5 / C-5b: export_projects_summary_secure attributes and EXECUTE / ACL match
+--       the baseline (SECURITY DEFINER, STABLE, owner postgres, fixed search_path;
+--       anon / authenticated / postgres / service_role EXECUTE = true; no PUBLIC
+--       EXECUTE; explicit ACL, is_grantable = false).
+--     - C-6: subcontractors -- total = 3, active = 3, inactive = 0, is_active null = 0.
+--     - C-7: front-end application code subcontractors direct read = 0 on all three
+--       screens (index.html / genka-app.html / admin-app.html); repo-confirmed.
+--     - C-8: anon / authenticated write-class privileges (INSERT / UPDATE / DELETE /
+--       TRUNCATE / REFERENCES / TRIGGER / MAINTAIN) all false.
+--
+--   [POST-CHECK RESULT] (P-1..P-11, Supabase SQL Editor + browser, 2026-07-14 -- all
+--    passed)
+--     - P-1: anon / authenticated -- all 8 privileges false (SELECT now revoked).
+--     - P-1b: SELECT ACL -- PUBLIC / anon / authenticated removed (0 rows).
+--     - P-2: policy_count = 0; sub_read_count = 0 (sub_read dropped; no policy remains).
+--     - P-3: RLS true, FORCE RLS false, owner postgres (unchanged).
+--     - P-4: both read RPCs unchanged -- signature, return type (id uuid, name text),
+--       SECURITY DEFINER, STABLE, owner postgres, fixed search_path.
+--     - P-4b: both read RPCs' EXECUTE privileges and ACL unchanged.
+--     - P-5 / P-5b: export_projects_summary_secure unchanged -- attributes, EXECUTE
+--       privileges, and ACL all intact.
+--     - P-6: subcontractors -- total = 3, active = 3, inactive = 0, null = 0
+--       (equals C-6; the body made no data change).
+--     - P-9 (negative): an invalid employee session is rejected with 'Invalid or
+--       expired session' by list_subcontractors_secure; an invalid management session
+--       is rejected with 'Invalid or expired session' by list_subcontractors_admin_secure.
+--
+--   [SMOKE TEST RESULT] (production browser, 2026-07-14; no real session token recorded)
+--     - Employee screen (index.html): 3 subcontractors render;
+--       list_subcontractors_secure = 200; NO /rest/v1/subcontractors direct GET;
+--       no Console errors.
+--     - Cost-management screen (genka-app.html): 3 subcontractors render;
+--       list_subcontractors_admin_secure = 200; NO /rest/v1/subcontractors direct GET;
+--       no Console errors.
+--     - Admin console (admin-app.html): initial load and page navigation normal;
+--       NO /rest/v1/subcontractors direct GET; no Console errors.
+--     - export_projects_summary_secure = 200; CSV / ZIP generation OK; no Console errors.
+--
+--   [OUTCOME]
+--     - anon / authenticated SELECT on public.subcontractors: revoked.
+--     - sub_read policy: dropped (policy_count = 0).
+--     - read RPC 2 (list_subcontractors_secure / list_subcontractors_admin_secure):
+--       kept, unchanged.
+--     - export_projects_summary_secure: kept, unchanged (still reads subcontractors as
+--       SECURITY DEFINER; verified 200 in smoke test).
+--     - RLS / FORCE RLS / owner: unchanged. data: 3 rows (active 3), unchanged by the body.
+--     - subcontractors reads are now unified through the secure read RPCs; Phase
+--       4-F-2B-7 subcontractors read protection is COMPLETE.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [PURPOSE]
 --   - The subcontractors read path has been fully migrated to secure read RPCs:

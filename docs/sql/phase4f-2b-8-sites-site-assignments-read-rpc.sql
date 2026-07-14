@@ -5,15 +5,57 @@
 --    list_site_assignments_admin_secure) so that index.html, admin-app.html and
 --    genka-app.html can stop reading sites / site_assignments directly.
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED 2026-07-14
 --   - This file ONLY adds five new read RPCs (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. All pre-check / body / post-check / smoke are run by the user.
---   - Run this file SECTION BY SECTION in this order:
---     PRE-CHECK (P-1..P-13) -> EXECUTION BODY (single transaction) ->
---     POST-CHECK (POST-1..POST-16) -> SMOKE TEST -> ROLLBACK only if needed.
+--     NO psql. All pre-check / body / post-check / smoke were run by the user.
+--   - Run order was: PRE-CHECK (P-1..P-13) -> EXECUTION BODY (single transaction) ->
+--     POST-CHECK (POST-1..POST-16) -> SMOKE TEST. ROLLBACK not used.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-14)
+--     - The user ran the EXECUTION BODY manually ONCE (single transaction,
+--       BEGIN..COMMIT; five plain CREATE FUNCTION + owner / EXECUTE settings).
+--       Result: Success. No rows returned. The body was NOT re-run afterwards.
+--     - Created: public.list_sites_secure(text),
+--       public.list_site_assignments_secure(text),
+--       public.list_sites_admin_secure(text),
+--       public.get_site_admin_secure(text, uuid),
+--       public.list_site_assignments_admin_secure(text, uuid).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [POST-CHECK RESULT] (POST-1..POST-16, Supabase SQL Editor, 2026-07-14 -- all passed)
+--     - All 5 functions exist once each, no unexpected overload; SECURITY DEFINER,
+--       STABLE, owner postgres, search_path public, extensions; identity args and
+--       RETURNS TABLE columns / types / order as designed (return_ordinal from 1).
+--     - anon / authenticated / service_role / postgres effective EXECUTE = true;
+--       explicit ACL, is_grantable = false; NO PUBLIC EXECUTE.
+--     - sites / site_assignments RLS / FORCE RLS / owner / ACL / table privileges /
+--       policies / counts / integrity all UNCHANGED from the pre-check baseline.
+--     - existing write RPCs (5), sites-internal read RPCs (4) and
+--       _verify_management_session all UNCHANGED (KNOWN PUBLIC EXECUTE left as-is).
+--
+--   [SMOKE TEST RESULT] (2026-07-14; no real token recorded)
+--     - NEGATIVE (Supabase SQL Editor): all 5 RPCs rejected an invalid token with
+--       SQLSTATE P0001 'Invalid or expired session'.
+--     - POSITIVE (production browser DevTools Console, valid sessions):
+--       list_sites_secure = 10 rows;
+--       list_site_assignments_secure = 11 rows; list_sites_admin_secure = 10 rows
+--       with sum(active_assignment_count) = 11; get_site_admin_secure = 1 row for an
+--       existing id; list_site_assignments_admin_secure = 4 rows for a site whose
+--       expected active assignment count is 4 (match).
+--
+--   [OUTCOME]
+--     - The 5 read RPCs are created and verified. This completes ONLY the
+--       "read RPC DB execution" stage of Phase 4-F-2B-8.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [STILL NOT DONE] (separate, later steps)
+--     - front-end migration of the 7 direct reads (index.html / admin-app.html /
+--       genka-app.html) to these RPCs.
+--     - REVOKE SELECT ON sites / site_assignments FROM anon, authenticated (NOT done).
+--     - DROP POLICY sites_read_all / sa_read (NOT done; both still exist).
 --
 -- [PURPOSE]
 --   The three front-ends currently read public.sites / public.site_assignments via

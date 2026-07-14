@@ -4880,3 +4880,111 @@ COMMIT;
 - 本番スモークテストは Browser DevTools（Console / Network）で実施（実 token 値は記録しない）。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-7-subcontractors-direct-read-revoke.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-14 Phase 4-F-2B-8 sites / site_assignments read RPC追加（★実行済み★・read RPCのDB実行工程完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-8 sites / site_assignments read 保護（read RPC 追加 → frontend 移行 → 両テーブル SELECT 同時 REVOKE）の第1工程。
+- 本記録で完了したのは **read RPC の DB 実行工程のみ**。Phase 4-F-2B-8 全体はまだ完了していない（次工程は後述）。
+
+### 目的
+
+- sites / site_assignments の direct read 撤廃の前段として、secure read RPC を5本追加。
+- index.html（従業員画面）・admin-app.html / genka-app.html（管理系画面）が sites / site_assignments を直接読まずに済むようにする。
+- employee session と management session を分離。返却列は実使用列のみ（`select('*')` を再現しない）。
+- この段階では frontend 移行・SELECT REVOKE・policy 削除は未実施（後続工程）。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-2b-8-sites-site-assignments-read-rpc.sql`（STATUS を `EXECUTED 2026-07-14` に更新）。
+- SQL source PR：#123（merge commit `8c3f1a5`）。
+
+### 追加RPC
+
+employee 向け（employee session inline 検証）:
+
+1. `public.list_sites_secure(session_token_input text)`
+   - `RETURNS TABLE (id uuid, name text, company_id uuid, location text, start_date date, end_date date)`
+   - active sites のみ・`ORDER BY name, id`。
+2. `public.list_site_assignments_secure(session_token_input text)`
+   - `RETURNS TABLE (site_id uuid, employee_id uuid)`
+   - active assignment 全件・`ORDER BY site_id, employee_id`。
+
+management 向け（`public._verify_management_session(text)` で検証）:
+
+3. `public.list_sites_admin_secure(session_token_input text)`
+   - `RETURNS TABLE (id uuid, name text, company_id uuid, location text, start_date date, end_date date, active_assignment_count bigint)`
+   - active sites のみ・`active_assignment_count` は各 site の active assignment 数（相関サブクエリ・0件は0・重複行なし）・`ORDER BY name, id`。
+   - admin startApp / pageSites と genka startApp が共用。
+4. `public.get_site_admin_secure(session_token_input text, site_id_input uuid)`
+   - `RETURNS TABLE (id uuid, name text, company_id uuid, location text, start_date date, end_date date)`
+   - id 指定・`is_active` 条件なし（active/inactive 問わず最新値）・不存在は空集合。
+5. `public.list_site_assignments_admin_secure(session_token_input text, site_id_input uuid)`
+   - `RETURNS TABLE (employee_id uuid)`
+   - 指定 site の active employee_id のみ・`ORDER BY employee_id`・site 存在検証なし。
+
+### 認証・権限
+
+5本すべて：
+
+- SECURITY DEFINER = true。
+- STABLE。
+- owner = postgres。
+- `SET search_path = public, extensions`。
+- PUBLIC EXECUTE なし。
+- anon / authenticated / service_role へ明示 EXECUTE 付与（postgres は owner として保持）。
+- is_grantable = false・explicit ACL。
+- employee 向け2本は employee_sessions を inline 検証（token_hash = sha256、expires_at > now()、employees.is_active = true、不正時 `RAISE 'Invalid or expired session'`）。
+- management 向け3本はデータ取得前に `PERFORM public._verify_management_session(session_token_input);`。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-14）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY（plain CREATE FUNCTION 5本・BEGIN/COMMIT 単一トランザクション）を1回だけ手動実行。
+- 結果：Success. No rows returned。
+- 5 RPC すべて作成済み・同名同 signature は各1件。
+- 同じ BODY の再実行なし。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 実行後確認結果（Post-check POST-1〜POST-16・2026-07-14）
+
+- POST-1〜POST-16：全合格。
+- 5 RPC すべて存在・想定外 overload なし・同名同 signature 各1件。
+- SECURITY DEFINER = true / STABLE / owner postgres / search_path = public, extensions。
+- 返却型・返却列・順序は設計どおり（return_ordinal は1起点で正しく表示）。
+- anon / authenticated / service_role / postgres の実効 EXECUTE = true・explicit ACL・is_grantable = false・PUBLIC EXECUTE なし。
+- sites / site_assignments の RLS / FORCE RLS / owner / ACL / table privilege / policy / 件数 / 整合性は実行前 baseline から不変。
+- 既存 site write RPC 5本・sites 内部 read RPC 4本・`_verify_management_session` の属性・EXECUTE ACL は不変（既知の PUBLIC EXECUTE はそのまま・非変更）。
+
+### スモークテスト（2026-07-14・実 token 値は記録しない）
+
+- negative（Supabase SQL Editor）：無効 session で5 RPC すべて `Invalid or expired session`（SQLSTATE P0001）により拒否。
+- positive・有効 employee session（本番 Browser DevTools Console）：`list_sites_secure` = 10件、`list_site_assignments_secure` = 11件。
+- positive・有効 management session（本番 Browser DevTools Console）：`list_sites_admin_secure` = 10件・`active_assignment_count` 合計 = 11、`get_site_admin_secure` = 1件、`list_site_assignments_admin_secure` = 対象 site の期待配属数4件と取得4件が一致。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。DROP 対象は今回作成した5 signature のみ。
+
+### 最終状態（この工程の到達点）
+
+- read RPC 5本の作成と DB 確認・RPC スモークまでは完了（read RPC の DB 実行工程完了）。
+- sites / site_assignments table の anon / authenticated SELECT 権限はまだ維持。
+- `sites_read_all` / `sa_read` policy はまだ存在。
+- frontend はまだ direct read（sites 5件・site_assignments 2件、うち embedded JOIN 1件）。
+- **Phase 4-F-2B-8 全体はまだ完了していない。**
+
+### 次工程（未完了）
+
+- frontend RPC 移行（index.html / admin-app.html / genka-app.html の direct read 7件を上記 RPC へ置換。admin pageSites の embedded JOIN は `active_assignment_count` へ、openSiteModal の id 単件取得は `get_site_admin_secure` へ置換）。
+- 本番 frontend 確認（direct GET 0件化の確認を含む）。
+- sites / site_assignments の SELECT REVOKE（両テーブル同時）。
+- `sites_read_all` / `sa_read` policy DROP（実 DB で確認した read policy のみ）。
+- Phase 4-F-2B-8 の最終クローズ。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- negative スモークテストは Supabase SQL Editor で実施（SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定）。positive スモークテスト（有効 employee / management session）は本番 Browser DevTools Console で実施。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-8-sites-site-assignments-read-rpc.sql` の pre-check / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

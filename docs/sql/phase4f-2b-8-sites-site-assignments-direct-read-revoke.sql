@@ -11,16 +11,119 @@
 --   admin-app.html pageSites embedded JOIN (sites -> site_assignments) means a
 --   partial revoke of either table alone was never a valid intermediate state.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This SQL has NOT been executed against any database.
---   - Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. This file is a prepared script only.
---   - The user runs this file MANUALLY, section by section, in the Supabase SQL
---     Editor: PRE-CHECK (C-1..C-9) -> EXECUTION BODY (single transaction, includes
---     the read-only GUARD) -> POST-CHECK (P-1..P-11) -> SMOKE TEST (browser).
---   - This step comes AFTER the front-end migration (PR #125 merged, production
+-- [STATUS] EXECUTED 2026-07-14
+--   - This file removes exactly TWO privileges (SELECT for anon / authenticated on
+--     public.sites and public.site_assignments) and drops exactly TWO policies
+--     (sites_read_all / sa_read). Nothing else was touched.
+--   - DB execution was done by the user, manually, in the Supabase SQL Editor.
+--     Claude Code CLI performed NO DB connection / NO SQL execution / NO Supabase
+--     CLI / NO psql. All pre-check / guard / body / post-check / smoke were run by
+--     the user.
+--   - Run order was: PRE-CHECK (C-1..C-9) -> EXECUTION BODY (single transaction:
+--     read-only GUARD G-1..G-9 + 2 REVOKE + 2 DROP POLICY) -> post-execution
+--     verification (the actually re-verified items are listed in [POST-CHECK
+--     RESULT]) -- all of the above in the Supabase SQL Editor -> negative /
+--     positive RPC smoke and production path checks (production Browser DevTools
+--     Console). ROLLBACK not used.
+--   - This step came AFTER the front-end migration (PR #125 merged, production
 --     commit e12ffca) and AFTER the production browser smoke passed on all three
 --     screens (see [FRONT-END PRECONDITIONS] / C-9).
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-14)
+--     - The user ran the EXECUTION BODY manually ONCE (single transaction,
+--       BEGIN .. GUARD DO block .. 2 x REVOKE SELECT .. 2 x DROP POLICY .. COMMIT).
+--       Result: Success. No rows returned. The BODY was NOT re-run afterwards and
+--       must NOT be re-run (the guard fails closed on a second run).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--
+--   [PRE-CHECK / GUARD RESULT] (C-1..C-9 + G-1..G-9, 2026-07-14 -- all passed)
+--     - C-1: both tables relkind 'r', RLS true, FORCE RLS false, owner postgres.
+--     - C-2 / C-2b: anon / authenticated SELECT = true, other 7 privileges false
+--       (both tables); ACL anon + authenticated SELECT only, is_grantable = false,
+--       NO PUBLIC SELECT ACL.
+--     - C-3: exactly 6 policies (3 per table); read = sites_read_all / sa_read only;
+--       the 4 kept write policies matched the real-DB baseline
+--       (anon_can_insert_sites PERMISSIVE/{anon}/INSERT/qual null/with_check true;
+--        anon_can_update_sites PERMISSIVE/{anon}/UPDATE/qual true/with_check true;
+--        sa_write PERMISSIVE/{public}/INSERT/qual null/with_check true;
+--        sa_update PERMISSIVE/{public}/UPDATE/qual true/with_check null).
+--     - C-4 / C-4b: all 5 read RPCs present with designed signatures / return types;
+--       SECURITY DEFINER, STABLE, owner postgres, fixed search_path; EXECUTE for
+--       anon / authenticated / postgres / service_role; no PUBLIC EXECUTE.
+--     - C-5 / C-6 / C-7: write RPCs (5), sites-internal read RPCs (4) and
+--       _verify_management_session matched the recorded baseline (KNOWN PUBLIC
+--       EXECUTE left as-is).
+--     - C-8: sites total 20 / active 10 / inactive 10 / null 0; site_assignments
+--       total 30 / active 12 / inactive 18 / null 0. NOTE: site_assignments grew
+--       from the read-rpc-step record (29/11/18) by one active assignment -- a
+--       legitimate data update between the steps, adopted as the invariant for
+--       P-5 and the smoke expectations per this file's baseline rule. Integrity:
+--       all 5 checks = 0.
+--     - C-9: front-end preconditions confirmed (direct read 0 on all three screens,
+--       PR #125 / e12ffca, production smoke passed).
+--     - GUARD G-1..G-9: all passed inside the body transaction (GUARD OK).
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-14. The items below are the
+--     ones ACTUALLY re-verified after the body; no blanket "all P-* passed" claim
+--     is made beyond them.)
+--     - anon / authenticated table privileges: all 8 false on BOTH tables (SELECT
+--       now revoked).
+--     - raw table ACL: {postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}
+--       (both tables); no anon / authenticated / PUBLIC SELECT ACL.
+--     - policies on the two TARGET tables: sites_read_all / sa_read = 0 rows; the
+--       4 kept write policies remain (sites 2 / site_assignments 2) with
+--       definitions matching the C-3 baseline. Policies OUTSIDE the two target
+--       tables were NOT re-queried after the body; the body's only policy DDL was
+--       the two DROPs above, so no other policy was subject to change by scope.
+--     - RLS true / FORCE RLS false / owner postgres (both tables).
+--     - columns: sites 10 cols / site_assignments 5 cols, names / types unchanged.
+--     - constraints: unchanged, all convalidated = true.
+--     - indexes: the 4 index names / definitions were re-checked via pg_indexes
+--       (sites_pkey, idx_sites_category_id, site_assignments_pkey,
+--       site_assignments_site_id_employee_id_key) and match the pre-execution
+--       baseline. indisvalid / indisready were NOT re-queried after the body.
+--     - counts: equal C-8 (sites 20/10/10/0; site_assignments 30/12/18/0);
+--       integrity all 5 checks = 0 (the body made no data change).
+--     - read RPCs (5): attributes (SECURITY DEFINER / STABLE / owner postgres /
+--       fixed search_path) and EXECUTE ACL re-verified, unchanged, no PUBLIC
+--       EXECUTE. Return types were verified in the PRE-CHECK baseline (C-4) and
+--       were NOT re-queried after the body; the body contains no FUNCTION DDL, so
+--       they were not subject to change.
+--     - write RPCs (5), sites-internal read RPCs (4) and _verify_management_session:
+--       attributes + EXECUTE ACL re-verified, unchanged (KNOWN PUBLIC EXECUTE
+--       as-is).
+--
+--   [SMOKE TEST RESULT] (2026-07-14; no real session token recorded)
+--     - NEGATIVE direct read (anon-key REST context): sites direct GET -> 401 /
+--       42501 (permission denied); site_assignments direct GET -> 401 / 42501;
+--       embedded JOIN (sites -> site_assignments) -> 401 / 42501.
+--     - POSITIVE RPC (valid sessions): list_sites_secure = 10 rows;
+--       list_site_assignments_secure = 12 rows; list_sites_admin_secure = 10 rows
+--       with sum(active_assignment_count) = 12; get_site_admin_secure = 1 row for
+--       an existing id; list_site_assignments_admin_secure = 4 rows for a site
+--       whose expected active assignment count is 4 (match; all values equal the
+--       C-8 invariant).
+--     - PRODUCTION path check (all three screens): employee / admin / genka screens
+--       use the secure read RPCs only; /rest/v1/sites and /rest/v1/site_assignments
+--       direct GET = 0.
+--
+--   [OUTCOME]
+--     - anon / authenticated SELECT on public.sites / public.site_assignments:
+--       revoked (both tables, same transaction).
+--     - sites_read_all / sa_read policies: dropped. Kept write policies (4):
+--       unchanged.
+--     - read RPC 5 / write RPC 5 / sites-internal read RPC 4 /
+--       _verify_management_session: kept; attributes + EXECUTE ACL re-verified
+--       unchanged (read RPC return types: pre-check baseline only, no FUNCTION DDL
+--       in the body).
+--     - RLS / FORCE RLS / owner / columns / constraints: unchanged; the 4 index
+--       names / definitions match the pre-execution baseline.
+--       data: unchanged by the body (site_assignments baseline growth to 30/12
+--       predates the body -- see C-8 note).
+--     - sites / site_assignments reads are now unified through the secure read
+--       RPCs; Phase 4-F-2B-8 sites / site_assignments read protection
+--       (read RPC -> front-end migration -> direct read shutdown) is COMPLETE.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [PURPOSE]
 --   - The sites / site_assignments read paths have been fully migrated to secure

@@ -4988,3 +4988,129 @@ management 向け（`public._verify_management_session(text)` で検証）:
 - negative スモークテストは Supabase SQL Editor で実施（SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定）。positive スモークテスト（有効 employee / management session）は本番 Browser DevTools Console で実施。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-8-sites-site-assignments-read-rpc.sql` の pre-check / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-14 Phase 4-F-2B-8 sites / site_assignments direct read撤廃（★実行済み★・Phase 4-F-2B-8 完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-8 sites / site_assignments read 保護（read RPC 追加 → frontend 移行 → 両テーブル SELECT 同時 REVOKE + read policy DROP）の最終工程。
+- 本記録をもって **Phase 4-F-2B-8 は完了**。
+- 両テーブルは admin-app.html pageSites の embedded JOIN（sites → site_assignments）依存があったため、設計どおり単一トランザクションで同時に撤廃した（片テーブルのみの中間状態を作らない）。
+
+### 目的
+
+- frontend 3画面（index.html / admin-app.html / genka-app.html）の read が secure RPC 5本へ移行済みであることを前提に、anon / authenticated の sites・site_assignments direct SELECT を撤廃する。
+- 不要になった permissive read policy（`sites_read_all` / `sa_read`）を削除する。
+- write 系 policy・write RPC・内部参照 RPC・データは一切変更しない。
+
+### Git / PR
+
+- frontend read RPC 移行：PR #125（merge commit `e12ffca`）。本番3画面 browser smoke 合格済み。
+- direct read 撤廃 SQL：`docs/sql/phase4f-2b-8-sites-site-assignments-direct-read-revoke.sql`（PR #126・merge commit `cddb4b5`。STATUS を `EXECUTED 2026-07-14` に更新）。
+- 実行前ガード G-1〜G-9 を BODY と同一トランザクション内に持つ設計（write policy 4本は実 DB baseline との厳格一致判定）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-14）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を1回だけ手動実行（単一トランザクション：read-only GUARD DO ブロック → REVOKE 2件 → DROP POLICY 2件）：
+
+```sql
+BEGIN;
+-- GUARD (G-1..G-9, read-only)
+REVOKE SELECT
+ON TABLE public.sites
+FROM anon, authenticated;
+REVOKE SELECT
+ON TABLE public.site_assignments
+FROM anon, authenticated;
+DROP POLICY sites_read_all
+ON public.sites;
+DROP POLICY sa_read
+ON public.site_assignments;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- BODY の再実行なし（ガードにより再実行は fail-closed で停止する設計。再実行しないこと）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 変更内容
+
+- anon / authenticated の sites SELECT を REVOKE。
+- anon / authenticated の site_assignments SELECT を REVOKE。
+- `sites_read_all` policy（sites）を DROP。
+- `sa_read` policy（site_assignments）を DROP。
+
+### 保持（非変更）
+
+- write policy 4本は実行前 baseline と完全一致のまま維持：
+  - `anon_can_insert_sites`（PERMISSIVE / {anon} / INSERT / qual null / with_check true）
+  - `anon_can_update_sites`（PERMISSIVE / {anon} / UPDATE / qual true / with_check true）
+  - `sa_write`（PERMISSIVE / {public} / INSERT / qual null / with_check true）
+  - `sa_update`（PERMISSIVE / {public} / UPDATE / qual true / with_check null）
+- read RPC 5本（`list_sites_secure` / `list_site_assignments_secure` / `list_sites_admin_secure` / `get_site_admin_secure` / `list_site_assignments_admin_secure`）の属性・EXECUTE ACL は不変（返却型は BODY に FUNCTION DDL がなく変更対象外・実行前 pre-check（C-4）で確認済み）。
+- 既存 write RPC 5本（`create_site_secure` / `update_site_secure` / `deactivate_site_secure` / `set_site_assignment_secure` / `replace_site_assignments_secure`）と sites 内部参照 RPC 4本（`export_projects_summary_secure` / `create_invoice_secure` / `update_invoice_secure` / `create_machine_location_secure`）・`_verify_management_session` の属性・EXECUTE ACL は不変（既知の PUBLIC EXECUTE はそのまま・非変更）。
+- RLS / FORCE RLS / owner / 列 / 制約は不変。index は4本の名称・定義が実行前 baseline と一致。
+- テーブル ACL は postgres / service_role のみ（arwdDxtm）。
+- write 系権限（anon / authenticated の INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）は引き続き全て false。
+
+### 実行前確認結果（Pre-check C-1〜C-9 + GUARD G-1〜G-9・2026-07-14）
+
+- C-1〜C-9・G-1〜G-9：全合格（GUARD OK）。
+- C-1：両テーブルとも relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- C-2 / C-2b：anon / authenticated は SELECT のみ true（他7権限 false）・PUBLIC SELECT ACL なし・grant option なし。
+- C-3：policy は両テーブル計6件のみ。read policy は `sites_read_all` / `sa_read` の2件、write policy 4本は上記 baseline と一致。
+- C-4 / C-4b：read RPC 5本の signature・返却型・SECURITY DEFINER・STABLE・owner・search_path・EXECUTE ACL は設計どおり・PUBLIC EXECUTE なし。
+- C-5 / C-6 / C-7：write RPC 5本・内部参照 RPC 4本・`_verify_management_session` は baseline どおり。
+- C-8：sites total 20 / active 10 / inactive 10 / null 0、site_assignments total 30 / active 12 / inactive 18 / null 0。整合性チェック5項目すべて0。
+  - 注記：site_assignments は read RPC 工程の記録（29 / 11 / 18）から active 1件増。工程間の正当なデータ更新であり、本ファイルの baseline 規則（実行直前の C-8 実測を正とする）に従い C-8 実測値を invariant として採用（P-5・smoke 期待値も C-8 と一致）。
+- C-9：frontend 前提充足（3画面 direct read 0件・PR #125 / `e12ffca`・本番 smoke 合格）。
+
+### 実行後確認結果（2026-07-14・実行後に実際に再確認した項目のみを記載）
+
+- anon / authenticated：両テーブルの8権限すべて false（SELECT 撤廃を確認）。
+- raw table ACL：両テーブルとも `{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}`（anon / authenticated / PUBLIC の SELECT ACL なし）。
+- 対象2テーブルの残存 policy：`sites_read_all` / `sa_read` は0件。残存は維持対象 write policy 4本のみ（sites 2 / site_assignments 2）で、定義は実行前 baseline（C-3）と一致することを直接確認。
+- 対象2テーブル以外の policy：実行後の全 public policy 再照会は行っていない。BODY の policy DDL は `sites_read_all` / `sa_read` の DROP 2件のみであり、対象外 policy への変更処理はスコープ上存在しない。
+- RLS / FORCE RLS / owner：true / false / postgres（両テーブル）。
+- 列：sites 10列 / site_assignments 5列・名称・型とも変更なし。
+- 制約：変更なし・全 convalidated = true。
+- index：pg_indexes で4本（`sites_pkey` / `idx_sites_category_id` / `site_assignments_pkey` / `site_assignments_site_id_employee_id_key`）の名称・定義を確認し、実行前 baseline と一致（indisvalid / indisready の実行後再照会は行っていない）。
+- 件数：C-8 と一致（sites 20/10/10/0・site_assignments 30/12/18/0）・整合性チェック5項目すべて0（BODY による data 変更なし）。
+- read RPC 5本：属性（SECURITY DEFINER / STABLE / owner postgres / search_path 固定）と EXECUTE ACL を再確認し不変・PUBLIC EXECUTE なし。返却型は実行前 pre-check（C-4）で確認済みで、実行後の再照会は行っていない（BODY に FUNCTION DDL がなく変更対象外）。
+- write RPC 5本・内部参照 RPC 4本・`_verify_management_session`：属性・EXECUTE ACL を再確認し不変（既知の PUBLIC EXECUTE はそのまま）。
+
+### direct read negative スモークテスト（2026-07-14・anon key REST 経路）
+
+- sites direct GET → 401 / 42501（permission denied）。
+- site_assignments direct GET → 401 / 42501。
+- embedded JOIN（sites → site_assignments）→ 401 / 42501。
+- ※ Supabase SQL Editor（postgres 実行）や service_role の SELECT は設計上可能であり、本チェックの対象外。
+
+### positive RPC スモークテスト（2026-07-14・実 token 値は記録しない）
+
+- employee session：`list_sites_secure` = 10件、`list_site_assignments_secure` = 12件。
+- management session：`list_sites_admin_secure` = 10件・`active_assignment_count` 合計 = 12、`get_site_admin_secure` = 1件、`list_site_assignments_admin_secure` = 対象 site の期待配属数4件と取得4件が一致。
+- いずれも C-8 invariant（active sites 10 / active assignments 12）と一致。
+
+### 本番経路確認（3画面・2026-07-14）
+
+- 従業員画面（index.html）：secure RPC のみ使用・`/rest/v1/sites`・`/rest/v1/site_assignments` direct GET 0件。
+- 管理画面（admin-app.html）：secure RPC のみ使用・direct GET 0件。
+- 原価画面（genka-app.html）：secure RPC のみ使用・direct GET 0件。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。対象は今回の4変更（GRANT SELECT 2件 + `sites_read_all` / `sa_read` 再作成）に限定。セキュリティを弱める（direct read 再開）ため緊急復旧時のみ使用。
+
+### 最終状態
+
+- sites / site_assignments の読み取りは secure read RPC 5本経由へ一本化。direct read 0件。anon / authenticated の SELECT 権限なし・`sites_read_all` / `sa_read` policy なし。
+- write 経路（write policy 4本・write RPC 5本）と内部参照 RPC は従来どおり。
+- **Phase 4-F-2B-8 sites / site_assignments read 保護工程（read RPC 追加 → frontend 移行 → direct read 撤廃）は完了。**
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- negative direct read スモークテストは anon key の REST 経路（browser）で実施。positive スモークテストは有効 employee / management session で実施。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-8-sites-site-assignments-direct-read-revoke.sql` の pre-check / guard / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

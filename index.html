@@ -995,7 +995,9 @@ async function loadNotice(){
 }
 
 async function loadSubcontractors(){
-  const{data}=await sb.from('subcontractors').select('*').eq('is_active',true).order('name');
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_subcontractors_secure',{session_token_input:token});
+  if(error){console.error('list_subcontractors_secure failed:',error);}
   state.subcontractors=data||[];
   renderSubChips();
 }

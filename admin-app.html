@@ -265,7 +265,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 let currentUser=null;
 let aPin_str='';
-let _sites=[],_employees=[],_subcontractors=[],_machines=[],_unitRates={};
+let _sites=[],_employees=[],_machines=[],_unitRates={};
 let _companies=[];
 let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null,_editMachineId=null;
 let _invoiceTab='active';
@@ -324,10 +324,9 @@ async function startApp(){
   // Phase 4-D-1b：単価（unit_rates）は secure read RPC 経由（direct SELECT を置換）。
   const token=currentUser?.session_token;
   if(!token){sessionStorage.removeItem('adminUser');location.reload();return;}
-  const[sRes,eRes,subRes,urRes,cRes]=await Promise.all([
+  const[sRes,eRes,urRes,cRes]=await Promise.all([
     sb.from('sites').select('*').eq('is_active',true).order('name'),
     sb.from('employees').select('id,name,role,company_id,is_active').eq('is_active',true).order('name'),
-    sb.from('subcontractors').select('*').eq('is_active',true).order('name'),
     sb.rpc('list_unit_rates_secure',{session_token_input:token}),
     sb.rpc('list_companies_secure',{session_token_input:token})
   ]);
@@ -335,7 +334,6 @@ async function startApp(){
   if(cRes.error)console.error('会社取得エラー:',cRes.error);
   _sites=sRes.data||[];
   _employees=eRes.data||[];
-  _subcontractors=subRes.data||[];
   _companies=cRes.data||[];
   (urRes.data||[]).forEach(r=>{_unitRates[`${r.category}:${r.name}`]=r;});
 

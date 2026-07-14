@@ -528,13 +528,14 @@ async function startApp(){
   const token=gCurrentUser?.session_token;
   if(!token){sessionStorage.removeItem('genkaUser');location.reload();return;}
   const[sRes,eRes,erRes,mRes,subRes,urRes]=await Promise.all([
-    sb.from('sites').select('*').eq('is_active',true),
+    sb.rpc('list_sites_admin_secure',{session_token_input:token}),
     sb.from('employees').select('id,name,role,is_active').eq('is_active',true),
     sb.rpc('list_employee_rates_secure',{session_token_input:token}),
     sb.rpc('list_machines_admin_secure',{session_token_input:token,include_inactive_input:false}),
     sb.rpc('list_subcontractors_admin_secure',{session_token_input:token}),
     sb.rpc('list_unit_rates_secure',{session_token_input:token})
   ]);
+  if(sRes.error)console.error('list_sites_admin_secure failed:',sRes.error);
   if(erRes.error)console.error('従業員日給取得エラー:',erRes.error);
   if(mRes.error)console.error('list_machines_admin_secure failed:',mRes.error);
   if(subRes.error)console.error('list_subcontractors_admin_secure failed:',subRes.error);

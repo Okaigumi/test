@@ -325,11 +325,12 @@ async function startApp(){
   const token=currentUser?.session_token;
   if(!token){sessionStorage.removeItem('adminUser');location.reload();return;}
   const[sRes,eRes,urRes,cRes]=await Promise.all([
-    sb.from('sites').select('*').eq('is_active',true).order('name'),
+    sb.rpc('list_sites_admin_secure',{session_token_input:token}),
     sb.from('employees').select('id,name,role,company_id,is_active').eq('is_active',true).order('name'),
     sb.rpc('list_unit_rates_secure',{session_token_input:token}),
     sb.rpc('list_companies_secure',{session_token_input:token})
   ]);
+  if(sRes.error)console.error('list_sites_admin_secure failed:',sRes.error);
   if(urRes.error)console.error('単価取得エラー:',urRes.error);
   if(cRes.error)console.error('会社取得エラー:',cRes.error);
   _sites=sRes.data||[];
@@ -370,7 +371,9 @@ async function pageSites(){
   document.getElementById('topbarActions').innerHTML=`<button class="btn btn-primary" onclick="openSiteModal()">＋ 現場を追加</button>`;
 
   // Supabaseから最新データを取得してキャッシュ更新
-  const{data}=await sb.from('sites').select('*,site_assignments(employee_id,is_active)').eq('is_active',true).order('name');
+  const token=currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_sites_admin_secure',{session_token_input:token});
+  if(error)console.error('list_sites_admin_secure failed:',error);
   _sites=(data||[]);
 
   const html=`
@@ -378,7 +381,7 @@ async function pageSites(){
       <div class="stat-card"><div class="stat-label">総現場数</div><div class="stat-val blue">${_sites.length}</div></div>
       <div class="stat-card"><div class="stat-label">工期設定済</div><div class="stat-val green">${_sites.filter(s=>s.start_date).length}</div></div>
       <div class="stat-card"><div class="stat-label">住所設定済</div><div class="stat-val orange">${_sites.filter(s=>s.location).length}</div></div>
-      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>s.site_assignments?.filter(a=>a.is_active).length>0).length}</div></div>
+      <div class="stat-card"><div class="stat-label">配属あり</div><div class="stat-val purple">${_sites.filter(s=>Number(s.active_assignment_count)>0).length}</div></div>
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">現場一覧</div></div>
@@ -390,7 +393,7 @@ async function pageSites(){
             <td>${s.company_id?companyName(s.company_id):'<span style="color:var(--orange);">未設定</span>'}</td>
             <td><div style="color:${s.location?'var(--text)':'var(--text3)'};">${escapeHtml(s.location||'未設定')}</div></td>
             <td><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${s.start_date&&s.end_date?s.start_date+' 〜 '+s.end_date:s.start_date?s.start_date+' 〜':'未設定'}</div></td>
-            <td><span class="badge badge-blue">${s.site_assignments?.filter(a=>a.is_active).length||0}名</span></td>
+            <td><span class="badge badge-blue">${Number(s.active_assignment_count)||0}名</span></td>
             <td>
               <button class="btn btn-secondary btn-sm" onclick="openSiteModal('${s.id}')">編集</button>
               <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteSite('${s.id}')">無効化</button>
@@ -404,12 +407,15 @@ async function pageSites(){
 
 async function openSiteModal(siteId=null){
   // 最新データをSupabaseから取得
+  const token=currentUser?.session_token;
   let s=null;
   if(siteId){
-    const{data}=await sb.from('sites').select('*').eq('id',siteId).single();
+    const{data,error}=await sb.rpc('get_site_admin_secure',{session_token_input:token,site_id_input:siteId}).single();
+    if(error)console.error('get_site_admin_secure failed:',error);
     s=data;
   }
-  const{data:assigns}=siteId?await sb.from('site_assignments').select('employee_id').eq('site_id',siteId).eq('is_active',true):{data:[]};
+  const{data:assigns,error:assignsError}=siteId?await sb.rpc('list_site_assignments_admin_secure',{session_token_input:token,site_id_input:siteId}):{data:[]};
+  if(assignsError)console.error('list_site_assignments_admin_secure failed:',assignsError);
   const assignedIds=(assigns||[]).map(a=>a.employee_id);
 
   const empChecks=_employees.filter(e=>e.role!=='admin').map(e=>`

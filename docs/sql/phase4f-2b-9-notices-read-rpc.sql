@@ -3,14 +3,72 @@
 --   (list_notices_secure) so that index.html can stop reading
 --   public.notices directly (loadNotice).
 -- ============================================================
--- [STATUS] NOT EXECUTED
+-- [STATUS] EXECUTED 2026-07-16
 --   - This file ONLY adds ONE new read RPC (additive). It does NOT touch any table
 --     grant, RLS, policy, existing routine, or the front-end.
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. All pre-check / body / post-check / smoke are run by the user.
---   - Intended run order: PRE-CHECK (P-1..P-9) -> EXECUTION BODY (single transaction) ->
---     POST-CHECK (POST-1..POST-16) -> SMOKE TEST.
+--     NO psql. All pre-check / body / post-check / smoke were run by the user.
+--   - Run order was: PRE-CHECK -> EXECUTION BODY (single transaction) -> POST-CHECK ->
+--     SMOKE TEST. ROLLBACK not used. (Only the confirmed POST-CHECK items are recorded
+--     under [POST-CHECK RESULT] below; not every POST-1..POST-16 is asserted as executed.)
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-16)
+--     - The user ran the EXECUTION BODY manually ONCE (single transaction,
+--       BEGIN..COMMIT; one plain CREATE FUNCTION + owner / EXECUTE settings).
+--       Result: Success. No rows returned. The body was NOT re-run afterwards.
+--     - Created: public.list_notices_secure(text).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - The EXECUTION BODY must NOT be re-run. If re-creation is ever needed, prepare a
+--       separate, independently reviewed dedicated SQL (do NOT re-run this BODY).
+--
+--   [PRE-CHECK RESULT] (P-1..P-9 / P-8b, Supabase SQL Editor, 2026-07-16 -- matched C-1..C-12)
+--     - notices: relkind 'r', RLS true, FORCE RLS false, owner postgres.
+--     - anon / authenticated: SELECT = true, other 7 privileges = false; raw ACL
+--       {postgres=arwdDxtm, anon=r, authenticated=r, service_role=arwdDxtm}; no PUBLIC,
+--       no grant option; column-level ACL 0 rows.
+--     - notices columns 9 / constraints 2 (notices_pkey, notices_attachment_type_check,
+--       both validated) / index notices_pkey only (valid/ready/unique/primary).
+--     - policy notices_read_all: PERMISSIVE, {public}, SELECT, qual true, with_check null.
+--     - counts: total 4 / active 1 / inactive 3 / null 0.
+--     - list_notices_secure did NOT pre-exist (P-8 = 0 rows) -> plain CREATE safe.
+--     - employee-session verification columns present; existing notices RPCs (5) baseline
+--       recorded (SECURITY DEFINER / VOLATILE / owner postgres / search_path; KNOWN PUBLIC
+--       EXECUTE present).
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-16 -- only the checks actually run
+--    and confirmed are recorded below; NOT asserting every POST-1..POST-16 was executed)
+--     - list_notices_secure attributes / return type: SECURITY DEFINER = true, STABLE,
+--       owner postgres, search_path public, extensions; identity arg
+--       "session_token_input text"; RETURNS TABLE content text / attachment_url text /
+--       attachment_type text / attachment_name text.
+--     - list_notices_secure EXECUTE ACL: anon / authenticated / postgres / service_role
+--       EXECUTE, is_grantable = false; NO PUBLIC EXECUTE.
+--     - notices anon / authenticated table privileges UNCHANGED (SELECT only, other 7 false).
+--     - policy notices_read_all UNCHANGED.
+--     - notices counts UNCHANGED (total 4 / active 1 / inactive 3 / null 0).
+--     - existing notices RPCs (5) attributes / return type UNCHANGED.
+--     - existing notices RPCs (5) EXECUTE ACL UNCHANGED (KNOWN PUBLIC EXECUTE left as-is,
+--       as baseline).
+--
+--   [SMOKE TEST RESULT] (2026-07-16; no real token recorded)
+--     - NEGATIVE (Supabase SQL Editor): list_notices_secure rejected an invalid token with
+--       SQLSTATE P0001 'Invalid or expired session'; the DO block returned
+--       "Success. No rows returned" (no unexpected success).
+--     - POSITIVE (valid employee session): status 200, error null, count = 1 (matches the
+--       active notices count 1); returned columns exactly content / attachment_url /
+--       attachment_type / attachment_name (only_expected_columns = true).
+--
+--   [OUTCOME]
+--     - list_notices_secure is created and verified. This completes ONLY the
+--       "read RPC DB execution" stage (2B-9-a) of Phase 4-F-2B-9.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [STILL NOT DONE] (Phase 4-F-2B-9 is NOT complete; separate, later steps)
+--     - 2B-9-b: front-end migration of index.html loadNotice() (still a direct read).
+--     - 2B-9-c: REVOKE SELECT ON notices FROM anon, authenticated (NOT done; SELECT kept)
+--       and DROP POLICY notices_read_all (NOT done; policy still exists).
+--     - Next step is 2B-9-b (front-end migration).
 --
 -- [PURPOSE]
 --   index.html currently reads public.notices via a direct SELECT (the only direct read):

@@ -5114,3 +5114,100 @@ COMMIT;
 - negative direct read スモークテストは anon key の REST 経路（browser）で実施。positive スモークテストは有効 employee / management session で実施。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-8-sites-site-assignments-direct-read-revoke.sql` の pre-check / guard / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-16 Phase 4-F-2B-9-a notices read RPC追加（★実行済み★・read RPCのDB実行工程完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-9 notices read 保護（read RPC 追加 → frontend 移行 → SELECT REVOKE + read policy DROP）の第1工程（2B-9-a）。
+- 本記録で完了したのは **read RPC の DB 実行工程のみ**。**Phase 4-F-2B-9 全体はまだ完了していない**（次工程は後述）。
+
+### 目的
+
+- index.html `loadNotice()` の direct read（`sb.from('notices').select('*').eq('is_active',true).order('created_at',{ascending:false})`）撤廃の前段として、secure read RPC を1本追加。
+- 従業員画面が notices を直接読まずに済むようにする。返却列は実表示列4つのみ（`select('*')` を再現しない）。
+- この段階では frontend 移行・SELECT REVOKE・policy 削除は未実施（後続工程）。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-2b-9-notices-read-rpc.sql`（STATUS を `EXECUTED 2026-07-16` に更新）。
+- SQL source PR：#128（merge commit `683e2cd`・その親 `8c34ee2`「add notices read RPC」がレビュー対象 commit）。
+
+### 追加RPC
+
+employee 向け（employee session inline 検証）:
+
+1. `public.list_notices_secure(session_token_input text)`
+   - `RETURNS TABLE (content text, attachment_url text, attachment_type text, attachment_name text)`
+   - `notices.is_active = true` のみ・`ORDER BY created_at DESC, id`・LIMIT なし。
+   - 返すのは表示に使う4列のみ（id / is_active / created_at / attachment_path / updated_at は返さない）。
+
+### 認証・権限
+
+- SECURITY DEFINER = true。
+- STABLE。
+- owner = postgres。
+- `SET search_path = public, extensions`。
+- argument：`session_token_input text`。
+- PUBLIC EXECUTE なし。
+- anon / authenticated / service_role へ明示 EXECUTE 付与（postgres は owner として保持）。
+- is_grantable = false・explicit ACL。
+- employee_sessions を inline 検証（token_hash = sha256、expires_at > now()、employees.is_active = true、不正時 `RAISE 'Invalid or expired session'`）。既存 2B系（list_sites_secure 等）と同一パターン。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-16）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY（plain CREATE FUNCTION 1本・BEGIN/COMMIT 単一トランザクション）を1回だけ手動実行。
+- 結果：Success. No rows returned。
+- 同じ BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**。再作成が必要な場合は、別途レビュー済みの専用 SQL を用意する（この BODY は再実行しない）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。
+
+### 実行前確認結果（Pre-check P-1〜P-9 / P-8b・2026-07-16）
+
+- notices：relkind 'r' / RLS true / FORCE RLS false / owner postgres。
+- anon / authenticated：SELECT = true・他7権限 false／raw ACL {postgres=arwdDxtm, anon=r, authenticated=r, service_role=arwdDxtm}・PUBLIC なし・grant option なし／列単位 ACL 0件。
+- columns 9 / constraints 2（notices_pkey・notices_attachment_type_check、両 validated）/ index は notices_pkey のみ（valid/ready/unique/primary）。
+- policy `notices_read_all`：PERMISSIVE / {public} / SELECT / qual true / with_check null。
+- counts：total 4 / active 1 / inactive 3 / null 0。
+- `list_notices_secure` は事前 0件（P-8）→ plain CREATE 安全。
+- employee session 検証列そろい・既存 notices RPC 5本 baseline 記録（SECURITY DEFINER / VOLATILE / owner postgres / search_path・既知 PUBLIC EXECUTE あり）。
+
+### 実行後確認結果（Post-check・2026-07-16・実際に確認した項目のみ）
+
+- `list_notices_secure` の属性・返却型：SECURITY DEFINER = true / STABLE / owner postgres / search_path = public, extensions／identity arg `session_token_input text`／RETURNS TABLE（content text / attachment_url text / attachment_type text / attachment_name text）。
+- `list_notices_secure` の EXECUTE ACL：anon / authenticated / postgres / service_role へ EXECUTE・is_grantable = false・PUBLIC EXECUTE なし。
+- notices の anon / authenticated table privilege は不変（SELECT のみ true・他7権限 false）。
+- policy `notices_read_all` は不変。
+- notices 件数は不変（total 4 / active 1 / inactive 3 / null 0）。
+- 既存 notices RPC 5本（`list_notices_admin_secure` / `create_notice_secure` / `update_notice_secure` / `update_notice_attachment_secure` / `delete_notice_attachment_secure`）の属性・返却型は不変。
+- 既存 notices RPC 5本の EXECUTE ACL は不変（既知の PUBLIC EXECUTE はそのまま・既知 baseline として維持）。
+- ※ 上記の実際に実行・確認した項目のみを記録。SQL ファイルの POST-1〜POST-16 を全件実行した証拠がないため「POST-1〜POST-16 全件合格」とは記録しない。
+
+### スモークテスト（2026-07-16・実 token 値は記録しない）
+
+- negative（Supabase SQL Editor）：無効 session で `list_notices_secure` が `Invalid or expired session`（SQLSTATE P0001）により拒否。DO ブロック実行結果は「Success. No rows returned」・unexpected success なし。
+- positive・有効 employee session：status 200・error null・count 1（active 件数1と一致）・返却列は content / attachment_url / attachment_type / attachment_name のみ（only_expected_columns = true）。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。DROP 対象は今回作成した `public.list_notices_secure(text)` 1本のみ。
+
+### 最終状態（この工程の到達点）
+
+- read RPC 1本の作成と DB 確認・RPC スモークまで完了（read RPC の DB 実行工程完了）。
+- notices table の anon / authenticated SELECT 権限はまだ維持。
+- policy `notices_read_all` はまだ存在。
+- 既存 notices RPC 5本の PUBLIC EXECUTE も既知 baseline として維持（今回非変更）。
+- frontend（index.html `loadNotice()`）はまだ direct read のまま。
+- **Phase 4-F-2B-9 全体はまだ完了していない。**
+
+### 次工程（未完了）
+
+- **2B-9-b：frontend 移行**（index.html `loadNotice()` の direct read 1箇所を `list_notices_secure` へ置換）→ Preview / 本番 smoke（direct GET 0件化の確認を含む）。
+- 2B-9-c：notices の SELECT REVOKE + `notices_read_all` policy DROP（実 DB で確認した read policy のみ）→ post-check / negative・positive smoke → Phase 4-F-2B-9 の最終クローズ。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- negative スモークテストは Supabase SQL Editor で実施（SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定）。positive スモークテストは有効 employee session で実施。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-9-notices-read-rpc.sql` の pre-check / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

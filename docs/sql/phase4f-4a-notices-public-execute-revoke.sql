@@ -16,24 +16,80 @@
 --   Same technique as phase4f-2b-6-machine-location-write-rpc-public-execute-revoke.sql
 --   (EXECUTED 2026-07-13), extended to 5 functions with an in-transaction GUARD.
 -- ============================================================
--- [STATUS] NOT EXECUTED (as of this file's creation)
---   - This file removes exactly FIVE privileges: EXECUTE for PUBLIC on each of the 5
---     notices RPCs listed above. Nothing else is touched.
---   - DB execution is done by the USER, manually, in the Supabase SQL Editor.
---     Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. All pre-check / guard / body / post-check / smoke are run by the user.
---   - The EXECUTION BODY is reviewed FIRST and then run exactly ONCE. As of this file's
---     creation it has NOT been run.
---   - Intended run order: PRE-CHECK (C-1..C-4) -> EXECUTION BODY (single transaction:
---     read-only GUARD G-0..G-3 + 5 REVOKE EXECUTE FROM PUBLIC) -> POST-CHECK (P-1..P-5)
---     -> SMOKE TEST (admin read-only + employee regression + invalid-session negative).
---     ROLLBACK is reference-only.
---   - SCOPE is PUBLIC EXECUTE on these 5 RPCs ONLY. anon / authenticated / postgres /
---     service_role EXECUTE is KEPT. No other RPC's PUBLIC EXECUTE is touched here
---     (out of scope; there are other KNOWN PUBLIC EXECUTE RPCs recorded elsewhere).
---   - Phase 4-F-4-a is NOT complete on the strength of this file alone (it completes
---     only after the body is executed, post-checked, smoke-tested and recorded in a
---     separate docs step). Phase 4-F as a whole is NOT complete either.
+-- [STATUS] EXECUTED 2026-07-16
+--   - This file removed exactly FIVE privileges: EXECUTE for PUBLIC on each of the 5
+--     notices RPCs listed above. Nothing else was touched.
+--   - DB execution was done by the USER, manually, in the Supabase SQL Editor.
+--     Claude Code CLI performed NO DB connection / NO SQL execution / NO Supabase CLI /
+--     NO psql. All pre-check / guard / body / post-check / smoke were run by the user.
+--   - Run order was: PRE-CHECK (C-1..C-4, read-only, run individually) -> EXECUTION
+--     BODY (single transaction: read-only GUARD G-0..G-3 + 5 REVOKE EXECUTE FROM PUBLIC)
+--     -> POST-CHECK (P-1..P-5) -> SMOKE TEST (admin read-only + employee regression +
+--     invalid-session negative). ROLLBACK not used.
+--   - SCOPE was PUBLIC EXECUTE on these 5 RPCs ONLY. anon / authenticated / postgres /
+--     service_role EXECUTE was KEPT. No other RPC's PUBLIC EXECUTE was touched.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-16)
+--     - The user ran the EXECUTION BODY manually ONCE (single transaction:
+--       BEGIN .. read-only GUARD DO block (G-0..G-3) .. 5 x REVOKE EXECUTE FROM PUBLIC
+--       .. COMMIT). Result: Success. No rows returned.
+--     - The BODY was NOT re-run afterwards and must NOT be re-run (the guard fails
+--       closed on a second run: G-3 sees PUBLIC already revoked and aborts).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI. ROLLBACK not used.
+--
+--   [PRE-CHECK RESULT] (C-1..C-4 + C-1b / C-3b, 2026-07-16 -- all passed; GUARD G-0..G-3 OK)
+--     - C-1: all 5 targets present; SECURITY DEFINER = true, VOLATILE ('v'), owner
+--       postgres, search_path = public, extensions; identity args match each signature;
+--       RETURNS TABLE = 9 columns (id / content / is_active / created_at /
+--       attachment_url / attachment_path / attachment_type / attachment_name /
+--       updated_at) for all 5.
+--     - C-1b: 5 target names, each overloads = 1; no unexpected overload.
+--     - C-2: 5 RPC x 4 roles = 20 rows; anon / authenticated / postgres / service_role
+--       can_execute = true on every target.
+--     - C-3: 5 RPC x 5 grantees = 25 rows; PUBLIC / anon / authenticated / postgres /
+--       service_role each present with EXECUTE, is_grantable = false; no unexpected grantee.
+--     - C-3b: per RPC execute_acl_count = 5; PUBLIC / anon / authenticated / postgres /
+--       service_role each = 1; unexpected_cnt = 0; grantable_cnt = 0.
+--     - C-4: out-of-scope list_notices_secure(text) has anon / authenticated / postgres /
+--       service_role explicit EXECUTE and NO PUBLIC (not a target).
+--
+--   [POST-CHECK RESULT] (P-1..P-5 + P-2b / P-2c / P-3b, 2026-07-16 -- all passed)
+--     - P-1: 5 RPC x 4 roles = 20 rows; anon / authenticated / postgres / service_role
+--       can_execute = true (unchanged).
+--     - P-2 / P-2b / P-2c: per RPC execute_acl_count = 4; public_cnt = 0 (PUBLIC removed);
+--       anon / authenticated / postgres / service_role each = 1; unexpected_cnt = 0;
+--       grantable_cnt = 0.
+--     - P-3: attributes / identity args / 9-column return type unchanged from C-1.
+--     - P-3b: 5 target names, each overloads = 1 (unchanged).
+--     - P-4: out-of-scope list_notices_secure(text) ACL unchanged (anon / authenticated /
+--       postgres / service_role EXECUTE kept; NO PUBLIC).
+--     - P-5a: notices anon / authenticated all 8 table privileges false.
+--     - P-5b: notices policy_count = 0. P-5c: relkind 'r', RLS true, FORCE RLS false,
+--       owner postgres. P-5d: notices total 4 / active 1 / inactive 3 / null 0 (no DML).
+--
+--   [SMOKE TEST RESULT] (2026-07-16; no real session token recorded)
+--     - NEGATIVE invalid session: list_notices_admin_secure('<invalid>') raised SQLSTATE
+--       P0001 'Invalid or expired admin session'; no data change.
+--     - ADMIN screen (admin-app.html, read-only): admin login OK; notices management
+--       screen + list (4) render; list_notices_admin_secure POST 200; NO /rest/v1/notices
+--       direct GET; create / update / delete NOT invoked.
+--     - EMPLOYEE screen (index.html) regression: employee login OK; notice renders;
+--       list_notices_secure POST 200; NO /rest/v1/notices direct GET; no Console errors.
+--
+--   [OUTCOME]
+--     - PUBLIC EXECUTE on the 5 notices RPCs: revoked. anon / authenticated / postgres /
+--       service_role EXECUTE: KEPT (unchanged). Function definitions / attributes /
+--       return types: unchanged (no FUNCTION DDL in the body).
+--     - notices table privileges / policies (0) / RLS / FORCE RLS / owner / data
+--       (total 4 / active 1 / inactive 3 / 0): unchanged. list_notices_secure and other
+--       objects: unchanged.
+--     - Write smoke (a real create / update / delete) was NOT performed on purpose; the
+--       write path is proven intact by P-1 / P-2c (per-role EXECUTE) + P-3 (definition /
+--       attributes) + the negative smoke (session verification still enforced).
+--     - The Phase 4-F-4-a real-DB work is DONE. Full closure is recorded once the record
+--       PR is merged to main; until then it is NOT treated as fully closed. Phase 4-F as
+--       a whole and other steps are NOT complete.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [PURPOSE]
 --   - Remove the redundant PUBLIC EXECUTE grant on the 5 notices admin/write RPCs. The

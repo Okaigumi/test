@@ -5330,3 +5330,114 @@ COMMIT;
 - negative direct read スモークテストは anon / authenticated 相当の direct SELECT 拒否確認（DO ブロック）で実施。positive スモークテストは有効 employee / management session で実施。invalid session negative は SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-9-notices-direct-read-revoke.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-16 Phase 4-F-4-a notices 既存5本 RPC PUBLIC EXECUTE 撤廃（★実行済み★）
+
+### 位置づけ
+
+- Phase 4-F-2B-9 完了後の全体セキュリティ再棚卸しで特定した最小・安全な次工程（4-F-4-a）。
+- notices 既存 5 RPC に残っていた既定の PUBLIC EXECUTE（KNOWN baseline）を撤廃し、最小権限化する。2B-6 side step（`create_machine_location_secure` の PUBLIC EXECUTE 撤廃）と同一手法を 5 関数へ拡張。
+- 本記録の PR が main へ merge されるまでは工程の完全クローズ扱いにしない。**Phase 4-F 全体は未完了。**
+
+### 発見経緯
+
+- Phase 4-F-2B-9 の pre/post-check で、notices 既存 5 RPC は作成時に `GRANT EXECUTE TO anon, authenticated` のみ実施し `REVOKE EXECUTE FROM PUBLIC` を行っていないため PUBLIC EXECUTE が残存していると記録（KNOWN, INTENTIONALLY UNCHANGED baseline）。
+- 各 RPC は内部で admin session を検証（`admin_sessions.token_hash` 照合 + `expires_at > now()`、不正時 `RAISE 'Invalid or expired admin session'`）しており認証バイパスは確認されていないが、PUBLIC EXECUTE は不要な過剰権限のため撤廃。
+
+### 対象（5 RPC・正確な signature）
+
+1. `public.list_notices_admin_secure(text)`
+2. `public.create_notice_secure(text, text, boolean)`
+3. `public.update_notice_secure(text, uuid, text, boolean)`
+4. `public.update_notice_attachment_secure(text, uuid, text, text, text, text)`
+5. `public.delete_notice_attachment_secure(text, uuid)`
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-4a-notices-public-execute-revoke.sql`（PR #133 merge。STATUS を `EXECUTED 2026-07-16` に更新）。
+- 実行前ガード G-0〜G-3 を BODY と同一トランザクション内に持つ設計（5 本すべての baseline を厳格一致判定・PUBLIC 既撤廃を検知して fail-closed）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-16）
+
+- ユーザーが PRE-CHECK を個別に read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：read-only GUARD DO ブロック（G-0〜G-3）→ REVOKE EXECUTE FROM PUBLIC 5件 → COMMIT）：
+
+```sql
+BEGIN;
+-- GUARD (G-0..G-3, read-only)
+REVOKE EXECUTE ON FUNCTION public.list_notices_admin_secure(text)                                     FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_notice_secure(text, text, boolean)                           FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.update_notice_secure(text, uuid, text, boolean)                     FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.update_notice_attachment_secure(text, uuid, text, text, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.delete_notice_attachment_secure(text, uuid)                         FROM PUBLIC;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（ガード G-3 が「PUBLIC 既撤廃」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。ROLLBACK 未使用。
+
+### 変更内容
+
+- 5 RPC すべてに対し PUBLIC EXECUTE のみを REVOKE。
+
+### 保持（非変更）
+
+- anon / authenticated / postgres / service_role の明示 EXECUTE は維持（各 RPC）。
+- 関数定義・属性（SECURITY DEFINER / VOLATILE / owner postgres / search_path = public, extensions / identity arguments / 9列返却型）は不変（BODY に FUNCTION DDL なし）。
+- 対象外 `public.list_notices_secure(text)` の ACL は不変（anon / authenticated / postgres / service_role EXECUTE 維持・PUBLIC なし）。
+- notices table privilege（anon / authenticated の8権限すべて false）・policy（0件）・RLS（true）/ FORCE RLS（false）/ owner（postgres）・データ（total 4 / active 1 / inactive 3 / null 0）は不変。
+- frontend 変更なし。
+
+### 実行前確認結果（Pre-check C-1〜C-4 + C-1b / C-3b・2026-07-16）
+
+- C-1〜C-4 + C-1b / C-3b：全合格（GUARD G-0〜G-3 OK）。
+- C-1：5 本存在・SECURITY DEFINER=true・VOLATILE（v）・owner postgres・search_path=public, extensions・identity 一致・9列返却型。
+- C-1b：対象名5件・各 overload=1・想定外 overload なし。
+- C-2：5 RPC × 4ロール=20行・全 can_execute=true。
+- C-3：5 RPC × 5 grantee=25行・PUBLIC / anon / authenticated / postgres / service_role 各1件・全 EXECUTE・is_grantable=false・想定外 grantee なし。
+- C-3b：各 RPC execute_acl_count=5・5 grantee 各1件・unexpected=0・grantable=0。
+- C-4：対象外 `list_notices_secure(text)` は anon / authenticated / postgres / service_role の明示 EXECUTE あり・PUBLIC なし。
+
+### 実行後確認結果（Post-check P-1〜P-5 + P-2b / P-2c / P-3b・2026-07-16）
+
+- P-1〜P-5 + P-2b / P-2c / P-3b：全合格。
+- P-1：5 RPC × 4ロール=20行・全 can_execute=true（維持）。
+- P-2 / P-2b / P-2c：各 RPC execute_acl_count=4・public_cnt=0（PUBLIC 撤廃）・anon / authenticated / postgres / service_role 各1件・unexpected=0・grantable=0。
+- P-3：SECURITY DEFINER=true・volatility=v・owner postgres・search_path=public, extensions・identity 不変・9列返却型不変。
+- P-3b：対象名5件・各 overload=1。
+- P-4：対象外 `list_notices_secure(text)` の ACL 不変（明示 EXECUTE 維持・PUBLIC なし）。
+- P-5a：notices anon / authenticated の8権限（SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）すべて false。
+- P-5b：notices policy_count=0。
+- P-5c：relkind=r・RLS enabled=true・FORCE RLS=false・owner=postgres。
+- P-5d：total 4 / active 1 / inactive 3 / null_active 0。
+
+### negative スモークテスト（2026-07-16・実 token 値は記録しない）
+
+- `select * from public.list_notices_admin_secure('<invalid session>');` → ERROR P0001 `Invalid or expired admin session`・データ変更なし。
+
+### 本番スモークテスト（2026-07-16）
+
+- 管理画面：管理者ログイン成功・お知らせ管理画面表示正常・一覧4件表示・`list_notices_admin_secure` POST 200・`/rest/v1/notices` direct GET なし・作成/更新/削除は未実施（read-only 確認）。
+- 従業員画面：従業員ログイン成功・お知らせ表示正常・`list_notices_secure` POST 200・`/rest/v1/notices` direct GET なし・Console エラーなし。
+
+### write RPC スモーク方針
+
+- 実データを create / update / delete する write smoke は意図的に未実施（不要な notices データ変更を作らない）。write path 健全性は P-1 / P-2c（ロール別 EXECUTE 維持）+ P-3（属性・定義不変）+ negative smoke（session 検証が引き続き有効）で担保。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ）。対象は 5 RPC への PUBLIC EXECUTE 再 GRANT のみに限定。PUBLIC 再付与は最小権限を再び緩めるため緊急復旧時のみ使用・別途明示承認が必要。
+
+### 最終状態
+
+- notices 既存 5 RPC の PUBLIC EXECUTE は撤廃済み。anon / authenticated / postgres / service_role の明示 EXECUTE は維持され、admin-app.html の呼び出し経路は不変。
+- 対象外 `list_notices_secure(text)`・notices テーブル権限 / policy / RLS / owner / データは不変。
+- Phase 4-F-4-a の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- PRE-CHECK は個別に read-only 実行、GUARD+BODY は1回のみ実行。negative smoke は SQLSTATE P0001 かつ `Invalid or expired admin session` を厳格判定。本番 smoke は有効 admin / employee session で実施。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-4a-notices-public-execute-revoke.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

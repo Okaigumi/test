@@ -975,7 +975,9 @@ async function loadMaterials(){
   state.materials=data||[];renderMaterialRows();renderMaster();
 }
 async function loadNotice(){
-  const{data}=await sb.from('notices').select('*').eq('is_active',true).order('created_at',{ascending:false});
+  const token=state.currentUser?.session_token;
+  const{data,error}=await sb.rpc('list_notices_secure',{session_token_input:token});
+  if(error){console.error('list_notices_secure failed:',error);}
   if(data&&data.length>0){
     document.getElementById('noticeText').innerHTML=data.map((n,i)=>{
       const isLast=i===data.length-1;

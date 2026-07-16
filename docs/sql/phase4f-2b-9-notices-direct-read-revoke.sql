@@ -9,22 +9,95 @@
 --   matching phase4f-2b-7-subcontractors-direct-read-revoke.sql and
 --   phase4f-2b-8-sites-site-assignments-direct-read-revoke.sql.
 -- ============================================================
--- [STATUS] NOT EXECUTED (as of this file's creation)
+-- [STATUS] EXECUTED 2026-07-16
 --   - This file removes exactly TWO privileges (SELECT for anon / authenticated on
 --     public.notices) and drops exactly ONE policy (notices_read_all). Nothing else
---     is touched.
---   - DB execution is done by the USER, manually, in the Supabase SQL Editor.
---     Claude Code CLI performs NO DB connection / NO SQL execution / NO Supabase CLI /
---     NO psql. All pre-check / guard / body / post-check / smoke are run by the user.
---   - The EXECUTION BODY is reviewed FIRST and then run exactly ONCE. As of this
---     file's creation it has NOT been run (STATUS above stays NOT EXECUTED until the
---     user records the execution result in a separate docs step).
---   - Intended run order: PRE-CHECK (C-1..C-8) -> EXECUTION BODY (single transaction:
+--     was touched.
+--   - DB execution was done by the USER, manually, in the Supabase SQL Editor.
+--     Claude Code CLI performed NO DB connection / NO SQL execution / NO Supabase CLI /
+--     NO psql. All pre-check / guard / body / post-check / smoke were run by the user.
+--   - Run order was: PRE-CHECK (C-1..C-7) -> EXECUTION BODY (single transaction:
 --     read-only GUARD G-1..G-6 + 2 REVOKE + 1 DROP POLICY) -> POST-CHECK (P-1..P-9) ->
---     SMOKE TEST (employee + admin, read-only). ROLLBACK is reference-only.
+--     SMOKE TEST (employee + admin read-only + negative). ROLLBACK not used.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-16)
+--     - The user ran the EXECUTION BODY manually ONCE (single transaction:
+--       BEGIN .. read-only GUARD DO block (G-1..G-6) .. 2 x REVOKE SELECT ..
+--       1 x DROP POLICY .. COMMIT). Result: Success. No rows returned.
+--     - The BODY was NOT re-run afterwards and must NOT be re-run (the guard fails
+--       closed on a second run: G-2 sees SELECT already revoked and aborts).
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI. ROLLBACK not used.
+--
+--   [PRE-CHECK RESULT] (C-1..C-7, 2026-07-16 -- all passed; GUARD G-1..G-6 OK)
+--     - C-1: notices relkind 'r', RLS true, FORCE RLS false, owner postgres.
+--     - C-2: anon / authenticated SELECT = true; INSERT / UPDATE / DELETE / TRUNCATE /
+--       REFERENCES / TRIGGER / MAINTAIN = false (both roles).
+--     - C-2b: raw ACL {postgres=arwdDxtm/postgres, anon=r/postgres,
+--       authenticated=r/postgres, service_role=arwdDxtm/postgres}; anon + authenticated
+--       direct SELECT ACL only, is_grantable = false; NO PUBLIC SELECT ACL.
+--     - C-2c: column-level (attribute) ACL 0 rows.
+--     - C-3: exactly 1 policy -- notices_read_all (PERMISSIVE / {public} / SELECT /
+--       qual true / with_check null); policy_count = 1; select_policy_count = 1.
+--     - C-4 / C-4b: list_notices_secure(text) SECURITY DEFINER, STABLE, owner postgres,
+--       search_path=public, extensions, identity arg session_token_input text,
+--       RETURNS TABLE(content text, attachment_url text, attachment_type text,
+--       attachment_name text); EXECUTE for anon / authenticated / postgres /
+--       service_role, is_grantable = false, NO PUBLIC EXECUTE; no unexpected overload.
+--     - C-5 / C-5b: existing notices RPCs (5) SECURITY DEFINER, VOLATILE, owner
+--       postgres, fixed search_path, 9-column return; EXECUTE for PUBLIC / anon /
+--       authenticated / postgres / service_role (KNOWN PUBLIC EXECUTE, baseline only).
+--     - C-6: notices total 4 / active 1 / inactive 3 / null 0.
+--     - C-7: front-end preconditions confirmed (notices direct read 0 in the app code;
+--       index.html -> list_notices_secure; admin-app.html -> list_notices_admin_secure;
+--       PR #130 merged; production verified).
+--
+--   [POST-CHECK RESULT] (P-1..P-9, 2026-07-16 -- the items actually re-verified)
+--     - P-1: anon / authenticated all 8 table privileges = false (SELECT now revoked).
+--     - P-1b: raw ACL {postgres=arwdDxtm/postgres, service_role=arwdDxtm/postgres};
+--       no anon / authenticated / PUBLIC SELECT ACL; grant option none.
+--     - P-1c: column-level ACL 0 rows.
+--     - P-2: notices policies 0 rows -- notices_read_all dropped; policy_count = 0;
+--       notices_read_all_count = 0; select_policy_count = 0; no unexpected policy.
+--     - P-3: notices relkind 'r', RLS true, FORCE RLS false, owner postgres (unchanged).
+--     - P-6: notices total 4 / active 1 / inactive 3 / null 0 (equals C-6; no DML).
+--     - P-7: list_notices_secure attributes / identity arg / return type / overload
+--       count unchanged; EXECUTE ACL anon / authenticated / postgres / service_role;
+--       public_execute_count = 0; grant option none.
+--     - P-8 / P-9: existing notices RPCs (5) attributes / return type / EXECUTE ACL
+--       unchanged (KNOWN PUBLIC EXECUTE preserved).
+--
+--   [SMOKE TEST RESULT] (2026-07-16; no real session token recorded)
+--     - NEGATIVE direct SELECT: anon direct SELECT rejected; authenticated direct SELECT
+--       rejected; no unexpected success (DO block: "Success. No rows returned").
+--     - POSITIVE employee screen (index.html): production login OK; notice card + body
+--       render; list_notices_secure POST 200; response 1 row, 4 columns only;
+--       /rest/v1/notices direct GET 0; no RPC-origin Console errors.
+--     - ADMIN screen (admin-app.html, read-only): admin login OK; notices list (4) shown;
+--       list_notices_admin_secure POST 200; /rest/v1/notices direct GET 0; no RPC-origin
+--       Console errors; create / update / attachment / delete NOT invoked.
+--     - NEGATIVE invalid session: list_notices_secure rejects an invalid session with
+--       SQLSTATE P0001 'Invalid or expired session'; no unexpected success (DO block:
+--       "Success. No rows returned").
+--
+--   [OUTCOME]
+--     - anon / authenticated SELECT on public.notices: revoked. notices_read_all policy:
+--       dropped (notices now has 0 policies). notices raw ACL: postgres / service_role
+--       only.
+--     - list_notices_secure and the 5 existing notices RPCs: kept; attributes /
+--       return types / EXECUTE ACL re-verified unchanged (KNOWN PUBLIC EXECUTE on the 5
+--       existing RPCs preserved as baseline).
+--     - RLS / FORCE RLS / owner / data: unchanged (total 4 / active 1 / inactive 3 / 0).
+--     - notices reads are now unified through the secure read RPCs (employee:
+--       list_notices_secure; admin: list_notices_admin_secure); direct read shut.
+--     - This is the FINAL step (2B-9-c) of Phase 4-F-2B-9. With 2B-9-a (read RPC added),
+--       2B-9-b (front-end migration + production verification) and this 2B-9-c
+--       (SELECT REVOKE + policy DROP + post-check + smoke) all done, Phase 4-F-2B-9
+--       (notices read protection: read RPC -> front-end move -> direct read shutdown) is
+--       COMPLETE. Phase 4-F as a whole and other steps are NOT thereby complete.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
 --
 -- [FRONT-END / PRECONDITIONS] (verified in the repo / production BEFORE this file;
---   SQL cannot check these -- recorded here as confirmed facts; re-stated in C-8)
+--   SQL cannot check these -- recorded here as confirmed facts; re-stated in C-7)
 --   - 2B-9-a: public.list_notices_secure(text) created in the real DB (read RPC),
 --     recorded in PR #129 (docs/db-migrations.md).
 --   - 2B-9-b: index.html loadNotice() migrated from the direct read to
@@ -42,10 +115,10 @@
 --     anon / authenticated direct SELECT grant; the revoke does not affect them.
 --     (Re-stated in C-7.)
 --
---   NOTE: This step (2B-9-c) is the LAST step of Phase 4-F-2B-9. Phase 4-F-2B-9 as a
---   whole is NOT yet complete: it becomes complete only AFTER this body is executed,
---   post-checked, smoke-tested, and recorded. Do NOT treat the mere existence of this
---   file as completion.
+--   NOTE: This step (2B-9-c) is the LAST step of Phase 4-F-2B-9. With this body now
+--   EXECUTED (2026-07-16), post-checked, smoke-tested and recorded (see the
+--   [OUTCOME] above and docs/db-migrations.md), Phase 4-F-2B-9 is COMPLETE. Phase 4-F
+--   as a whole and other steps are NOT thereby complete.
 --
 -- [PURPOSE]
 --   - The notices read path is now fully migrated to the secure read RPC

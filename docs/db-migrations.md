@@ -5211,3 +5211,122 @@ employee 向け（employee session inline 検証）:
 - negative スモークテストは Supabase SQL Editor で実施（SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定）。positive スモークテストは有効 employee session で実施。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-2b-9-notices-read-rpc.sql` の pre-check / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-16 Phase 4-F-2B-9-c notices direct read撤廃（★実行済み★・Phase 4-F-2B-9 完了）
+
+### 位置づけ
+
+- Phase 4-F-2B-9 notices read 保護（read RPC 追加 → frontend 移行 → SELECT REVOKE + read policy DROP）の最終工程（2B-9-c）。
+- 本記録をもって **Phase 4-F-2B-9 は完了**。
+- notices は read policy `notices_read_all` 1本のみを持つ単一テーブルであり、subcontractors（2B-7）と同じく DROP 後は policy 0件になる。
+
+### 目的
+
+- 従業員画面（index.html `loadNotice()`）の read が `list_notices_secure` へ移行済み・本番確認済みであることを前提に、anon / authenticated の notices direct SELECT を撤廃する。
+- 不要になった permissive read policy `notices_read_all` を削除する。
+- RPC・データ・write 権限・他 policy・frontend は一切変更しない。
+
+### Git / PR
+
+- 2B-9-a read RPC 追加：PR #128（`docs/sql/phase4f-2b-9-notices-read-rpc.sql`・EXECUTED 2026-07-16）。
+- 2B-9-b frontend 移行：PR #130 merge・Vercel 本番デプロイ／本番 smoke 合格（`list_notices_secure` POST 200・`/rest/v1/notices` direct GET 0件・お知らせ表示正常・RPC 由来 Console エラーなし）。
+- 2B-9-c direct read 撤廃 SQL：`docs/sql/phase4f-2b-9-notices-direct-read-revoke.sql`（PR #131 merge。STATUS を `EXECUTED 2026-07-16` に更新）。
+- 実行前ガード G-1〜G-6 を BODY と同一トランザクション内に持つ設計（`notices_read_all` は実 DB baseline と厳格一致判定・`DROP POLICY IF EXISTS` 不使用）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-16）
+
+- ユーザーが Supabase SQL Editor で EXECUTION BODY を1回だけ手動実行（単一トランザクション：read-only GUARD DO ブロック（G-1〜G-6）→ REVOKE 2件 → DROP POLICY 1件）：
+
+```sql
+BEGIN;
+-- GUARD (G-1..G-6, read-only)
+REVOKE SELECT
+ON TABLE public.notices
+FROM anon;
+REVOKE SELECT
+ON TABLE public.notices
+FROM authenticated;
+DROP POLICY notices_read_all
+ON public.notices;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（ガード G-2 が「SELECT 撤廃済み」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。ROLLBACK 未使用。
+
+### 変更内容
+
+- anon の notices SELECT を REVOKE。
+- authenticated の notices SELECT を REVOKE。
+- `notices_read_all` policy を DROP（notices は他 policy を持たないため policy 0件になる）。
+
+### 保持（非変更）
+
+- `list_notices_secure(text)`：属性（SECURITY DEFINER / STABLE / owner postgres / search_path = public, extensions / identity arg `session_token_input text`）・返却型（content / attachment_url / attachment_type / attachment_name の4列 text）・EXECUTE ACL（anon / authenticated / postgres / service_role・PUBLIC EXECUTE なし・grant option なし）・overload 件数、すべて不変。SECURITY DEFINER のため anon / authenticated の SELECT 撤廃後も動作は維持。
+- 既存 notices RPC 5本（`list_notices_admin_secure` / `create_notice_secure` / `update_notice_secure` / `update_notice_attachment_secure` / `delete_notice_attachment_secure`）：属性・返却型・EXECUTE ACL は不変（既知の PUBLIC EXECUTE はそのまま・非変更）。
+- RLS / FORCE RLS / owner / 列 / 制約 / index は不変。
+- テーブル ACL は postgres / service_role のみ（arwdDxtm）。
+- write 系権限（anon / authenticated の INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）は引き続き全て false。
+- データ不変（total 4 / active 1 / inactive 3 / null 0）。
+
+### 実行前確認結果（Pre-check C-1〜C-7 + GUARD G-1〜G-6・2026-07-16）
+
+- C-1〜C-7・G-1〜G-6：全合格（GUARD OK）。
+- C-1：notices relkind = 'r'、RLS = true、FORCE RLS = false、owner = postgres。
+- C-2 / C-2b / C-2c：anon / authenticated は SELECT のみ true（他7権限 false）・raw ACL {postgres=arwdDxtm, anon=r, authenticated=r, service_role=arwdDxtm}・PUBLIC SELECT ACL なし・grant option なし・列単位 ACL 0件。
+- C-3：policy は `notices_read_all` 1件のみ（PERMISSIVE / {public} / SELECT / qual true / with_check null）・policy_count = 1・select_policy_count = 1。
+- C-4 / C-4b：`list_notices_secure(text)` は SECURITY DEFINER / STABLE / owner postgres / search_path 固定・identity arg `session_token_input text`・返却型4列 text・EXECUTE ACL（anon / authenticated / postgres / service_role）・PUBLIC EXECUTE なし・overload なし。
+- C-5 / C-5b：既存 notices RPC 5本は SECURITY DEFINER / VOLATILE / owner postgres / search_path 固定・9列返却・EXECUTE ACL（PUBLIC / anon / authenticated / postgres / service_role・既知 PUBLIC EXECUTE）。
+- C-6：notices total 4 / active 1 / inactive 3 / null 0。
+- C-7：frontend 前提充足（app code の notices direct read 0件・index.html → `list_notices_secure`・admin-app.html → `list_notices_admin_secure`・PR #130 merge・本番確認済み）。
+
+### 実行後確認結果（Post-check P-1〜P-9・2026-07-16）
+
+- P-1：anon / authenticated の8権限すべて false（SELECT 撤廃を確認）。
+- P-1b：raw ACL は `{postgres=arwdDxtm/postgres, service_role=arwdDxtm/postgres}`（anon / authenticated / PUBLIC の SELECT ACL なし・grant option なし）。
+- P-1c：列単位 ACL 0件。
+- P-2：notices policy 0件・`notices_read_all` 削除済み・policy_count = 0・select_policy_count = 0・想定外 policy なし。
+- P-3：notices relkind 'r' / RLS true / FORCE RLS false / owner postgres（実行前から不変）。
+- P-6：notices total 4 / active 1 / inactive 3 / null 0（C-6 と一致・BODY による data 変更なし）。
+- P-7：`list_notices_secure` の属性・identity arg・返却型・overload 件数は不変・EXECUTE ACL（anon / authenticated / postgres / service_role）・public_execute_count = 0・grant option なし。
+- P-8 / P-9：既存 notices RPC 5本の属性・返却型・EXECUTE ACL は不変（既知の PUBLIC EXECUTE も維持）。
+
+### direct read negative スモークテスト（2026-07-16）
+
+- anon direct SELECT 拒否・authenticated direct SELECT 拒否・unexpected success なし。DO ブロック実行結果は「Success. No rows returned」。
+- ※ Supabase SQL Editor（postgres 実行）や service_role の SELECT は設計上可能であり、本チェックの対象外。
+
+### 従業員画面 positive スモークテスト（2026-07-16・実 token 値は記録しない）
+
+- 本番ログイン OK・お知らせカード表示 OK・本文表示 OK。
+- `list_notices_secure` POST 200・レスポンス1件・4列のみ。
+- `/rest/v1/notices` direct GET 0件・RPC 由来 Console エラーなし。
+
+### 管理画面 read-only スモークテスト（2026-07-16）
+
+- 管理者ログイン OK・お知らせ一覧4件表示 OK。
+- `list_notices_admin_secure` POST 200・`/rest/v1/notices` direct GET 0件・RPC 由来 Console エラーなし。
+- 作成・更新・添付・削除操作は未実施（read-only 確認のみ）。
+
+### invalid session negative スモークテスト（2026-07-16）
+
+- `list_notices_secure` が無効 session を SQLSTATE P0001 / `Invalid or expired session` で拒否・unexpected success なし。DO ブロック実行結果は「Success. No rows returned」。
+
+### rollback
+
+- 未実行（SQL ファイル末尾のコメント参照用のみ）。対象は今回の3変更（GRANT SELECT 2件 + `notices_read_all` 再作成）に限定。セキュリティを弱める（direct read 再開）ため緊急復旧時のみ使用・別途明示承認が必要。
+
+### 最終状態
+
+- notices の読み取りは secure read RPC 経由へ一本化（従業員：`list_notices_secure`・管理：`list_notices_admin_secure`）。direct read 0件。anon / authenticated の SELECT 権限なし・`notices_read_all` policy なし（notices は policy 0件）。
+- write 経路（既存 notices RPC 5本）・`list_notices_secure` は従来どおり。既存5本の既知 PUBLIC EXECUTE も維持。
+- **Phase 4-F-2B-9 notices read 保護工程（read RPC 追加 → frontend 移行 → direct read 撤廃）は完了。**
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- negative direct read スモークテストは anon / authenticated 相当の direct SELECT 拒否確認（DO ブロック）で実施。positive スモークテストは有効 employee / management session で実施。invalid session negative は SQLSTATE P0001 かつ `Invalid or expired session` を厳格判定。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-2b-9-notices-direct-read-revoke.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

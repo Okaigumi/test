@@ -8,18 +8,60 @@
 --   if a write grant ever reappeared by mistake, ml_write (WITH CHECK true)
 --   would silently allow every INSERT.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - This file has NOT been run. Phase 4-F-5-a is NOT complete.
---     Phase 4-F as a whole is NOT complete.
+-- [STATUS] EXECUTED 2026-07-16
+--   - The EXECUTION BODY was run exactly ONCE by the user (Supabase SQL Editor,
+--     manual, 2026-07-16). DO NOT RE-RUN: a second run fails the guard at G-2
+--     (ml_write already dropped) by design (fail-closed).
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution /
 --     NO Supabase CLI / NO psql.
---   - The EXECUTION BODY is run exactly ONCE, only after review and only after
---     the PRE-CHECK (C-1..C-8) passes with no STOP condition hit.
---   - Run this file SECTION BY SECTION in this order:
---     PRE-CHECK (C-1..C-8) -> EXECUTION GUARD + BODY (single transaction) ->
---     POST-CHECK (P-1..P-7) -> SMOKE TEST -> ROLLBACK only in an emergency,
---     with separate explicit approval.
+--   - Run order (as designed): PRE-CHECK (C-1..C-8) -> EXECUTION GUARD + BODY
+--     (single transaction) -> POST-CHECK (P-1..P-7) -> SMOKE TEST -> ROLLBACK
+--     only in an emergency, with separate explicit approval.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-16)
+--     - The user ran the EXECUTION BODY manually, once, as a single
+--       transaction (read-only GUARD DO block G-1..G-8 -> DROP POLICY ml_write
+--       ON public.machine_locations -> COMMIT).
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-16 -- reported items only)
+--     - P-1: machine_locations policy_count = 0; ml_write count = 0; no
+--       unexpected policy.
+--     - P-1b: public schema policy count = 29 (was 30 before the body;
+--       exactly -1 = ml_write only).
+--     - P-3: anon / authenticated -- all 8 table privileges false
+--       (16/16 items).
+--     - P-4: table ACL entries for PUBLIC / anon / authenticated = 0;
+--       column ACL entries for PUBLIC / anon / authenticated = 0.
+--     - P-5: create_machine_location_secure(text, uuid, uuid, text)
+--       unchanged -- SECURITY DEFINER true, volatility 'v', owner postgres,
+--       search_path=public, extensions, result type TABLE(id uuid).
+--     - P-6: both read RPCs unchanged --
+--       list_machine_current_locations_secure(text) and
+--       list_machine_location_history_secure(text, uuid); both SECURITY
+--       DEFINER true, STABLE, owner postgres.
+--     - P-7: machine_locations data unchanged (pre = post): total_count 43,
+--       null_id_count 0, null_machine_id_count 0, null_moved_by_count 20,
+--       earliest_moved_at 2026-05-26 02:05:17.378433+00,
+--       latest_moved_at 2026-07-13 09:14:37.472624+00.
+--
+--   [SMOKE TEST RESULT] (2026-07-16; no real token value recorded)
+--     - RPC negative: PASS -- invalid session was rejected without persisting
+--       a write.
+--     - DB negative: PASS -- anon direct INSERT was rejected; transaction
+--       rolled back.
+--     - Production read-only (browser): machine locations list renders;
+--       list_machine_current_locations_secure = HTTP 200; NO write operation
+--       performed.
+--
+--   [OUTCOME]
+--     - ml_write policy: DROPPED. machine_locations policy count: 0.
+--     - Table privileges / ACLs / write RPC / read RPCs / data: unchanged.
+--     - Phase 4-F-5-a DB work is COMPLETE; the step closes when this record's
+--       PR is merged to main. Phase 4-F as a whole is NOT complete.
 --
 -- [PURPOSE]
 --   - public.machine_locations write access is already closed at the privilege

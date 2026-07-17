@@ -5535,3 +5535,111 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。negative smoke は dummy token および transaction+ROLLBACK 設計で実データを残さない。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-5a-machine-locations-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-17 Phase 4-F-5-b machines stale write policy drop（★実行済み★）
+
+### 位置づけ
+
+- 2026-07-16 の残存 no-op write policy 棚卸しに基づく Phase 4-F-5-a（machine_locations `ml_write` drop）の後続工程。machines に残存していた no-op write policy 2本（`machines_update` / `machines_write`）のみを drop する。
+- 本記録 PR の main merge をもって工程クローズ。**Phase 4-F 全体は未完了。**
+
+### 目的
+
+- anon / authenticated の machines INSERT / UPDATE は 2026-06-19（Phase 3-3 materials / machines direct write REVOKE）に REVOKE 済みで、2026-07-12（Phase 4-F-2B-5 post-check）に8権限すべて false を再実測済み。`machines_update`（PERMISSIVE / {public} / UPDATE / qual true / with_check null）と `machines_write`（PERMISSIVE / {public} / INSERT / qual null / with_check true）は実効性のない stale policy だった。
+- 将来 write grant が誤って再付与された場合に、machines_write は全行 INSERT、machines_update は全行 UPDATE を許す潜在経路となるため、defense-in-depth として除去（Phase 4-F-3 / 4-F-5-a と同一方針）。
+- アプリの write 経路は SECURITY DEFINER RPC 5本（`create_machine_secure` / `update_machine_secure` / `deactivate_machine_secure` / `create_machine_admin_secure` / `update_machine_admin_secure`。いずれも owner postgres・FORCE RLS false の owner 実行で RLS bypass）のみであり、policy に依存しない。
+
+### 対象
+
+- `DROP POLICY machines_update ON public.machines;` と `DROP POLICY machines_write ON public.machines;` の2文のみ（DB 変更はこの2件だけ・IF EXISTS 不使用・単一トランザクション）。
+
+### 非対象
+
+- table privilege（GRANT / REVOKE なし）・RLS enabled / FORCE RLS / owner・machines データ（DML なし）。
+- write RPC 5本・read RPC 2本（`list_machines_secure(text)` / `list_machines_admin_secure(text, boolean)`）の定義・EXECUTE。
+- write RPC 5本の PUBLIC EXECUTE（下記「PUBLIC EXECUTE 残存」参照。本工程では変更しない）。
+- frontend・他テーブル・他 policy・他ロールの権限。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-5b-machines-stale-write-policy-drop.sql`（PR #137 merge `0d49b8eb06e9dfa02d4bb7d06826ab2a3c201256`・mergedAt 2026-07-17T11:08:29Z・SQL commit `6e61c67`。本記録で STATUS を `EXECUTED 2026-07-17` に更新）。
+- 実行前 GUARD G-1〜G-9 を BODY と同一トランザクション内に持つ設計（table 属性一致・policy 2本の名前別存在＋定義完全一致・machines policy 総数=2・public schema policy 総数=29・anon/authenticated 8権限×2ロール false・table/column ACL 0・write RPC 5本の signature / overload=1 / 属性 / `_verify_management_session` 検証（strpos による literal 一致）/ anon・authenticated EXECUTE true・read RPC 2本の存在＋属性。いずれかの不一致で raise exception し全体 abort する fail-closed。再実行は G-2「policy 既 drop」で停止）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-17）
+
+- ユーザーが PRE-CHECK（C-1〜C-8）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：read-only GUARD DO ブロック（G-1〜G-9）→ DROP POLICY machines_update → DROP POLICY machines_write → COMMIT）：
+
+```sql
+BEGIN;
+-- GUARD (G-1..G-9, read-only)
+DROP POLICY machines_update ON public.machines;
+DROP POLICY machines_write ON public.machines;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2 が「policy 既 drop」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。ROLLBACK 未使用。
+
+### 変更内容
+
+- `machines_update` policy（PERMISSIVE / {public} / UPDATE / qual true / with_check null）を DROP。
+- `machines_write` policy（PERMISSIVE / {public} / INSERT / qual null / with_check true）を DROP。
+- machines の policy は0件になった。
+
+### 保持（非変更）
+
+- anon / authenticated の8権限（SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）すべて false（GRANT / REVOKE なし・不変）。
+- PUBLIC / anon / authenticated 向け table ACL・column ACL：0件（不変）。
+- write RPC 5本・read RPC 2本：属性・EXECUTE 不変。
+- machines データ：26件・不変。frontend 変更なし。
+
+### 実行後確認結果（Post-check・2026-07-17・報告された項目のみ記載）
+
+- P-1：machines policy_count = 0・machines_update_count = 0・machines_write_count = 0・想定外 policy なし。
+- P-1b：public schema 全体の policy count = 27（実行前 29 から2件減＝machines_update + machines_write のみ）。
+- P-3：anon / authenticated の8権限 × 2ロール = 16項目すべて false。
+- P-4：PUBLIC / anon / authenticated 向け table ACL = 0件・column ACL = 0件。
+- P-5：write RPC 5本不変（`create_machine_secure` / `update_machine_secure` / `deactivate_machine_secure` / `create_machine_admin_secure` / `update_machine_admin_secure`。全て SECURITY DEFINER true・volatility 'v'・owner postgres・search_path=public, extensions・result type TABLE(id uuid)・管理 session 検証維持・anon / authenticated EXECUTE 10項目 true）。
+- P-6：read RPC 2本不変（`list_machines_secure(text)` / `list_machines_admin_secure(text, boolean)`・両方 SECURITY DEFINER true / STABLE / owner postgres）。
+- P-7：machines データ不変（実行前後で一致）：total_rows 26・active_rows 22・inactive_rows 4・null_active_rows 0・earliest_created_at 2026-05-26 02:01:33.281736+00・latest_created_at 2026-06-19 23:52:13.774825+00。
+
+### PUBLIC EXECUTE 残存（別工程候補・本工程では変更していない）
+
+- **write RPC 5本すべてで PUBLIC EXECUTE = true のまま残存**（C-4d / P-5 実測。実行前後で不変＝本工程は GRANT / REVOKE を一切行っていない）。
+- 原因は既存状態：Phase 3 の定義ファイル（materials-machines-secure-rpc.sql / machines-admin-secure-rpc.sql）は anon / authenticated へ GRANT する一方、PUBLIC からの REVOKE を行っておらず、PostgreSQL の関数デフォルト（PUBLIC EXECUTE）が残っている。
+- read RPC 2本（2B-5 で作成時に REVOKE ALL FROM PUBLIC 済み）および `create_machine_location_secure`（2B-6 side step で PUBLIC 撤廃済み）とは対照的な状態。
+- **対応は別工程候補として記録**（2B-6 side step と同型の「write RPC PUBLIC EXECUTE 撤廃」工程。実施時は他テーブルの write RPC にも同様の残存がないか横断確認を推奨）。
+
+### negative スモークテスト（2026-07-17・実 token 値は記録しない）
+
+- write RPC：無効 management session での呼び出しを拒否（PASS: invalid session was rejected without persisting a write）。
+- direct INSERT / UPDATE：anon の direct INSERT・direct UPDATE をいずれも拒否・transaction は rollback（PASS）。
+
+### 本番 read-only スモークテスト（2026-07-17）
+
+- 従業員画面の重機一覧表示 OK・管理画面の重機一覧表示 OK。
+- `list_machines_secure` = HTTP 200・`list_machines_admin_secure` = HTTP 200。
+- machines への direct REST access なし。Console 赤エラーなし。書き込み操作は未実施。
+
+### write positive スモーク方針
+
+- 実データを作成・変更する write smoke は意図的に未実施（不要な重機マスタ変更を作らない方針）。write path 健全性は P-5（RPC 属性・EXECUTE 不変）+ invalid session negative smoke で担保。次回の通常業務での重機登録・更新が実運用上の positive 確認となり、問題があれば rollback を判断する。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ）。対象は `machines_update` / `machines_write` の再作成（policy 層のみ・GRANT 復元なし）に限定。再作成は潜在的な allow-all write 経路を復活させるため緊急復旧時のみ使用・別途明示承認が必要。
+
+### 最終状態
+
+- machines の policy は0件（stale write policy `machines_update` / `machines_write` 撤廃済み）。直接アクセスは privilege 層で全面遮断のまま、write 経路は SECURITY DEFINER RPC 5本（owner postgres・FORCE RLS false）に一本化。
+- write RPC 5本の PUBLIC EXECUTE は true のまま（既存状態・本工程対象外・別工程候補）。
+- Phase 4-F-5-b の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- GUARD+BODY は1回のみ実行。negative smoke は dummy token および transaction+ROLLBACK 設計で実データを残さない。実 token 値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-5b-machines-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

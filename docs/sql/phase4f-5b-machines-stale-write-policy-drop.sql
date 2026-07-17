@@ -10,16 +10,78 @@
 --   machines_write (WITH CHECK true) would silently allow every INSERT and
 --   machines_update (USING true) would silently allow every UPDATE.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - The EXECUTION BODY must be run exactly ONCE by the user (Supabase SQL
---     Editor, manual). DO NOT RE-RUN after success: a second run fails the
+-- [STATUS] EXECUTED 2026-07-17
+--   - The EXECUTION BODY was run exactly ONCE by the user (Supabase SQL
+--     Editor, manual, 2026-07-17). DO NOT RE-RUN: a second run fails the
 --     guard at G-2 (policies already dropped) by design (fail-closed).
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution /
 --     NO Supabase CLI / NO psql.
---   - Run order: PRE-CHECK (C-1..C-8) -> EXECUTION GUARD + BODY (single
---     transaction) -> POST-CHECK (P-1..P-7) -> SMOKE TEST -> ROLLBACK only in
---     an emergency, with separate explicit approval.
+--   - Run order (as designed): PRE-CHECK (C-1..C-8) -> EXECUTION GUARD + BODY
+--     (single transaction) -> POST-CHECK (P-1..P-7) -> SMOKE TEST -> ROLLBACK
+--     only in an emergency, with separate explicit approval.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-17)
+--     - The user ran the EXECUTION BODY manually, once, as a single
+--       transaction (read-only GUARD DO block G-1..G-9 -> DROP POLICY
+--       machines_update ON public.machines -> DROP POLICY machines_write
+--       ON public.machines -> COMMIT).
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-17 -- reported items
+--     only)
+--     - P-1: machines policy_count = 0; machines_update_count = 0;
+--       machines_write_count = 0; no unexpected policy.
+--     - P-1b: public schema policy count = 27 (was 29 before the body;
+--       exactly -2 = machines_update + machines_write only).
+--     - P-3: anon / authenticated -- all 8 table privileges false
+--       (16/16 items).
+--     - P-4: table ACL entries for PUBLIC / anon / authenticated = 0;
+--       column ACL entries for PUBLIC / anon / authenticated = 0.
+--     - P-5: all 5 write RPCs unchanged -- create_machine_secure /
+--       update_machine_secure / deactivate_machine_secure /
+--       create_machine_admin_secure / update_machine_admin_secure; all
+--       SECURITY DEFINER true, volatility 'v', owner postgres,
+--       search_path=public, extensions, result type TABLE(id uuid);
+--       management-session verification present in all 5; anon /
+--       authenticated EXECUTE true for all 5 (10/10 items).
+--     - P-5 (PUBLIC EXECUTE finding): PUBLIC EXECUTE = true on ALL 5 write
+--       RPCs, unchanged by this step (this file performed no GRANT /
+--       REVOKE; the state is pre-existing -- the Phase 3 definition files
+--       never revoked PUBLIC). Recorded as a candidate for a SEPARATE later
+--       step (same pattern as the 2B-6 side step that revoked PUBLIC on
+--       create_machine_location_secure); NOT changed here per the approved
+--       scope (record only).
+--     - P-6: both read RPCs unchanged -- list_machines_secure(text) and
+--       list_machines_admin_secure(text, boolean); both SECURITY DEFINER
+--       true, STABLE, owner postgres.
+--     - P-7: machines data unchanged (pre = post): total_rows 26,
+--       active_rows 22, inactive_rows 4, null_active_rows 0,
+--       earliest_created_at 2026-05-26 02:01:33.281736+00,
+--       latest_created_at 2026-06-19 23:52:13.774825+00.
+--
+--   [SMOKE TEST RESULT] (2026-07-17; no real token value recorded)
+--     - RPC negative: PASS -- invalid management session was rejected
+--       without persisting a write.
+--     - DB negative: PASS -- anon direct INSERT and anon direct UPDATE were
+--       both rejected; transactions rolled back.
+--     - Production read-only (browser): employee screen machines list
+--       renders; admin screen machines list renders; list_machines_secure =
+--       HTTP 200; list_machines_admin_secure = HTTP 200; NO direct REST
+--       access to machines; no red console errors; NO write operation
+--       performed.
+--
+--   [OUTCOME]
+--     - machines_update / machines_write policies: DROPPED. machines policy
+--       count: 0. public schema policy count: 29 -> 27.
+--     - Table privileges / ACLs / write RPCs / read RPCs / data: unchanged.
+--     - PUBLIC EXECUTE on the 5 write RPCs remains true (pre-existing;
+--       untouched here) -- follow-up candidate for a separate step.
+--     - Phase 4-F-5-b DB work is COMPLETE; the step closes when this
+--       record's PR is merged to main. Phase 4-F as a whole is NOT
+--       complete.
 --
 -- [PURPOSE]
 --   - public.machines write access is already closed at the privilege layer:

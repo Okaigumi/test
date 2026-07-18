@@ -10,19 +10,100 @@
 --   Same change class and structure as Phase 4-F-4-a (notices) and
 --   Phase 4-F-6-a (write/admin RPCs).
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - The EXECUTION BODY must be run exactly ONCE by the user (Supabase SQL
---     Editor, manual). DO NOT RE-RUN after success: a second run fails the
+-- [STATUS] EXECUTED 2026-07-18
+--   - The EXECUTION BODY was run exactly ONCE by the user (Supabase SQL
+--     Editor, manual, 2026-07-18). DO NOT RE-RUN: a second run fails the
 --     guard at G-2/G-3 (PUBLIC already revoked on the targets) by design
 --     (fail-closed).
 --   - DB execution is done by the user, manually, in the Supabase SQL
 --     Editor. Claude Code CLI performs NO DB connection / NO SQL execution /
 --     NO Supabase CLI / NO psql.
---   - Run order: PRE-CHECK (C-1..C-5) -> EXECUTION GUARD + BODY (single
---     transaction) -> POST-CHECK (P-1..P-3) -> SMOKE TEST -> ROLLBACK only
---     in an emergency, with separate explicit approval.
+--   - Run order (as designed): PRE-CHECK (C-1..C-5) -> EXECUTION GUARD +
+--     BODY (single transaction) -> POST-CHECK (P-1..P-3) -> SMOKE TEST ->
+--     ROLLBACK only in an emergency, with separate explicit approval.
 --   - Recording the execution (STATUS -> EXECUTED, db-migrations.md append)
 --     is a SEPARATE step / separate PR.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-18)
+--     - The user ran the EXECUTION BODY manually, once, as a single
+--       transaction (read-only GUARD DO block G-1..G-3 -> 4 x REVOKE
+--       EXECUTE ... FROM PUBLIC -> COMMIT).
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [PRE-CHECK RESULT] (Supabase SQL Editor, 2026-07-18 -- reported items
+--     only; ALL PASSED, no STOP condition)
+--     - C-1: SECURITY DEFINER total = 78; PUBLIC EXECUTE true = 4.
+--     - C-2: all 4 targets present -- signature / identity args / result
+--       type as expected, plpgsql, owner postgres, SECURITY DEFINER,
+--       VOLATILE, search_path=public, extensions, overload = 1, proacl NOT
+--       NULL, explicit PUBLIC / anon / authenticated EXECUTE true, effective
+--       PUBLIC / anon / authenticated EXECUTE true.
+--     - C-2b: 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0.
+--     - C-3: 0 rows (the PUBLIC-true set matches exactly the 4 session RPCs).
+--     - C-4: create_admin_session -> gen_random_bytes/digest/genka_admins/
+--       admin_sessions/INSERT/DELETE; create_employee_session -> same with
+--       employees/employee_sessions; revoke_admin_session -> digest/
+--       admin_sessions/DELETE (no gen_random_bytes / no INSERT);
+--       revoke_employee_session -> digest/employee_sessions/DELETE. No
+--       cross-session or unexpected table references.
+--     - C-5: index / admin / genka each use an anon-key Supabase client with
+--       NO auth switch to authenticated; the 4 targets are called only at
+--       the login/logout sites; the explicit anon EXECUTE grant is the
+--       critical path.
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-18 -- reported items
+--     only; ALL PASSED)
+--     - P-1: SECURITY DEFINER total = 78 (unchanged); PUBLIC EXECUTE true
+--       = 0 (was 4; exactly -4).
+--     - P-1b: 0 rows -- NO SECURITY DEFINER function in public retains
+--       PUBLIC EXECUTE. This is the final state of the cross-cutting PUBLIC
+--       EXECUTE cleanup (Phase 4-F-6-a + 6-b).
+--     - P-2: all 4 targets -- explicit / effective PUBLIC EXECUTE = false;
+--       explicit / effective anon / authenticated EXECUTE = true
+--       (unchanged); signature / result type / language / owner / SECURITY
+--       DEFINER / volatility / search_path / overload unchanged.
+--     - P-3 (aggregate re-run): 4, 0, 4, 4, 0, 4, 4, 0, 0, 0, 0
+--       (public counts drop to 0; anon / authenticated counts stay 4;
+--       anomaly counts 0).
+--
+--   [SMOKE TEST RESULT] (2026-07-18; no real token / real UUID recorded)
+--     - Production POSITIVE login/logout smoke -- ALL PASS:
+--       * Employee (index.html): login OK (create_employee_session = HTTP
+--         200), main screens render, logout OK (revoke_employee_session =
+--         HTTP 204, RETURNS void normal response), re-login OK; no
+--         unexpected 401 / 403.
+--       * Admin (admin-app.html): login OK (create_admin_session = HTTP
+--         200), main screens render, logout OK (revoke_admin_session = HTTP
+--         204); no unexpected 401 / 403.
+--       * Genka (genka-app.html): admin login OK (create_admin_session =
+--         HTTP 200), main screens render, logout OK (revoke_admin_session =
+--         HTTP 204); no unexpected 401 / 403.
+--       * Console: no app-origin red errors. (A one-off
+--         "supabase.rpc is not a function" came from a negative-smoke test
+--         snippet that used the SDK root variable instead of the client
+--         variable `sb`; re-run with `sb` confirmed normal -- NOT an app
+--         fault.)
+--     - Negative smoke -- PASS:
+--       * Wrong PIN: login rejected, loginError shown, no screen breakage,
+--         no app-origin console error, NO account / PIN change, no side
+--         effect.
+--       * Unknown-token revoke (revoke_employee_session with a dummy token):
+--         success = true, error = null, data = null, HTTP 204 -- a no-op;
+--         no effect on real sessions / PINs.
+--
+--   [OUTCOME]
+--     - PUBLIC EXECUTE revoked on the 4 session RPCs. public schema:
+--       SECURITY DEFINER 78 (unchanged); PUBLIC EXECUTE true 4 -> 0.
+--     - anon / authenticated explicit + effective EXECUTE: unchanged on all
+--       4. Function definitions / tables / policies / business data:
+--       untouched.
+--     - This completes the cross-cutting PUBLIC EXECUTE cleanup: NO
+--       SECURITY DEFINER function in public retains PUBLIC EXECUTE.
+--     - Phase 4-F-6-b DB work is COMPLETE; the step closes when this
+--       record's PR is merged to main. Phase 4-F as a whole is NOT
+--       complete.
 --
 -- [WHY LOGIN / LOGOUT IS UNAFFECTED]
 --   - The three front-ends (index.html / admin-app.html / genka-app.html)

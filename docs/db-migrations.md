@@ -5848,3 +5848,89 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。negative smoke は dummy token / gen_random_uuid・各文個別実行で実データを残さない。実 token 値・実 UUID は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-6a-write-rpc-public-execute-revoke.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-18 Phase 4-F-6-b session RPC 4本 PUBLIC EXECUTE 撤廃（★実行済み★）
+
+### 位置づけ
+
+- Phase 4-F-6-a（write/admin RPC 32本）に続く PUBLIC EXECUTE 整理の第2工程かつ最終工程。6-a 後に PUBLIC EXECUTE true が残存していた session RPC 4本（login / logout の critical path）を撤廃する。Phase 4-F-4-a（notices）・6-a と同一の変更クラス。
+- 本工程完了で public schema の SECURITY DEFINER 関数で PUBLIC EXECUTE=true が0本となり、**PUBLIC EXECUTE 横断整理（6-a + 6-b）が完結**。
+- 本記録 PR の main merge をもって工程クローズ。**Phase 4-F 全体は未完了。**
+
+### 目的
+
+- 対象4本は Phase 2 期の作成時に anon / authenticated へ explicit GRANT される一方、explicit な PUBLIC EXECUTE も残存していた。クライアントロールは anon / authenticated のみで PUBLIC は冗長のため、defense-in-depth として PUBLIC のみ撤廃する。
+- **critical path 特性**: index / admin / genka の3画面は Supabase Auth を使わず、単一の anon キーで Supabase クライアントを生成し、**ログイン前後を通じて anon ロール**で RPC を呼ぶ（自前 session token を引数で渡す方式）。したがって **anon の explicit EXECUTE が login / logout の生命線**。PUBLIC 撤廃は anon / authenticated の explicit エントリに触れないため実効到達性は不変。GUARD で explicit anon / authenticated エントリの実在を fail-closed 検証し、実行後は本番 login/logout positive smoke を必須とした。
+
+### 対象（4本）
+
+- `create_admin_session(uuid, text)`（admin login）・`revoke_admin_session(text)`（admin logout）・`create_employee_session(uuid, text)`（employee login）・`revoke_employee_session(text)`（employee logout）。
+- DB 変更は `REVOKE EXECUTE ON FUNCTION ... FROM PUBLIC` ×4文のみ（単一トランザクション）。
+
+### 非対象
+
+- anon / authenticated の GRANT / REVOKE（一切変更なし）。
+- 関数定義（CREATE OR REPLACE / ALTER / DROP なし）・table / view / policy / RLS・業務 DML。
+- frontend。6-a で撤廃済みの write/admin RPC 32本。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-6b-session-rpc-public-execute-revoke.sql`（PR #143 merge `dafff4894c54f594419f36d379339df44165cec3`・mergedAt 2026-07-18T13:11:35Z・SQL commit `17e1bdd`。本記録で STATUS を `EXECUTED 2026-07-18` に更新）。
+- 実行前 GUARD G-1〜G-3 を BODY と同一トランザクション内に持つ設計（schema 基準 78/4・4本の signature / overload=1 / plpgsql / owner postgres / VOLATILE / search_path / result type / proacl 非NULL・**explicit PUBLIC あり（なければ再実行として停止）・explicit anon / authenticated あり（なければ login/logout 断絶として停止）**・effective 3値 true。G-2（PUBLIC true 総数=4）+ G-3（4本が PUBLIC true）の組合せで「PUBLIC true = 対象4本」の集合一致を保証。不一致は raise exception で全体 abort する fail-closed）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-18）
+
+- ユーザーが PRE-CHECK（C-1〜C-5）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：GUARD DO ブロック → REVOKE ×4 → COMMIT）。
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2/G-3 が「PUBLIC 既撤廃」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用。ROLLBACK 未使用。
+
+### 実行前確認結果（Pre-check・2026-07-18・全合格・STOP条件なし）
+
+- C-1：SECURITY DEFINER 総数 78・PUBLIC EXECUTE true 4。
+- C-2：対象4本すべて存在・signature / identity args / result type 一致・plpgsql・owner postgres・SECURITY DEFINER・VOLATILE・search_path=public, extensions・overload=1・proacl 非NULL・explicit / effective の PUBLIC / anon / authenticated EXECUTE すべて true。
+- C-2b：4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0。
+- C-3：PUBLIC true 集合が対象4本と完全一致（差分0行）。
+- C-4：create系は gen_random_bytes / digest / INSERT / DELETE で自テーブル（genka_admins→admin_sessions / employees→employee_sessions）参照、revoke系は digest / DELETE のみ（gen_random_bytes・INSERT なし）。想定外 table・別 session 系参照なし。
+- C-5：3画面とも anon キーの Supabase クライアント・Auth 切替なし・4本は login/logout のみで使用・anon explicit EXECUTE が critical path。
+
+### 実行後確認結果（Post-check・2026-07-18・全合格）
+
+- P-1：SECURITY DEFINER 総数 78 不変・**PUBLIC EXECUTE true 4 → 0**。
+- P-1b：public schema の SECURITY DEFINER 関数で PUBLIC EXECUTE true は0行（横断整理の最終状態）。
+- P-2：対象4本の explicit / effective PUBLIC EXECUTE = false・**explicit / effective anon / authenticated EXECUTE = true 維持**・signature / result type / language / owner / SECURITY DEFINER / volatility / search_path / overload 不変。
+- P-3（集計再実行）：4, 0, 4, 4, 0, 4, 4, 0, 0, 0, 0（PUBLIC = 0・anon/authenticated = 4・異常件数 0）。
+
+### 本番 positive スモークテスト（2026-07-18・login/logout 必須・実 token/UUID は記録しない）
+
+- 従業員画面：login 成功（`create_employee_session` = HTTP 200）・主要画面表示正常・logout 成功（`revoke_employee_session` = **HTTP 204**・RETURNS void の正常応答）・同一従業員で再 login 成功・想定外 401/403 なし。
+- 管理画面：login 成功（`create_admin_session` = HTTP 200）・主要画面表示正常・logout 成功（`revoke_admin_session` = **HTTP 204**）・想定外 401/403 なし。
+- 原価画面：admin login 成功（`create_admin_session` = HTTP 200）・主要画面表示正常・logout 成功（`revoke_admin_session` = **HTTP 204**）・想定外 401/403 なし。
+- Console：アプリ由来の赤エラーなし。一度出た「supabase.rpc is not a function」は negative smoke 用テストコードで SDK ルート変数を誤用したもので、正しいクライアント変数 `sb` での再実行により正常確認済み（アプリ障害ではない）。
+
+### negative スモークテスト（2026-07-18）
+
+1. 不正PIN：ログイン不可・loginError 表示・画面破損なし・アプリ由来 Console 赤エラーなし・アカウント/PIN 変更なし・副作用なし（PIN 照合が先で DELETE/INSERT 未到達）。
+2. 不明 token revoke（`revoke_employee_session` に dummy token）：success = true・error = null・data = null・HTTP 204 の no-op・実在 session / PIN への影響なし。
+
+### write positive スモーク方針
+
+- login / logout 自体が本工程の positive 確認（session token 行の INSERT / DELETE を伴うが、ログインの本質的動作であり ephemeral（8h 期限）・業務データ（employees / genka_admins / PIN）の恒久変更ではない）。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・`GRANT EXECUTE ... TO PUBLIC` ×4）。**通常実行禁止**：本番 login/logout 障害の原因が本工程と確定し、かつ別途明示承認された場合のみ。実行しても anon / authenticated の ACL は変更しない。
+
+### 最終状態
+
+- session RPC 4本の PUBLIC EXECUTE は撤廃済み。**public schema の SECURITY DEFINER 関数で PUBLIC EXECUTE true は0本**（SECURITY DEFINER 78本 不変）＝ PUBLIC EXECUTE 横断整理（6-a + 6-b）完結。
+- anon / authenticated の explicit / effective EXECUTE は4本すべてで不変（login / logout 挙動に変更なし）。
+- Phase 4-F-6-b の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない（残: financial / paid_leave / reports 系 pg_policies 実測）。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- GUARD+BODY は1回のみ実行。positive smoke は本番3画面の login/logout・negative smoke は dummy token / 不正 PIN で実データを残さない。実 token 値・実 UUID は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-6b-session-rpc-public-execute-revoke.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

@@ -12,16 +12,101 @@
 --   every INSERT and sa_update / anon_can_update_sites (USING true) would
 --   silently allow every UPDATE on their tables.
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - The EXECUTION BODY must be run exactly ONCE by the user (Supabase SQL
---     Editor, manual). DO NOT RE-RUN after success: a second run fails the
+-- [STATUS] EXECUTED 2026-07-18
+--   - The EXECUTION BODY was run exactly ONCE by the user (Supabase SQL
+--     Editor, manual, 2026-07-18). DO NOT RE-RUN: a second run fails the
 --     guard at G-2 (policies already dropped) by design (fail-closed).
 --   - DB execution is done by the user, manually, in the Supabase SQL Editor.
 --     Claude Code CLI performs NO DB connection / NO SQL execution /
 --     NO Supabase CLI / NO psql.
---   - Run order: PRE-CHECK (C-1..C-9) -> EXECUTION GUARD + BODY (single
---     transaction) -> POST-CHECK (P-1..P-7) -> SMOKE TEST -> ROLLBACK only in
---     an emergency, with separate explicit approval.
+--   - Run order (as designed): PRE-CHECK (C-1..C-8b) -> EXECUTION GUARD +
+--     BODY (single transaction) -> POST-CHECK (P-1..P-7) -> SMOKE TEST ->
+--     ROLLBACK only in an emergency, with separate explicit approval.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-18)
+--     - The user ran the EXECUTION BODY manually, once, as a single
+--       transaction (read-only GUARD DO block G-1..G-9 -> DROP POLICY
+--       sa_update -> DROP POLICY sa_write -> DROP POLICY
+--       anon_can_insert_sites -> DROP POLICY anon_can_update_sites ->
+--       COMMIT).
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-18 -- reported items
+--     only)
+--     - P-1: sites policy_count = 0; site_assignments policy_count = 0;
+--       sa_update_count = sa_write_count = anon_can_insert_sites_count =
+--       anon_can_update_sites_count = 0; no unexpected policy.
+--     - P-1b: public schema policy count = 23 (was 27 before the body;
+--       exactly -4 = the four dropped write policies only).
+--     - P-2: table attributes unchanged on BOTH tables (relkind 'r', RLS
+--       enabled true, FORCE RLS false, owner postgres).
+--     - P-3: anon / authenticated -- all 8 table privileges false on both
+--       tables (32/32 items).
+--     - P-4: table grants for PUBLIC / anon / authenticated = 0; column
+--       ACL = 0; raw table ACLs list postgres / service_role only
+--       (unchanged).
+--     - P-5: all 5 write RPCs unchanged -- create_site_secure /
+--       update_site_secure / deactivate_site_secure /
+--       set_site_assignment_secure / replace_site_assignments_secure; all
+--       SECURITY DEFINER, VOLATILE, owner postgres, search_path=public,
+--       extensions, management-session verification present, anon /
+--       authenticated EXECUTE true, per-RPC result types unchanged
+--       (TABLE(id uuid) for create_site_secure, void for the other four).
+--     - P-5 (PUBLIC EXECUTE finding): PUBLIC EXECUTE remains on ALL 5 write
+--       RPCs, unchanged by this step (this file performed no GRANT /
+--       REVOKE; the state is pre-existing -- the Phase 3 definition file
+--       never revoked PUBLIC). Recorded as part of the same cross-cutting
+--       "write RPC PUBLIC EXECUTE revoke" follow-up candidate as the
+--       machines write RPCs (Phase 4-F-5-b finding); NOT changed here per
+--       the approved scope (record only).
+--     - P-6: 5 read RPCs unchanged (SECURITY DEFINER, STABLE, owner
+--       postgres, fixed search_path, result types unchanged); 4 internal
+--       sites-referencing RPCs unchanged (SECURITY DEFINER, owner postgres,
+--       fixed search_path); _verify_management_session(text) unchanged
+--       (SECURITY DEFINER, owner postgres, fixed search_path, anon /
+--       authenticated EXECUTE false, no PUBLIC EXECUTE).
+--     - P-7: data unchanged (pre = post): sites total_rows 20 /
+--       active_rows 10 / inactive_rows 10 / null_active_rows 0;
+--       site_assignments total_rows 30 / active_rows 12 / inactive_rows 18
+--       / null_active_rows 0; integrity checks sa_null_site_id 0 /
+--       sa_null_employee_id 0 / sa_orphan_site 0.
+--
+--   [SMOKE TEST RESULT] (2026-07-18; no real token / real UUID used or
+--     recorded)
+--     - RPC negative: PASS -- deactivate_site_secure with an invalid
+--       management session raised P0001 'Invalid or expired session'; the
+--       write was never reached.
+--     - DB negative: PASS on all four operations, confirmed INDIVIDUALLY --
+--       (a) anon direct INSERT into sites: 42501 permission denied;
+--       (b) anon direct UPDATE on sites: 42501 permission denied;
+--       (c) anon direct INSERT into site_assignments: 42501 permission
+--       denied; (d) anon direct UPDATE on site_assignments: 42501
+--       permission denied. All four wrapped in transactions and rolled
+--       back; no data change.
+--     - Production read-only (browser): employee screen -- login OK, sites
+--       list and assignment views render, list_sites_secure = HTTP 200,
+--       list_site_assignments_secure = HTTP 200, no red console errors, no
+--       direct REST access to either table. Admin screen -- login OK,
+--       sites management list and detail render, list_sites_admin_secure =
+--       HTTP 200, get_site_admin_secure = HTTP 200,
+--       list_site_assignments_admin_secure = HTTP 200, no red console
+--       errors, no direct REST access to either table. NO write operation
+--       performed.
+--
+--   [OUTCOME]
+--     - sa_update / sa_write / anon_can_insert_sites /
+--       anon_can_update_sites: DROPPED. sites / site_assignments policy
+--       counts: 0 / 0. public schema policy count: 27 -> 23.
+--     - Table privileges / ACLs / write RPCs / read RPCs / internal RPCs /
+--       _verify_management_session / data: unchanged.
+--     - PUBLIC EXECUTE on the 5 write RPCs remains (pre-existing; untouched
+--       here) -- cross-cutting follow-up candidate together with the
+--       machines write RPCs.
+--     - Phase 4-F-5-c DB work is COMPLETE; the step closes when this
+--       record's PR is merged to main. Phase 4-F as a whole is NOT
+--       complete.
 --
 -- [PURPOSE]
 --   - public.sites / public.site_assignments write access is already closed

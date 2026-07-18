@@ -5643,3 +5643,120 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。negative smoke は dummy token および transaction+ROLLBACK 設計で実データを残さない。実 token 値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-5b-machines-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-18 Phase 4-F-5-c sites / site_assignments stale write policy drop（★実行済み★）
+
+### 位置づけ
+
+- Phase 4-F-5-a（machine_locations `ml_write`）・4-F-5-b（machines `machines_update` / `machines_write`）に続く no-op write policy 整理の第3工程。sites / site_assignments に残存していた stale write policy 4本のみを drop する。
+- 本記録 PR の main merge をもって工程クローズ。**Phase 4-F 全体は未完了。**
+
+### 目的
+
+- anon / authenticated の sites / site_assignments INSERT / UPDATE は 2026-06-13（Phase 3-3 direct write REVOKE）に REVOKE 済みで、2026-07-14（Phase 4-F-2B-8 post-check）に両テーブルとも8権限すべて false を再実測済み。次の4本は実効性のない stale policy だった。
+  - `site_assignments.sa_update`（PERMISSIVE / {public} / UPDATE / qual true / with_check null）
+  - `site_assignments.sa_write`（PERMISSIVE / {public} / INSERT / qual null / with_check true）
+  - `sites.anon_can_insert_sites`（PERMISSIVE / {anon} / INSERT / qual null / with_check true）
+  - `sites.anon_can_update_sites`（PERMISSIVE / {anon} / UPDATE / qual true / with_check true）
+- 将来 write grant が誤って再付与された場合に全行 INSERT / UPDATE を許す潜在経路となるため、defense-in-depth として除去（4-F-3 / 4-F-5-a / 4-F-5-b と同一方針）。
+- アプリの write 経路は SECURITY DEFINER RPC 5本（`create_site_secure` / `update_site_secure` / `deactivate_site_secure` / `set_site_assignment_secure` / `replace_site_assignments_secure`。いずれも owner postgres・FORCE RLS false の owner 実行で RLS bypass）のみであり、policy に依存しない。
+
+### 対象
+
+- DROP POLICY 4文のみ（`sa_update` → `sa_write` → `anon_can_insert_sites` → `anon_can_update_sites` の順・IF EXISTS 不使用・単一トランザクション）。DB 変更はこの4件だけ。
+
+### 非対象
+
+- table privilege（GRANT / REVOKE なし）・RLS enabled / FORCE RLS / owner・sites / site_assignments データ（DML なし）。
+- write RPC 5本・read RPC 5本（`list_sites_secure(text)` / `list_site_assignments_secure(text)` / `list_sites_admin_secure(text)` / `get_site_admin_secure(text, uuid)` / `list_site_assignments_admin_secure(text, uuid)`）・内部参照 RPC 4本（`export_projects_summary_secure` / `create_invoice_secure` / `update_invoice_secure` / `create_machine_location_secure`）・`_verify_management_session(text)` の定義・EXECUTE。
+- write RPC 5本の PUBLIC EXECUTE（下記「PUBLIC EXECUTE 残存」参照。本工程では変更しない）。
+- frontend・他テーブル・他 policy・他ロールの権限。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-5c-sites-site-assignments-stale-write-policy-drop.sql`（PR #139 merge `3fe3f982ff0af3dda5891bf5af192a1274e30464`・mergedAt 2026-07-18T01:07:31Z・SQL commit `b66ff04`。本記録で STATUS を `EXECUTED 2026-07-18` に更新）。
+- 実行前 GUARD G-1〜G-9 を BODY と同一トランザクション内に持つ設計（両テーブルの属性一致・policy 4本の名前別存在＋定義完全一致（sites 側 roles={anon}・site_assignments 側 roles={public} を厳密照合・`anon_can_update_sites` は qual true + with_check true の両方）・per-table policy 総数=2/2・public schema policy 総数=27・8権限×2ロール×2テーブル false・table/column ACL 0・write RPC 5本の signature / overload=1 / 属性 / RPC ごとの result type / `_verify_management_session` 検証（strpos literal 一致）/ anon・authenticated EXECUTE true・read RPC 5本の signature / overload / 属性 / result type・内部参照 RPC 4本の signature / overload / 属性・helper の属性＋非公開 EXECUTE。いずれかの不一致で raise exception し全体 abort する fail-closed。再実行は G-2「policy 既 drop」で停止）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-18）
+
+- ユーザーが PRE-CHECK（C-1〜C-8b）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：read-only GUARD DO ブロック（G-1〜G-9）→ DROP POLICY 4文 → COMMIT）：
+
+```sql
+BEGIN;
+-- GUARD (G-1..G-9, read-only)
+DROP POLICY sa_update ON public.site_assignments;
+DROP POLICY sa_write ON public.site_assignments;
+DROP POLICY anon_can_insert_sites ON public.sites;
+DROP POLICY anon_can_update_sites ON public.sites;
+COMMIT;
+```
+
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2 が「policy 既 drop」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用（DB 実行はユーザーが手動で実施）。ROLLBACK 未使用。
+
+### 変更内容
+
+- `site_assignments.sa_update` / `site_assignments.sa_write` / `sites.anon_can_insert_sites` / `sites.anon_can_update_sites` の4本を DROP。
+- sites / site_assignments の policy はいずれも0件になった。
+
+### 保持（非変更）
+
+- anon / authenticated の8権限（SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）× 2テーブル：すべて false（GRANT / REVOKE なし・不変）。
+- PUBLIC / anon / authenticated 向け table grant：0件・column ACL：0件・raw table ACL は postgres / service_role のみ（不変）。
+- write RPC 5本・read RPC 5本・内部参照 RPC 4本・`_verify_management_session`：属性・EXECUTE 不変。
+- sites データ20件・site_assignments データ30件：不変。frontend 変更なし。
+
+### 実行後確認結果（Post-check・2026-07-18・報告された項目のみ記載）
+
+- P-1：sites policy_count = 0・site_assignments policy_count = 0・対象4本の個別 count = 0・想定外 policy なし。
+- P-1b：public schema 全体の policy count = 23（実行前 27 から4件減＝対象4本のみ）。
+- P-2：両テーブルの属性不変（relkind = 'r'・RLS = true・FORCE RLS = false・owner = postgres）。
+- P-3：anon / authenticated の8権限 × 2ロール × 2テーブル = 32項目すべて false。
+- P-4：PUBLIC / anon / authenticated 向け table grant = 0件・column ACL = 0件・raw table ACL は postgres / service_role のみ。
+- P-5：write RPC 5本不変（全て SECURITY DEFINER・VOLATILE・owner postgres・search_path=public, extensions・管理 session 検証あり・anon / authenticated EXECUTE true・result type 不変（create_site_secure のみ TABLE(id uuid)・他4本 void））。
+- P-6：read RPC 5本不変（SECURITY DEFINER / STABLE / owner postgres / search_path 固定 / result type 不変）・内部参照 RPC 4本不変（SECURITY DEFINER / owner postgres / search_path 固定）・`_verify_management_session(text)` 不変（SECURITY DEFINER / owner postgres / search_path 固定・anon / authenticated EXECUTE false・PUBLIC EXECUTE なし）。
+- P-7：データ不変（実行前後で完全一致）：sites total 20 / active 10 / inactive 10 / null_active 0・site_assignments total 30 / active 12 / inactive 18 / null_active 0・整合性 sa_null_site_id 0 / sa_null_employee_id 0 / sa_orphan_site 0。
+
+### PUBLIC EXECUTE 残存（別工程候補・本工程では変更していない）
+
+- **write RPC 5本すべてで PUBLIC EXECUTE が残存**（C-4d / P-5 実測。実行前後で不変＝本工程は GRANT / REVOKE を一切行っていない）。
+- 原因は既存状態：Phase 3 の定義ファイル（sites-site-assignments-secure-rpc.sql）は anon / authenticated へ GRANT する一方、PUBLIC からの REVOKE を行っていない。read RPC 5本（2B-8 で作成時に REVOKE ALL FROM PUBLIC 済み）・`_verify_management_session`（作成時に PUBLIC / anon / authenticated から REVOKE 済み）とは対照的な状態。
+- **対応は別工程候補として記録**：Phase 4-F-5-b で記録した machines write RPC 5本の残存と合わせ、「write RPC PUBLIC EXECUTE 撤廃」の横断工程（棚卸し→一括設計）として扱う。
+
+### negative スモークテスト（2026-07-18・実 token・実 UUID は使用しない・記録もしない）
+
+- write RPC：無効 management session での `deactivate_site_secure` 呼び出しを拒否（P0001 'Invalid or expired session'・write 処理未到達）。
+- direct write 4操作を**個別に**確認（すべて 42501 permission denied・transaction は ROLLBACK 済み・実データ変更なし）：
+  1. anon direct INSERT public.sites → 42501
+  2. anon direct UPDATE public.sites → 42501
+  3. anon direct INSERT public.site_assignments → 42501
+  4. anon direct UPDATE public.site_assignments → 42501
+
+### 本番 read-only スモークテスト（2026-07-18）
+
+- 従業員画面：ログイン OK・現場一覧・割当表示 OK・`list_sites_secure` = HTTP 200・`list_site_assignments_secure` = HTTP 200・Console 赤エラーなし・両テーブルへの direct REST access なし。
+- 管理画面：ログイン OK・現場管理一覧・詳細表示 OK・`list_sites_admin_secure` = HTTP 200・`get_site_admin_secure` = HTTP 200・`list_site_assignments_admin_secure` = HTTP 200・Console 赤エラーなし・両テーブルへの direct REST access なし。
+- 書き込み操作は未実施。
+
+### write positive スモーク方針
+
+- 実データを作成・変更する write smoke は意図的に未実施（不要な現場・割当変更を作らない方針）。write path 健全性は P-5（RPC 属性・EXECUTE 不変）+ invalid session negative smoke で担保。次回の通常業務での現場登録・更新・割当変更が実運用上の positive 確認となり、問題があれば rollback を判断する。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ）。対象は4本の再作成（policy 層のみ・GRANT 復元なし・site_assignments 側は TO public・sites 側は TO anon・`anon_can_update_sites` は USING (true) WITH CHECK (true)）に限定。再作成は潜在的な allow-all write 経路を復活させるため緊急復旧時のみ使用・別途明示承認が必要。
+
+### 最終状態
+
+- sites / site_assignments の policy は0件（stale write policy 4本撤廃済み）。直接アクセスは privilege 層で全面遮断のまま、write 経路は SECURITY DEFINER RPC 5本（owner postgres・FORCE RLS false）に一本化。
+- write RPC 5本の PUBLIC EXECUTE は残存（既存状態・本工程対象外・machines 分と合わせた横断別工程候補）。
+- Phase 4-F-5-c の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- GUARD+BODY は1回のみ実行。negative smoke は dummy token / gen_random_uuid および transaction+ROLLBACK 設計で実データを残さない。実 token 値・実 UUID は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-5c-sites-site-assignments-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

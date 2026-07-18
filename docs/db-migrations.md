@@ -5760,3 +5760,91 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。negative smoke は dummy token / gen_random_uuid および transaction+ROLLBACK 設計で実データを残さない。実 token 値・実 UUID は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-5c-sites-site-assignments-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-18 Phase 4-F-6-a write/admin RPC 32本 PUBLIC EXECUTE 撤廃（★実行済み★）
+
+### 位置づけ
+
+- 2026-07-18 の public schema 横断棚卸し（SECURITY DEFINER 78本・PUBLIC EXECUTE true 36本＝全て explicit）に基づく PUBLIC EXECUTE 整理の第1工程。Phase 4-F-4-a（notices RPC 5本）・2B-6 side step（create_machine_location_secure）と同一の変更クラス。
+- **session系4本（`create_admin_session(uuid, text)` / `revoke_admin_session(text)` / `create_employee_session(uuid, text)` / `revoke_employee_session(text)`）は対象外**とし、ログイン前 anon 呼出の critical path として Phase 4-F-6-b（login/logout smoke 必須）へ持ち越し。
+- 本記録 PR の main merge をもって工程クローズ。**Phase 4-F 全体は未完了。**
+
+### 目的
+
+- 対象32本は Phase 2〜3 期の作成時に anon / authenticated へ explicit GRANT される一方、explicit な PUBLIC EXECUTE も付与されたまま残存していた。クライアントロールは anon / authenticated のみで PUBLIC は冗長であり、将来ロールが write RPC の EXECUTE を暗黙継承する潜在経路となるため、defense-in-depth として PUBLIC のみ撤廃する。
+- anon / authenticated の到達性は explicit ACL エントリ（aclexplode で32本全件の実在を GUARD 検証）により REVOKE 前後で不変。
+
+### 対象（32本）
+
+- machines 5本・sites / site_assignments 5本・employees / genka_admins 4本・materials 2本・rates 2本・invoices 4本・site_budgets 4本・reports 3本・paid_leave 3本。
+- DB 変更は `REVOKE EXECUTE ON FUNCTION ... FROM PUBLIC` ×32文のみ（単一トランザクション）。
+
+### 非対象
+
+- session系4本（Phase 4-F-6-b）。
+- anon / authenticated の GRANT / REVOKE（一切変更なし）。
+- 関数定義（CREATE OR REPLACE / ALTER / DROP なし）・table / view / policy / RLS・DML。
+- frontend。positive write smoke は不実施（P-2/P-3 で EXECUTE 不変を実証）。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-6a-write-rpc-public-execute-revoke.sql`（PR #141 merge `e27182350c7e2f4f1ff1956b09c283b6174a074c`・mergedAt 2026-07-18T07:29:39Z・SQL commit `6cf6b37`。本記録で STATUS を `EXECUTED 2026-07-18` に更新）。
+- 実行前 GUARD G-1〜G-4 を BODY と同一トランザクション内に持つ設計（schema 基準 78/36・32本の signature / overload=1 / plpgsql / owner postgres / VOLATILE / search_path / result type / proacl 非NULL・**explicit PUBLIC あり（なければ再実行として停止）・explicit anon / authenticated あり（なければアプリ断絶として停止）**・effective 3値 true・session名混入検知・session系4本の状態検証。G-2+G-3+G-4 の組合せで「PUBLIC true 36本 = 対象32＋session 4」の集合一致を保証。不一致は raise exception で全体 abort する fail-closed）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-18）
+
+- ユーザーが PRE-CHECK（C-1〜C-6）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：GUARD DO ブロック → REVOKE ×32 → COMMIT）。
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2/G-3 が「PUBLIC 既撤廃」を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用。ROLLBACK 未使用。
+
+### 実行前確認結果（Pre-check・2026-07-18・全合格）
+
+- C-1：SECURITY DEFINER 総数 78・PUBLIC EXECUTE true 36。
+- C-2：対象32本すべて存在・plpgsql・owner postgres・SECURITY DEFINER・VOLATILE・search_path=public, extensions・overload=1・proacl 非NULL・explicit / effective の PUBLIC / anon / authenticated EXECUTE すべて true。reports系2本は `time without time zone` の signature 一致。
+- C-2b：32, 32, 32, 32, 32, 32, 32, 0, 0, 0, 0, 0。
+- C-3：session系4本は explicit / effective の PUBLIC / anon / authenticated EXECUTE true・属性不変。
+- C-4：PUBLIC true 36本が対象32本＋session系4本と完全一致（差分0行）。
+- C-5：再作成版3本が repo 現行版と一致（`review_paid_leave_request_secure` / `save_paid_leave_grant_secure` = employee_sessions / admin_sessions の dual 参照・helper 不使用、`upsert_site_budget_secure` = admin_sessions 参照。owner / 属性 / result type / overload 一致）。
+- C-6：frontend 呼出の repo 事実確認済み。
+
+### 実行後確認結果（Post-check・2026-07-18・全合格）
+
+- P-1：SECURITY DEFINER 総数 78 不変・**PUBLIC EXECUTE true 36 → 4**。
+- P-1b：残存 PUBLIC true 4本は session系4本と完全一致（差分0行）。
+- P-2：対象32本の explicit / effective PUBLIC EXECUTE = false・**explicit / effective anon / authenticated EXECUTE = true 維持**・owner / SECURITY DEFINER / VOLATILE / search_path / result type / overload / proacl 不変。
+- P-3（集計再実行）：報告値 32, 0, 32, 32, 0, 32, 32, 0, 0（explicit/effective PUBLIC = 0・anon/authenticated = 32・異常件数 0）で期待どおり。
+- P-4：session系4本は explicit / effective の PUBLIC / anon / authenticated EXECUTE true のまま不変。
+
+### negative スモークテスト（2026-07-18・実 token・実 UUID は使用しない・記録もしない・各文を個別実行）
+
+1. `deactivate_machine_secure(text, uuid)`：invalid token で単独実行 → P0001 'Invalid or expired session'（`_verify_management_session` で拒否・実データ変更なし）：PASS。
+2. `deactivate_site_secure(text, uuid)`：invalid token で単独実行 → 同上：PASS。
+
+### 本番 read-only スモークテスト（2026-07-18）
+
+- index / admin / genka を通常ログインで確認：主要一覧・詳細表示 OK・関連 RPC HTTP 200・想定外の 401 / 403 なし・アプリ由来の Console 赤エラーなし・データ作成・更新・削除なし。
+- Console の「A listener indicated an asynchronous response ...」は Chrome 拡張の content script 由来で、アプリ / RPC 由来ではないと判断。
+- login / logout の本格確認は Phase 4-F-6-b（session系工程）で実施する。
+
+### write positive スモーク方針
+
+- 不実施（EXECUTE 到達性の不変は P-2 / P-3 の explicit + effective 両面の実測で担保）。次回の通常業務での各書き込み操作が実運用上の positive 確認となる。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・`GRANT EXECUTE ... TO PUBLIC` ×32）。**通常実行禁止**：本番障害の原因が本工程と確定し、かつ別途明示承認された場合のみ。実行しても anon / authenticated の ACL は変更しない。
+
+### 最終状態
+
+- write/admin RPC 32本の PUBLIC EXECUTE は撤廃済み。public schema の PUBLIC EXECUTE true は session系4本のみ（SECURITY DEFINER 78本 不変）。
+- anon / authenticated の explicit / effective EXECUTE は36本すべてで不変（アプリ挙動に変更なし）。
+- Phase 4-F-6-a の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。**次工程は Phase 4-F-6-b（session系4本の PUBLIC EXECUTE 撤廃・login/logout smoke 必須）**。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- GUARD+BODY は1回のみ実行。negative smoke は dummy token / gen_random_uuid・各文個別実行で実データを残さない。実 token 値・実 UUID は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-6a-write-rpc-public-execute-revoke.sql` の pre-check / guard / post-check / smoke に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

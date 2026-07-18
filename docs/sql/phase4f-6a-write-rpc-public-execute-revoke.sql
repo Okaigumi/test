@@ -12,17 +12,92 @@
 --   Same change class and structure as Phase 4-F-4-a (notices RPC PUBLIC
 --   EXECUTE revoke) and the 2B-6 side step (create_machine_location_secure).
 -- ============================================================
--- [STATUS] NOT EXECUTED
---   - The EXECUTION BODY must be run exactly ONCE by the user (Supabase SQL
---     Editor, manual). DO NOT RE-RUN after success: a second run fails the
---     guard at G-3 (PUBLIC already revoked on the targets) by design
+-- [STATUS] EXECUTED 2026-07-18
+--   - The EXECUTION BODY was run exactly ONCE by the user (Supabase SQL
+--     Editor, manual, 2026-07-18). DO NOT RE-RUN: a second run fails the
+--     guard at G-2/G-3 (PUBLIC already revoked on the targets) by design
 --     (fail-closed).
 --   - DB execution is done by the user, manually, in the Supabase SQL
 --     Editor. Claude Code CLI performs NO DB connection / NO SQL execution /
 --     NO Supabase CLI / NO psql.
---   - Run order: PRE-CHECK (C-1..C-6) -> EXECUTION GUARD + BODY (single
---     transaction) -> POST-CHECK (P-1..P-4) -> SMOKE TEST -> ROLLBACK only
---     in an emergency, with separate explicit approval.
+--   - Run order (as designed): PRE-CHECK (C-1..C-6) -> EXECUTION GUARD +
+--     BODY (single transaction) -> POST-CHECK (P-1..P-4) -> SMOKE TEST ->
+--     ROLLBACK only in an emergency, with separate explicit approval.
+--
+--   [DB EXECUTION RESULT] (Supabase SQL Editor, by the user, 2026-07-18)
+--     - The user ran the EXECUTION BODY manually, once, as a single
+--       transaction (read-only GUARD DO block G-1..G-4 -> 32 x REVOKE
+--       EXECUTE ... FROM PUBLIC -> COMMIT).
+--       Result: Success. No rows returned.
+--     - No DB connection / Supabase CLI / psql from Claude Code CLI.
+--     - ROLLBACK: NOT executed (kept as commented reference only).
+--
+--   [PRE-CHECK RESULT] (Supabase SQL Editor, 2026-07-18 -- reported items
+--     only; ALL PASSED)
+--     - C-1: SECURITY DEFINER total = 78; PUBLIC EXECUTE true = 36.
+--     - C-2: all 32 targets present -- plpgsql, owner postgres, SECURITY
+--       DEFINER, VOLATILE, search_path=public, extensions, overload = 1,
+--       proacl NOT NULL, explicit PUBLIC / anon / authenticated EXECUTE
+--       true, effective PUBLIC / anon / authenticated EXECUTE true; the two
+--       reports RPCs matched the 'time without time zone' signatures.
+--     - C-2b: 32, 32, 32, 32, 32, 32, 32, 0, 0, 0, 0, 0.
+--     - C-3: all 4 session RPCs -- explicit / effective PUBLIC / anon /
+--       authenticated EXECUTE true; attributes unchanged.
+--     - C-4: 0 rows (the 36 PUBLIC-true functions match exactly the 32
+--       6-a targets + 4 session RPCs).
+--     - C-5: the 3 re-created current versions match the repo --
+--       review_paid_leave_request_secure and save_paid_leave_grant_secure
+--       reference employee_sessions AND admin_sessions (no helper);
+--       upsert_site_budget_secure references admin_sessions; owner /
+--       attributes / result type / overload all as expected.
+--     - C-6: repo front-end call-site facts confirmed.
+--
+--   [POST-CHECK RESULT] (Supabase SQL Editor, 2026-07-18 -- reported items
+--     only; ALL PASSED)
+--     - P-1: SECURITY DEFINER total = 78 (unchanged); PUBLIC EXECUTE true
+--       = 4 (was 36; exactly -32).
+--     - P-1b: the remaining 4 PUBLIC-true functions are EXACTLY the 4
+--       session RPCs (0 unexpected rows in the set comparison).
+--     - P-2: all 32 targets -- explicit / effective PUBLIC EXECUTE = false;
+--       explicit / effective anon / authenticated EXECUTE = true
+--       (unchanged); owner / SECURITY DEFINER / VOLATILE / search_path /
+--       result type / overload / proacl unchanged.
+--     - P-3 (aggregate re-run): reported 32, 0, 32, 32, 0, 32, 32, 0, 0 --
+--       explicit/effective PUBLIC counts 0, anon / authenticated counts 32,
+--       anomaly counts 0, consistent with the expected values.
+--     - P-4: the 4 session RPCs unchanged -- explicit / effective PUBLIC /
+--       anon / authenticated EXECUTE all still true.
+--
+--   [SMOKE TEST RESULT] (2026-07-18; no real token / real UUID used or
+--     recorded)
+--     - RPC negative (run individually, one statement per run):
+--       (1) deactivate_machine_secure(text, uuid) with an invalid token ->
+--       P0001 'Invalid or expired session' (rejected by
+--       _verify_management_session; no data change): PASS.
+--       (2) deactivate_site_secure(text, uuid) with an invalid token ->
+--       P0001 'Invalid or expired session' (same rejection; no data
+--       change): PASS.
+--     - Production read-only (browser): index / admin / genka -- normal
+--       login OK, main lists and detail views render, related RPCs =
+--       HTTP 200, no unexpected 401 / 403, no app-origin red console
+--       errors, NO data create / update / delete. A console message
+--       "A listener indicated an asynchronous response ..." was determined
+--       to originate from a Chrome extension content script, NOT from the
+--       app or any RPC.
+--     - Positive write smoke: NOT performed (P-2/P-3 prove the client
+--       roles' EXECUTE unchanged).
+--
+--   [OUTCOME]
+--     - PUBLIC EXECUTE revoked on the 32 write/admin RPCs. public schema:
+--       SECURITY DEFINER 78 (unchanged); PUBLIC EXECUTE true 36 -> 4 (the
+--       4 session RPCs only, deferred to Phase 4-F-6-b).
+--     - anon / authenticated explicit + effective EXECUTE: unchanged on all
+--       36 functions. Function definitions / tables / policies / data:
+--       untouched.
+--     - Phase 4-F-6-a DB work is COMPLETE; the step closes when this
+--       record's PR is merged to main. Next step: Phase 4-F-6-b (the 4
+--       session RPCs, with dedicated login/logout smoke). Phase 4-F as a
+--       whole is NOT complete.
 --
 -- [WHY anon / authenticated ACCESS IS UNAFFECTED]
 --   - has_function_privilege('anon', ...) can be true EITHER via an explicit

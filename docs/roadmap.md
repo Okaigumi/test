@@ -497,6 +497,21 @@
   - 方針：CSV 出力導線は管理コンソール側のみに集約する
   - 位置づけ：Phase 4-C-4 の範囲外。読み取り整理とは独立した UI 整理タスクとして扱う
 
+### 4-F-7 stale policy cleanup（pg_policies 実測にもとづく整理）
+
+- 4-F-7-a rates（`unit_rates` / `employee_rates` の stale policy 6本 DROP）：**✅ 完了（2026-07-19）**
+  （準備 PR #145・実行記録 PR #146。public schema policy 23 → 17。詳細は docs/db-migrations.md「2026-07-19 Phase 4-F-7-a」）
+- 4-F-7-b 業務系（`invoices` / `site_budgets` / `paid_leave_requests` / `paid_leave_grants` / `reports` の stale policy 12本 DROP）：**✅ 完了（2026-07-19）**
+  - 準備 PR #147（merge `7bf9170`）→ DB 実行 2026-07-19（GUARD＋BODY 1回のみ・Success. No rows returned・再実行禁止）
+  - PRE-CHECK C-1〜C-8 / POST-CHECK P-1〜P-5 全合格。**public schema policy 17 → 5**（想定外0）
+  - 本番 smoke 全合格（3画面＋同値保存 write smoke。`paid_leave_requests` の新規申請・承認 write は実データ変更を伴うため未実施＝関数属性・ACL・EXECUTE 証拠で補完）
+  - `anon_can_update_site_budgets`（4-D-4 以来の policy-review 宿題）・`reports_all`・paid_leave write系 policy はここで解消
+  - 詳細は docs/db-migrations.md「2026-07-19 Phase 4-F-7-b」
+- **4-F-7-c identity 系（未完了・後続工程）**：残存 policy 5本（`employees.employees_read_all` / `genka_admins.ga_read` / `ga_write` / `ga_update` / `anon_can_update_genka_admins`）
+  - `employees_read_all` / `ga_read` は**ログイン前の名前リスト direct SELECT（列レベル grant）を支える現役 policy の可能性が高く、削除禁止のまま実測判断**
+  - `ga_write` / `ga_update` / `anon_can_update_genka_admins` は stale 候補（write 権限 REVOKE 済み）。実測 roles 確認のうえ限定 drop を別途判断
+  - 現役 policy を意図的保持してクローズする場合は、その旨を記録してから Phase 4 完了と扱う（direct read の完全 RPC 化・PIN ハッシュ化は後続 Phase 候補）
+
 ## Phase 5：PIN・ログイン強化
 
 状態：未着手

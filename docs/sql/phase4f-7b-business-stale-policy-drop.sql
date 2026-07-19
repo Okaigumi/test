@@ -3,11 +3,50 @@
 --   invoices / site_budgets / paid_leave_requests / paid_leave_grants /
 --   reports の stale permissive policy 12本を DROP
 -- ============================================================
--- 【実行ステータス】STATUS: PREPARED / NOT EXECUTED
---   - preparation date：2026-07-19
---   - execution date  ：（未実行・未記入）
---   - Result          ：（未実行・未記入）
---   - ★実DBへは未実行。実行済みと誤認しないこと★
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-19
+--   - preparation date：2026-07-19（準備PR #147・merge `7bf9170`）
+--   - execution date  ：2026-07-19（Supabase SQL Editor 手動実行・Supabase CLI / psql 未使用）
+--   - Result          ：Success. No rows returned
+--   - 実行内容：EXECUTION BODY（GUARD G-1〜G-8＋DROP POLICY 12文・同一transaction）を
+--     1回だけ実行。再実行なし。
+--   - ★BODY は実行済み。再実行禁止★（再実行しても GUARD G-2 が対象policy 0本を
+--     検知して fail-closed で停止する）
+--   - PRE-CHECK 全合格（C-1〜C-8・2026-07-19）：
+--       C-1 public_total=17 / target=12 / identity=5 / other=0
+--       C-2 対象12本の名前・roles・cmd・qual・with_check 想定どおり
+--       C-3 期待集合との差分0行・C-4 5テーブル owner=postgres・RLS=true・FORCE=false
+--       C-5 anon/authenticated の table 権限なし（明示0行・実効40判定 false）
+--       C-6〜C-8 対象参照30関数：SECURITY DEFINER=true・owner=postgres・
+--       search_path=public, extensions・PUBLIC EXECUTE=false・
+--       anon/authenticated EXECUTE=true
+--   - BODY で削除した policy（12本のみ・identity 系5本は未変更）：
+--       invoices：inv_read / inv_write / inv_update
+--       site_budgets：sb_read / sb_write / sb_update / anon_can_update_site_budgets
+--       paid_leave_requests：plr_write / plr_update
+--       paid_leave_grants：plg_write / plg_update
+--       reports：reports_all
+--   - POST-CHECK 全合格（P-1〜P-5・2026-07-19）：
+--       P-1 対象5テーブル policy 0行
+--       P-2 public_total=17→5・残存は identity 系5本（employees_read_all /
+--           ga_read / ga_write / ga_update / anon_can_update_genka_admins）と
+--           完全一致・想定外0
+--       P-3 5テーブルの owner・RLS・FORCE・ACL 不変
+--       P-4 対象30関数の SECURITY DEFINER・owner・search_path・
+--           PUBLIC EXECUTE なし 不変
+--       P-5 anon/authenticated EXECUTE 維持
+--   - 本番 smoke（2026-07-19・全合格）：
+--       従業員画面：ログイン・日報入力/履歴/カレンダー・有休情報 正常・
+--       関連RPC成功・Console赤エラーなし・対象テーブル direct REST なし
+--       管理コンソール：ログイン・日報一覧・有休管理・請求書一覧・実行予算一覧 正常
+--       原価管理画面：ログイン・ダッシュボード・日報原価/請求書/予算表示・
+--       現場/期間切替 正常
+--       write smoke：現場予算 同値保存（get_site_budget_secure 200 /
+--       update_site_budget_secure 204）・請求書 同値保存・日報 同値保存・
+--       有休付与日数 同値保存 すべて合格・direct REST なし
+--       ★未実施の明記★：paid_leave_requests の新規申請・承認は実データ変更を
+--       伴うため意図的に未実施。PRE/POST-CHECK の関数属性・ACL・EXECUTE 証拠
+--       （SECURITY DEFINER owner bypass により policy 非依存）で補完。
+--   - 記録先：docs/db-migrations.md「2026-07-19 Phase 4-F-7-b」
 --
 -- 【実行方法（重要）】
 --   - 実行先：Supabase SQL Editor（手動実行のみ）

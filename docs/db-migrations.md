@@ -6011,3 +6011,84 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。smoke は本番 admin / genka 画面の一覧表示と employee rate 同値保存（完全無変化）で実施し、実 token 値・実 UUID は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-7a-rates-stale-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-19 Phase 4-F-7-b business stale policy cleanup（★実行済み★）
+
+### 位置づけ
+
+- Phase 4-F-7-a（rates 6本）に続く pg_policies 整理の第2工程。実DB read-only 調査（SQL A〜J・2026-07-19）で stale 確定した業務系5テーブル（`invoices` / `site_budgets` / `paid_leave_requests` / `paid_leave_grants` / `reports`）の stale permissive policy 12本を、単一トランザクション・fail-closed GUARD 付きで一括 DROP。4F-7-a と同一の変更クラスを複数テーブルへ統合した工程。
+- 本記録 PR の main merge をもって工程クローズ。**identity 系5本（Phase 4-F-7-c）が未完了の後続工程として残る。Phase 4 全体は未完了。**
+
+### 目的
+
+- 対象5テーブルとも anon / authenticated の table 権限は全8種 REVOKE 済みで、policy 12本は権限段階で遮断済みの no-op（stale）。読み書きは SECURITY DEFINER RPC（owner=postgres・FORCE RLS=false のため policy 非依存）経由のみ・frontend direct access 0件。defense-in-depth として stale policy を撤去し、特に `anon_can_update_site_budgets`（roles={anon} の UPDATE 全行許可・4-D-4 以来の policy-review 宿題）と `reports_all`（cmd=ALL・qual/with_check=true）を解消する。
+
+### 対象（DROP POLICY 12本）
+
+- `public.invoices`：`inv_read` / `inv_write` / `inv_update`
+- `public.site_budgets`：`sb_read` / `sb_write` / `sb_update` / `anon_can_update_site_budgets`（roles={anon}）
+- `public.paid_leave_requests`：`plr_write` / `plr_update`
+- `public.paid_leave_grants`：`plg_write` / `plg_update`
+- `public.reports`：`reports_all`（cmd=ALL）
+- DB 変更は DROP POLICY 12文のみ（単一トランザクション・IF EXISTS なし）。
+
+### 非対象（identity 系5本＝Phase 4-F-7-c で別途判断・今回未変更）
+
+- `employees.employees_read_all`・`genka_admins.ga_read`：**ログイン前の名前リスト direct SELECT（列レベル grant）を支える現役 policy の可能性が高く、削除禁止**（index.html:895 / admin-app.html:291 / genka-app.html:480 等が依存）。
+- `genka_admins.ga_write` / `ga_update` / `anon_can_update_genka_admins`：write 権限 REVOKE 済み（2026-05-30・2026-07-08 再確認）で stale 候補だが、実測 roles 確認のうえ 4F-7-c で限定判断。
+- そのほか table ACL / RLS 状態 / RPC 定義・EXECUTE / frontend は一切変更なし。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-7b-business-stale-policy-drop.sql`（準備 PR #147 merge `7bf9170093b10ad612d17fe2e05371190d2e1c30`・mergedAt 2026-07-19T04:48:41Z・準備 commit `cd3db37dcde4325cdd2372647cd4e7157b37ac2d`。本記録で STATUS を `EXECUTED 2026-07-19` に更新）。
+- GUARD（G-1〜G-8）は BODY と同一トランザクション内の fail-closed 設計：policy 総数 17/12/5・対象外が identity 5本と完全一致＋他0・12本の名前/cmd/roles 一致＋無制限性（qual/with_check が true/NULL）・owner=postgres/RLS=true/FORCE=false・anon/authenticated 実効権限40判定 false＋PUBLIC 明示0・対象参照関数（prosrc 検出）全て SECURITY DEFINER/owner=postgres・PUBLIC EXECUTE なし。不一致は raise exception で全体 abort。
+- read-only security auditor subagent によるレビュー合格（重大問題なし）を経て merge。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-19）
+
+- ユーザーが PRE-CHECK（C-1〜C-8）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：GUARD DO ブロック → DROP POLICY ×12 → COMMIT）。
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2 が対象 policy 0本を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用。ROLLBACK 未使用。
+
+### 実行前確認結果（Pre-check・2026-07-19・全合格・STOP条件なし）
+
+- C-1：public policy 総数 17（対象12・identity 5・想定外0）。
+- C-2/C-3：対象12本の名前・roles・cmd・qual・with_check 想定どおり・期待集合との差分0行。identity 系5本も想定どおり。
+- C-4：5テーブルとも owner=postgres・RLS=true・FORCE RLS=false。
+- C-5：anon / authenticated の対象 table 権限なし（明示0行・実効40判定すべて false）。
+- C-6〜C-8：対象参照 30 関数すべて SECURITY DEFINER=true・owner=postgres・search_path=public, extensions・PUBLIC EXECUTE=false・anon / authenticated EXECUTE=true。
+
+### 実行後確認結果（Post-check・2026-07-19・全合格）
+
+- P-1：対象5テーブルの policy 0行（削除対象12本 = 0）。
+- P-2：**public schema policy 総数 17 → 5**。残存は identity 系5本（`employees_read_all` / `ga_read` / `ga_write` / `ga_update` / `anon_can_update_genka_admins`）と完全一致・想定外0。
+- P-3：5テーブルの owner・RLS・FORCE RLS・table ACL 不変。
+- P-4：対象30関数の SECURITY DEFINER・owner・search_path・PUBLIC EXECUTE なし 不変。
+- P-5：anon / authenticated EXECUTE 維持。
+
+### 本番スモークテスト（2026-07-19・全合格）
+
+- 従業員画面：ログイン正常・日報入力/履歴/カレンダー正常・有休情報正常・関連 RPC 成功・Console 赤エラーなし・対象テーブルへの direct REST なし。
+- 管理コンソール：ログイン正常・日報一覧・有休管理・請求書一覧・実行予算一覧 正常・関連 RPC 成功・Console 赤エラーなし・direct REST なし。
+- 原価管理画面：ログイン正常・ダッシュボード・日報原価/請求書/予算表示・現場/期間切替 正常・関連 RPC 成功・Console 赤エラーなし・direct REST なし。
+- write smoke：現場予算の同値保存（`get_site_budget_secure` HTTP 200 / `update_site_budget_secure` HTTP 204・direct REST なし）・請求書の同値保存・日報の同値保存・有休付与日数の同値保存 すべて合格。
+- **未実施（意図的・記録）**：`paid_leave_requests` の新規申請・承認 write は実データ変更を伴うため未実施。当該 RPC（`create_paid_leave_request_secure` / `review_paid_leave_request_secure`）が policy 非依存であることは、PRE/POST-CHECK の関数属性（SECURITY DEFINER・owner=postgres＝owner bypass）・ACL・EXECUTE 証拠で補完した。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・CREATE POLICY 12文。使用時は C-2 実測値と照合してから）。**通常実行禁止**：本番の対象5テーブル系障害の原因が本工程と確定し、かつ別途明示承認された場合のみ。
+
+### 最終状態
+
+- 業務系5テーブルの policy は 0本（stale 12本撤去済み）。**public schema policy 総数は 17 → 5**。
+- 残存5本は identity 系のみ：`employees_read_all` / `ga_read`（ログイン前 direct read を支える現役候補）と `ga_write` / `ga_update` / `anon_can_update_genka_admins`（stale 候補）。**Phase 4-F-7-c として実測のうえ限定判断する未完了の後続工程**。
+- RLS 状態・table ACL・RPC 定義と EXECUTE 権限・業務データはすべて不変（アプリ挙動に変更なし）。DB の追加実行は不要。
+- Phase 4-F-7-b の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。**Phase 4 全体は未完了。**
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。GUARD+BODY は1回のみ実行。
+- smoke は本番3画面の統合1セッション方式（一覧表示＋同値保存 write smoke）で実施し、実 token 値・実 UUID は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-7b-business-stale-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

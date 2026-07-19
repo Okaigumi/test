@@ -523,7 +523,7 @@
 
 ## Phase 5：PIN・ログイン強化
 
-状態：未着手
+状態：着手（2026-07-19・5-C-1a 実行済み）
 
 ### やること
 
@@ -532,6 +532,20 @@
 - 一定回数失敗時の一時ロック
 - session_token の期限管理強化
 - 期限切れセッション削除
+
+### 実施方針（2026-07-19 確定・案D）
+
+- 実施順：**5-A 現状調査 → 5-C 失敗回数制限・一時的な試行抑制 → Phase 6 管理者日報カレンダー → 5-D/5-E PIN ハッシュ化（計画的）→ 5-B 期限切れ session 削除（後段）**。
+- **5-F/5-G（ログイン前名前一覧の RPC 化・`employees_read_all`/`ga_read` 撤廃・policy 完全0化）は凍結**（現役 policy・pin/created_at 非公開・table-level SELECT 無効で実質リスク小に対し login 破壊リスクが大きいため）。
+- IP 単位 rate limit（PostgREST db-pre-request）は独立後続工程。Phase 5-C は総当り・DoS の**完全防御ではなく軽減**と位置づける。
+
+### 5-C ログイン失敗抑制
+
+- **5-C-1a login throttle テーブル作成：✅ 完了（2026-07-19・実行済み）**
+  - 非公開スキーマ `private` に `private.login_throttle`（realm/identifier/fail_count/cooldown_until/last_failed_at/updated_at・PK(realm,identifier)）を新規作成。Data API 向け全ロールから到達不能（USAGE/table 権限を明示 REVOKE・RLS 有効・policy なし・FORCE なし）。owner=postgres。
+  - 準備 PR #151（merge `ed98b0c`）→ DB 実行 2026-07-19（GUARD＋BODY 1回のみ・Success. No rows returned・再実行禁止）。PRE C-1〜C-4 / POST P-1〜P-8 全合格。Phase 4 の policy 2本・login RPC 2本は不変。
+  - 詳細は docs/db-migrations.md「2026-07-19 Phase 5-C-1a」。
+- **5-C-1b（後続）**：`create_employee_session` / `create_admin_session` を **CREATE OR REPLACE**（DROP しない・同 signature/同 RETURNS/同挙動維持・クールダウン中も 0行返す互換方式）で throttle 判定を組込。発動条件「5回目失敗で cooldown 開始＝6回目以降拒否」・実在 ID のみ記録・DB 内で待たせない（即拒否）・safeupdate 対応（WHERE 付き更新）。retry_after 表示は後続 `*_session_v2`（additive）で対応。
 
 ## Phase 6：admin-app.html 改善
 

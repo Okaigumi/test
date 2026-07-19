@@ -6175,3 +6175,68 @@ COMMIT;
 - smoke は本番3画面の login/logout/再ログイン＋管理者同値保存で実施し、実 token 値・実 UUID・実 PIN は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-7c-genka-admins-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-19 Phase 5-C-1a login throttle table 作成（★実行済み★）
+
+### 位置づけ
+
+- Phase 4（RLSポリシー整理）クローズ後の Phase 5「PIN・ログイン強化」の最初の実 DB 変更。ログイン失敗回数抑制（アカウント単位クールダウン）の状態保持テーブルを、Data API から到達不能な非公開スキーマ `private` に**新規作成**する additive 工程。
+- 本工程は**テーブル作成のみ**。login RPC への throttle 判定組込は 5-C-1b（後続・CREATE OR REPLACE で同 signature 維持）。IP 単位 rate limit（db-pre-request）は独立後続工程。Phase 5-C 全体は**総当り・DoS の完全防御ではなく軽減**の位置づけ。
+
+### 対象（新規作成）
+
+- `private` スキーマ（`CREATE SCHEMA private AUTHORIZATION postgres`・実測で未存在を確認済み）。
+- `private.login_throttle(realm text, identifier uuid, fail_count integer, cooldown_until timestamptz, last_failed_at timestamptz, updated_at timestamptz)`・PK `(realm, identifier)`・owner=postgres・`CHECK (realm IN ('employee','admin'))`・`CHECK (fail_count >= 0)`。
+- DB 変更は「スキーマ作成・テーブル作成・明示 REVOKE・RLS 有効化」のみ（単一トランザクション）。GRANT / CREATE POLICY / DML / 既存オブジェクト変更は含まない。
+
+### 到達不能化（GRANT しないだけでなく明示 REVOKE）
+
+- `private` スキーマ USAGE と `private.login_throttle` の table 権限を **PUBLIC / anon / authenticated / service_role / authenticator** から明示 REVOKE。
+- **RLS 有効・policy なし・FORCE RLS を付けない**。owner（postgres）は非 FORCE 時に RLS を bypass するため、5-C-1b の SECURITY DEFINER・owner=postgres の login RPC だけが完全修飾名 `private.login_throttle` でアクセスできる。非 owner は「USAGE なし＋table 権限なし＋RLS で 0 行」の三重で到達不能。
+
+### 非対象（今回変更なし）
+
+- `create_employee_session` / `create_admin_session`（throttle 参照組込は 5-C-1b）。
+- `employees.employees_read_all` / `genka_admins.ga_read`（Phase 4 の現役 policy・不変）。
+- 列 grant・frontend・IP rate limit。
+
+### Git / PR
+
+- SQL：`docs/sql/phase5c-1a-login-throttle-table.sql`（準備 PR #151 merge `ed98b0c3ac131870ea3935049d02e7c972aa1477`・mergedAt 2026-07-19T11:13:20Z。本記録で STATUS を `EXECUTED 2026-07-19` に更新）。
+- GUARD（G-1〜G-3）は BODY と同一トランザクション内の fail-closed 設計（private スキーマ未存在・login_throttle 未存在・employees/genka_admins 存在。不一致は raise exception で abort）。security-auditor subagent レビュー全11項目 PASS を経て merge。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-19）
+
+- ユーザーが PRE-CHECK（C-1〜C-4）を read-only 実行後、EXECUTION BODY を1回だけ手動実行。結果：Success. No rows returned。
+- BODY の再実行なし。**今後も再実行禁止**（GUARD G-1 が private スキーマ既存を検知して fail-closed で停止）。Supabase CLI / psql / 外部 DB 接続は未使用。
+
+### 実行前確認結果（Pre-check C-1〜C-4・2026-07-19・全合格）
+
+- C-1：private スキーマ未存在（0行）。C-2：private.login_throttle 未存在（0行）。
+- C-3：public.employees / public.genka_admins 存在（2行）。
+- C-4：public policy が employees_read_all / ga_read の2本と完全一致（roles/cmd/qual・差分0行）。
+
+### 実行後確認結果（Post-check P-1〜P-8・2026-07-19・全合格）
+
+- P-1：private スキーマ存在・owner=postgres。P-2：USAGE が PUBLIC/anon/authenticated/service_role/authenticator の5ロールすべて false。
+- P-3：private.login_throttle 存在・relkind=r・owner=postgres。P-4：table 権限（S/I/U/D）が5ロール×4＝**20判定すべて false**。
+- P-5：RLS enabled=true・forced=false。P-6：policy 0本。
+- P-7a：カラム構成・型・default が設計どおり。P-7b：PK(realm,identifier)・CHECK(realm IN ...)・CHECK(fail_count>=0)。
+- P-8a：public policy 2本が roles/cmd/qual/with_check まで完全一致（差分0行）。P-8b：login RPC 2本（create_employee_session / create_admin_session）未変更・owner=postgres・SECURITY DEFINER・search_path 固定・private.login_throttle 参照 false。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ）。順序：5-C-1b 適用後にロールバックする場合は**先に login RPC を旧定義へ CREATE OR REPLACE で戻し→login smoke 合格→その後にテーブル削除→private スキーマは空のときのみ削除（CASCADE 不使用・参照中に先に削除しない）**。5-C-1a 単独時点では login RPC が参照していないため、テーブル削除→空スキーマ削除で完結。
+
+### 最終状態
+
+- private スキーマと private.login_throttle が作成され、Data API 向け全ロールから到達不能。RLS 有効・policy なし・FORCE なし。
+- Phase 4 の public policy 2本・login RPC 2本は不変。**DB の追加実行は不要**（本テーブルは 5-C-1b の login RPC 改修で初めて参照・書き込みされる）。
+- ※ Phase 5 全体・Phase 5-C 本体（login RPC 改修）は未完了。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。GUARD+BODY は1回のみ実行。
+- 実 PIN・token・UUID 等の機微値は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase5c-1a-login-throttle-table.sql` の pre-check / guard / post-check に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

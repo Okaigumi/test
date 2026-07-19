@@ -3,11 +3,28 @@
 --   ログイン失敗回数抑制（アカウント単位クールダウン）の状態保持テーブルを
 --   Data API から到達不能な非公開スキーマに新規作成する。
 -- ============================================================
--- 【実行ステータス】STATUS: PREPARED / NOT EXECUTED
---   - preparation date：2026-07-19
---   - execution date  ：（未実行・未記入）
---   - Result          ：（未実行・未記入）
---   - ★実DBへは未実行。実行済みと誤認しないこと★
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-19
+--   - preparation date：2026-07-19（準備PR #151・merge `ed98b0c`）
+--   - execution date  ：2026-07-19（Supabase SQL Editor 手動実行・Supabase CLI / psql 未使用）
+--   - Result          ：Success. No rows returned
+--   - 実行内容：EXECUTION BODY（GUARD G-1〜G-3＋CREATE SCHEMA/TABLE・明示 REVOKE・
+--     RLS 有効化・同一transaction）を1回だけ実行。再実行なし。
+--   - ★BODY は実行済み。再実行禁止★（再実行しても GUARD G-1 が private スキーマ
+--     既存を検知して fail-closed で停止する）
+--   - PRE-CHECK 全合格（C-1〜C-4・2026-07-19）：
+--       C-1 private スキーマ未存在（0行）／C-2 login_throttle 未存在（0行）／
+--       C-3 employees・genka_admins 存在（2行）／
+--       C-4 Phase 4 policy 2本（employees_read_all / ga_read）完全一致（差分0行）
+--   - POST-CHECK 全合格（P-1〜P-8・2026-07-19）：
+--       P-1 private 存在・owner=postgres／P-2 USAGE 5ロール全 false／
+--       P-3 login_throttle 存在・relkind=r・owner=postgres／
+--       P-4 table 権限 5ロール×S/I/U/D 計20判定すべて false／
+--       P-5 RLS enabled=true・forced=false／P-6 policy 0本／
+--       P-7a カラム構成一致／P-7b PK(realm,identifier)・CHECK realm・CHECK fail_count>=0／
+--       P-8a public policy 2本 完全一致（roles/cmd/qual/with_check・差分0行）／
+--       P-8b login RPC 2本 未変更（owner=postgres・SECURITY DEFINER・search_path 固定・
+--       private.login_throttle 参照 false）
+--   - 記録先：docs/db-migrations.md「2026-07-19 Phase 5-C-1a」
 --
 -- 【実行方法（重要）】
 --   - 実行先：Supabase SQL Editor（手動実行のみ）

@@ -282,7 +282,7 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'GUARD OK: baseline verified; replacing login RPCs with account-level cooldown';
-END
+END;
 $guard$;
 
 

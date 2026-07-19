@@ -5934,3 +5934,80 @@ COMMIT;
 - GUARD+BODY は1回のみ実行。positive smoke は本番3画面の login/logout・negative smoke は dummy token / 不正 PIN で実データを残さない。実 token 値・実 UUID は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-6b-session-rpc-public-execute-revoke.sql` の pre-check / guard / post-check / smoke に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-19 Phase 4-F-7-a rates stale policy cleanup（★実行済み★）
+
+### 位置づけ
+
+- PUBLIC EXECUTE 横断整理（6-a + 6-b）完結後の pg_policies 整理の第1工程。financial / paid_leave / reports 系 pg_policies 実測（2026-07-19）で確定した rates 2テーブル（`unit_rates` / `employee_rates`）の stale permissive policy 6本を DROP する。Phase 4-F-3 / 4-F-5a〜5c（stale policy drop）と同一の変更クラス。
+- 本記録 PR の main merge をもって工程クローズ。**Phase 4-F 全体は未完了。**
+
+### 目的
+
+- 両テーブルとも anon / authenticated / PUBLIC の SELECT / INSERT / UPDATE / DELETE は REVOKE 済み（table ACL は postgres / service_role のみ）で、policy 6本は権限段階で遮断済みの no-op（stale）。読み書きは SECURITY DEFINER RPC 4本（`list_unit_rates_secure(text)` / `list_employee_rates_secure(text)` / `upsert_unit_rate_secure(text,text,text,integer,text)` / `upsert_employee_rate_secure(text,uuid,integer,date)`・owner=postgres・FORCE RLS=false のため policy 非依存）経由のみ・frontend direct access 0件。defense-in-depth として stale policy を撤去する。
+
+### 対象（DROP POLICY 6本）
+
+- `public.unit_rates`：`ur_read`（SELECT qual=true）・`ur_write`（INSERT with_check=true）・`ur_update`（UPDATE qual=true）。
+- `public.employee_rates`：`er_read`（SELECT qual=true）・`er_write`（INSERT with_check=true）・`er_update`（UPDATE qual=true）。
+- 6本すべて PERMISSIVE・roles={public}。DB 変更は DROP POLICY 6文のみ（単一トランザクション・IF EXISTS なし）。
+
+### 非対象
+
+- table ACL / GRANT / REVOKE（一切変更なし）。RLS 有効状態（enabled=true / FORCE=false のまま不変）。
+- RPC 定義・EXECUTE 権限（anon / authenticated の 8組 true を維持・PUBLIC EXECUTE なしを維持）。
+- 業務データ（unit_rates / employee_rates の行データ不変）・frontend・他テーブルの policy。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-7a-rates-stale-policy-drop.sql`（PR #145 merge `e524a5f2e4bb991cf4c79945ce36b94907fc6a9e`・mergedAt 2026-07-18T23:44:09Z・SQL 準備 commit `a5f4d429ec3f18221aede6a50075bfdb9ec0b7a5`。本記録で STATUS を `EXECUTED 2026-07-19` に更新）。
+- GUARD（G-1〜G-8b）を BODY と同一トランザクション内に持つ fail-closed 設計（policy 総数 23/6/17・6本の定義完全一致（permissive / roles / cmd / qual / with_check）・table owner=postgres / RLS=true / FORCE=false・anon / authenticated 実効 S/I/U/D 16判定 false + PUBLIC 明示 grant 0・RPC 4本の存在 / overload なし / SECURITY DEFINER / owner=postgres・PUBLIC EXECUTE なし（proacl NULL 不可）・anon / authenticated EXECUTE 8組 true。不一致は raise exception で全体 abort）。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-19）
+
+- ユーザーが PRE-CHECK（C-1〜C-8）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：GUARD DO ブロック → DROP POLICY ×6 → COMMIT）。
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**EXECUTION BODY は今後も再実行禁止**（GUARD G-2 が対象 policy 0本を検知して fail-closed で停止する設計）。
+- Supabase CLI / psql / 外部 DB 接続は未使用。ROLLBACK 未使用。
+
+### 実行前確認結果（Pre-check・2026-07-19・全合格・STOP条件なし）
+
+- C-1：public_total=23 / target_total=6 / others_total=17。
+- C-2：対象 policy 6本の定義一致。C-3：期待集合との差分0行。
+- C-4：unit_rates / employee_rates とも owner=postgres・RLS=true・FORCE RLS=false・ACL は postgres / service_role のみ。
+- C-5a：anon / authenticated / PUBLIC の明示 table 権限0行。C-5b：anon / authenticated の実効 SELECT / INSERT / UPDATE / DELETE 16判定すべて false。
+- C-6：RPC 4本・owner=postgres・SECURITY DEFINER=true・search_path 固定・overload なし。
+- C-7：PUBLIC EXECUTE 問題0行。C-8：anon / authenticated EXECUTE 8組すべて true。
+
+### 実行後確認結果（Post-check・2026-07-19・全合格）
+
+- P-1：対象テーブルの policy 0行。
+- P-2：**public schema policy 総数 23 → 17**（target 0・**対象外 17本は不変**）。
+- P-3：owner=postgres・RLS=true・FORCE RLS=false・table ACL 不変。
+- P-4：RPC 4本・owner=postgres・SECURITY DEFINER=true・PUBLIC EXECUTE なし。
+- P-5：anon / authenticated EXECUTE 8組すべて true。
+
+### 本番スモークテスト（2026-07-19）
+
+- S-1 admin 単価設定：unit_rates / employee_rates 一覧表示正常・`list_unit_rates_secure` / `list_employee_rates_secure` HTTP 200・想定外 401/403 なし・Console 赤エラーなし。
+- S-2 genka：画面起動・原価表示正常・list RPC 2本 HTTP 200・想定外 401/403 なし・Console 赤エラーなし。
+- S-4 employee rate 同値保存：初回は既存管理者 session の期限切れで Invalid or expired session / HTTP 400（**policy 障害ではない**）。ログアウト・再ログイン後に再実施し `upsert_employee_rate_secure` HTTP 200・画面表示「保存しました」（既存値の同値保存・業務データの恒久変更なし）。
+- S-3 unit rate 同値保存：updated_at のみ now() に更新されるため、SQL ファイルの SMOKE CHECKLIST 設計記載に従って省略（S-1 / S-2 / S-4 で代替）。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・実測定義どおりの CREATE POLICY 6文）。**通常実行禁止**：本番 rates 系障害の原因が本工程と確定し、かつ別途明示承認された場合のみ。
+
+### 最終状態
+
+- unit_rates / employee_rates の policy は 0本（stale policy 6本撤去済み）。**public schema policy 総数は 23 → 17**・対象外 17本は不変。
+- RLS enabled=true / FORCE=false・table ACL・RPC 4本の定義と EXECUTE 権限・業務データはすべて不変（アプリ挙動に変更なし）。
+- Phase 4-F-7-a の実 DB 作業は完了。本記録 PR の main merge をもって工程クローズ。
+- ※ Phase 4-F 全体や他の未完了工程は完了扱いしない（残: invoices / site_budgets・paid_leave・reports 系の policy 整理）。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。
+- GUARD+BODY は1回のみ実行。smoke は本番 admin / genka 画面の一覧表示と employee rate 同値保存（完全無変化）で実施し、実 token 値・実 UUID は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-7a-rates-stale-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

@@ -2,7 +2,41 @@
 -- Phase 4-F-7-a：rates stale policy cleanup
 --   unit_rates / employee_rates の stale permissive policy 6本を DROP
 -- ============================================================
--- 【実行ステータス】STATUS: NOT EXECUTED
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-19
+--   - 実行日：2026-07-19（Supabase SQL Editor 手動実行・Supabase CLI / psql 未使用）
+--   - 実行内容：EXECUTION BODY（GUARD＋DROP POLICY 6文・同一transaction）を1回だけ実行
+--       Result: Success. No rows returned
+--   - ★BODY は実行済み。再実行禁止★（再実行しても GUARD G-2 が対象policy 0本を
+--     検知して fail-closed で停止する）
+--   - PRE-CHECK 全合格（C-1〜C-8）：
+--       C-1 public_total=23 / target_total=6 / others_total=17
+--       C-2 対象policy 6本の定義一致・C-3 期待集合との差分0行
+--       C-4 両テーブル owner=postgres・RLS=true・FORCE RLS=false・
+--           ACL=postgres / service_role のみ
+--       C-5a 明示table権限0行・C-5b 実効S/I/U/D 16判定すべて false
+--       C-6 RPC 4本（owner=postgres・SECURITY DEFINER=true・search_path固定・
+--           overloadなし）
+--       C-7 PUBLIC EXECUTE 問題0行・C-8 anon/authenticated EXECUTE 8組すべて true
+--   - BODY で削除した policy（6本）：
+--       unit_rates：ur_read / ur_write / ur_update
+--       employee_rates：er_read / er_write / er_update
+--   - POST-CHECK 全合格（P-1〜P-5）：
+--       P-1 対象policy 0行・P-2 public_total=17 / target_total=0 / others_total=17
+--       P-3 owner=postgres・RLS=true・FORCE RLS=false・ACL不変
+--       P-4 RPC 4本・owner=postgres・SECURITY DEFINER=true・PUBLIC EXECUTEなし
+--       P-5 anon/authenticated EXECUTE 8組すべて true
+--   - 本番 smoke：
+--       S-1 admin単価設定：一覧表示正常・list RPC 2本 HTTP 200・
+--           想定外401/403なし・Console赤エラーなし
+--       S-2 genka：起動・原価表示正常・list RPC 2本 HTTP 200・
+--           想定外401/403なし・Console赤エラーなし
+--       S-4 employee rate 同値保存：初回は既存管理者sessionの期限切れで
+--           Invalid or expired session / HTTP 400（policy障害ではない）。
+--           ログアウト・再ログイン後に再実施し upsert_employee_rate_secure
+--           HTTP 200・画面表示「保存しました」（既存値の同値保存）
+--       S-3 unit rate 同値保存：updated_at のみ更新されるため、
+--           下記 SMOKE CHECKLIST の設計記載に従って省略
+--   - 記録先：docs/db-migrations.md「2026-07-19 Phase 4-F-7-a」
 --
 -- 【実行方法（重要）】
 --   - 実行先：Supabase SQL Editor（手動実行のみ）

@@ -6092,3 +6092,86 @@ COMMIT;
 - smoke は本番3画面の統合1セッション方式（一覧表示＋同値保存 write smoke）で実施し、実 token 値・実 UUID は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase4f-7b-business-stale-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-19 Phase 4-F-7-c genka_admins stale write policy cleanup（★実行済み・Phase 4 クローズ★）
+
+### 位置づけ
+
+- pg_policies 整理（4-F-7）の最終工程。4-F-7-c-1（identity 系 read-only 実測 I-1〜I-6・2026-07-19）で stale 確定した genka_admins の write policy 3本を限定 DROP し、現役 read policy 2本の**意図的保持**を文書化して、**Phase 4-F-7-c および Phase 4 全体をクローズ**する。
+- login critical path 隣接領域のため、GUARD は保持2本の存在・定義照合と login 断絶防止検証（EXECUTE 維持・列 grant・pin 非公開）を含む fail-closed 設計とした。
+
+### 4-F-7-c-1 read-only 実測（2026-07-19・DB 変更なし・全合格）
+
+- I-1：identity 系 policy は正確に5本・同名重複なし・期待集合との差分0行。実定義：employees_read_all（PERMISSIVE/{public}/SELECT/qual=true/wc=NULL）・ga_read（同）・ga_write（INSERT/{public}/qual=NULL/wc=true）・ga_update（UPDATE/{public}/qual=true/wc=NULL）・anon_can_update_genka_admins（UPDATE/{anon}/qual=true/wc=true）。
+- I-2：両テーブル owner=postgres・RLS=true・FORCE=false・table-level S/I/U/D 全 false・ACL は postgres/service_role のみ。
+- I-3/I-4：anon/authenticated は SELECT 列 grant のみ（employees: id/name/role/is_active/company_id/can_genka/can_admin・genka_admins: id/name/is_active）。**pin・created_at の SELECT 権限なし**・UPDATE/INSERT 列 grant なし・PUBLIC 列 grant なし・全列 can_update=false。
+- I-5：identity 関連9関数すべて owner=postgres・SECURITY DEFINER・search_path=public, extensions・PUBLIC EXECUTE=false・overload なし。外部8関数は anon/authenticated EXECUTE=true・内部 helper `_verify_management_session` のみ非公開。
+- I-6：write 系3本は想定外 role なし・write 実効権限 false・write 列 grant 0 → **権限段階で遮断済みの stale no-op と確定**。read 系2本は SELECT 列 grant（employees 14 / genka_admins 6）と組で**ログイン前名前一覧を支える現役 policy と確定**。
+
+### 4-F-7-c-2 対象（DROP POLICY 3本）
+
+- `public.genka_admins`：`anon_can_update_genka_admins`（roles={anon}）/ `ga_update` / `ga_write`。
+- DB 変更は DROP POLICY 3文のみ（単一トランザクション・IF EXISTS なし）。
+
+### 意図的保持（削除していない・現役2本）
+
+- `employees.employees_read_all` / `genka_admins.ga_read`。
+- **未整理残ではなく、現行のログイン前名前一覧（3画面の direct SELECT×限定列 grant）を支える現役 policy として意図的に保持**。保持根拠：table-level SELECT=false・anon/authenticated への限定列 SELECT grant（employees 7列×2role=14 / genka_admins 3列×2role=6）・pin/created_at 非公開・3画面 login smoke 合格。
+- ログイン前 direct SELECT の RPC 化・PIN ハッシュ化は **Phase 5「PIN・ログイン強化」の候補として分離**（Phase 4 には含めない）。
+
+### Git / PR
+
+- SQL：`docs/sql/phase4f-7c-genka-admins-stale-write-policy-drop.sql`（準備 PR #149 merge `823fdd1541af9d87db9c12adfa0ef8c1f9fbf702`・mergedAt 2026-07-19T06:31:01Z・準備 commit `2871324c4239ab65e717f0005aabbfa01bd60ca4`。本記録で STATUS を `EXECUTED 2026-07-19` に更新）。
+- GUARD（G-1〜G-10b）は BODY と同一トランザクション内の fail-closed 設計：総数5・5本の厳密定義照合（保持2本の存在込み・NULL 安全）・想定外0・同名重複なし・owner/RLS/FORCE・write 権限/列 grant なし・9関数属性・外部8関数 EXECUTE 維持・`_verify` 非公開・ga_read を支える SELECT 列 grant 存在・pin 非公開。不一致は raise exception で全体 abort。
+
+### 実行結果（Supabase SQL Editor・手動実行・2026-07-19）
+
+- ユーザーが PRE-CHECK（C-1〜C-6）を read-only 実行後、EXECUTION BODY を1回だけ手動実行（単一トランザクション：GUARD DO ブロック → DROP POLICY ×3 → COMMIT）。
+- 結果：Success. No rows returned。
+- BODY の再実行なし。**GUARD＋BODY は今後も再実行禁止**。
+- Supabase CLI / psql / 外部 DB 接続は未使用。ROLLBACK 未使用。
+
+### 実行前確認結果（Pre-check C-1〜C-6・2026-07-19・全合格・STOP条件なし）
+
+- C-1：public_total=5 / drop_targets=3 / keep_targets=2 / other_policies=0。
+- C-2：identity 系5本すべて存在・実測定義と完全一致（全行 definition_matches=true・same_name_count=1）。
+- C-3：genka_admins owner=postgres・RLS=true・FORCE=false・ACL は postgres/service_role のみ・anon/authenticated の INSERT/UPDATE/DELETE すべて false。
+- C-4：列権限は anon/authenticated の SELECT のみ（id/name/is_active）・pin/created_at 非公開・全列 INSERT/UPDATE 不可・PUBLIC 列 grant なし。
+- C-5：9関数 owner=postgres・SECURITY DEFINER・search_path 固定・PUBLIC EXECUTE=false・overload なし・外部8関数 EXECUTE=true・`_verify_management_session` のみ非公開。
+- C-6：全5 policy guard_condition_met=true（write 系3本 stale 確定・read 系2本 現役確定）。
+
+### 実行後確認結果（Post-check P-1〜P-6・2026-07-19・全合格）
+
+- P-1：**public_total=5 → 2**・drop_targets=0・keep_targets=2・other=0。
+- P-2：残存は `employees.employees_read_all` / `genka_admins.ga_read` の2本のみ（PERMISSIVE・roles={public}・SELECT・qual=true・with_check=NULL・same_name_count=1）。
+- P-3：genka_admins の owner・RLS・FORCE・ACL・write 権限なし 不変。
+- P-4：列権限不変（id/name/is_active SELECT のみ・**pin/created_at 非公開維持**・INSERT/UPDATE 不可・PUBLIC なし）。
+- P-5：9関数の owner・SECURITY DEFINER・search_path・PUBLIC EXECUTE なし・overload なし 不変。
+- P-6：EXECUTE 不変（外部8関数 anon/authenticated=true・`_verify_management_session`=false）。
+
+### 本番スモークテスト（2026-07-19・全合格）
+
+- 従業員画面・管理コンソール・原価管理画面の3画面すべて：ログアウト状態の名前一覧表示 正常 → PIN ログイン 正常 → ログアウト 正常 → 再ログイン 正常・Console 赤エラーなし・**Network 応答に PIN なし**。
+- 管理者同値保存（既存管理者を内容変更なしで保存）：
+  - **初回試行**：`update_genka_admin_secure` が **HTTP 400（Invalid or expired session）**。既存管理者 session の期限切れが原因（Preserve log ON のため期限切れ session の過去ログも残存）。**policy 削除障害ではないと判定**し、再ログインして再確認。
+  - **再ログイン後**：同値保存成功・`update_genka_admin_secure` 正常・Console 赤エラーなし・genka_admins への direct REST write なし・名前/有効状態は不変。
+- **未実施（意図的・記録）**：新規管理者作成は実データ変更を伴うため未実施。`create_genka_admin_secure` が policy 非依存であることは、関数属性（SECURITY DEFINER・owner=postgres＝owner bypass）・ACL・EXECUTE 証拠（C-5/P-5/P-6）で補完した。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・実測定義どおりの CREATE POLICY 3文）。**通常実行禁止**：本番 login / genka_admins 系障害の原因が本工程と確定し、かつ別途明示承認された場合のみ。
+
+### 最終状態と Phase 4 クローズ判定
+
+- **public schema policy 総数は 2本**：`employees_read_all` / `ga_read`（意図的保持・現役）。stale policy は 0本。DB の追加実行は不要。
+- roadmap の Phase 4 完了条件（「pg_policies の棚卸し / ALL true の広いポリシー確認 / SELECT・INSERT・UPDATE・DELETE の役割整理 / RPC 経由に寄せるテーブルの方針整理」）はすべて充足：全 policy の棚卸しと実測完了・ALL true（reports_all 等）は解消・S/I/U/D の役割は「現役 read 2本＋secure RPC」へ整理完了・RPC 化方針は全業務テーブルで実装完了。roadmap 4-F-7-c 節の「現役 policy を意図的保持してクローズする場合は、その旨を記録してから Phase 4 完了と扱う」の条件を本記録で充足。
+- repo 上に Phase 4 の未完了必須項目は存在しない（roadmap「次候補」「別タスク候補」節の残項目＝Playwright smoke 自動化検討・CSV 出力集約・管理者向け写真確認導線・photos private 化は、いずれも候補・別フェーズ扱いであり Phase 4 の必須完了条件ではない）。
+- **判定：Phase 4-F-7-c 完了・Phase 4（RLSポリシー整理）完了。**
+- ログイン前 direct SELECT の RPC 化・PIN ハッシュ化・ログイン失敗回数制限は **Phase 5「PIN・ログイン強化」候補として明確に分離**（Phase 4 に含めない）。
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。GUARD+BODY は1回のみ実行。
+- smoke は本番3画面の login/logout/再ログイン＋管理者同値保存で実施し、実 token 値・実 UUID・実 PIN は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase4f-7c-genka-admins-stale-write-policy-drop.sql` の pre-check / guard / post-check / smoke checklist に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

@@ -3,11 +3,51 @@
 --   genka_admins の stale write policy 3本を DROP
 --   （read policy 2本＝employees_read_all / ga_read は現役のため必ず保持）
 -- ============================================================
--- 【実行ステータス】STATUS: PREPARED / NOT EXECUTED
---   - preparation date：2026-07-19
---   - execution date  ：（未実行・未記入）
---   - Result          ：（未実行・未記入）
---   - ★実DBへは未実行。実行済みと誤認しないこと★
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-19
+--   - preparation date：2026-07-19（準備PR #149・merge `823fdd1`）
+--   - execution date  ：2026-07-19（Supabase SQL Editor 手動実行・Supabase CLI / psql 未使用）
+--   - Result          ：Success. No rows returned
+--   - 実行内容：EXECUTION BODY（GUARD G-1〜G-10b＋DROP POLICY 3文・同一transaction）を
+--     1回だけ実行。再実行なし。★GUARD＋BODY は今後も再実行禁止★
+--     （再実行しても G-1/G-2 が総数2への変化を検知して fail-closed で停止する）
+--   - PRE-CHECK 全合格（C-1〜C-6・2026-07-19）：
+--       C-1 public_total=5 / drop_targets=3 / keep_targets=2 / other=0
+--       C-2 identity 系5本すべて実測定義と完全一致・同名重複なし
+--       C-3 genka_admins owner=postgres・RLS=true・FORCE=false・
+--           ACL=postgres/service_role のみ・anon/authenticated I/U/D すべて false
+--       C-4 列権限：anon/authenticated は SELECT のみ（id/name/is_active）・
+--           pin/created_at 非公開・全列 INSERT/UPDATE 不可・PUBLIC 列 grant なし
+--       C-5 identity 関連9関数：owner=postgres・SECURITY DEFINER・search_path固定・
+--           PUBLIC EXECUTE=false・overloadなし・外部8関数 EXECUTE=true・
+--           _verify_management_session のみ非公開
+--       C-6 全5 policy guard_condition_met=true（write系3本 stale no-op 確定・
+--           read系2本 現役確定）
+--   - BODY で削除した policy（3本のみ）：
+--       genka_admins：anon_can_update_genka_admins / ga_update / ga_write
+--   - ★意図的保持（削除していない・現役2本）★：
+--       employees.employees_read_all / genka_admins.ga_read
+--       （ログイン前名前一覧を支える現役 policy。未整理残ではない）
+--   - POST-CHECK 全合格（P-1〜P-6・2026-07-19）：
+--       P-1 public_total=2 / drop_targets=0 / keep_targets=2 / other=0
+--       P-2 残存は employees_read_all / ga_read の2本のみ
+--           （PERMISSIVE・roles={public}・SELECT・qual=true・with_check=NULL・重複なし）
+--       P-3 genka_admins の owner・RLS・FORCE・ACL・I/U/D なし 不変
+--       P-4 列権限不変（id/name/is_active SELECT のみ・pin/created_at 非公開）
+--       P-5 9関数の owner・SECURITY DEFINER・search_path・PUBLIC EXECUTE なし・
+--           overload なし 不変
+--       P-6 EXECUTE 不変（外部8関数 true・_verify は false）
+--   - 本番 smoke（2026-07-19・全合格）：
+--       3画面（従業員・管理コンソール・原価管理）とも：ログアウト状態の名前一覧
+--       表示正常 → PIN ログイン → ログアウト → 再ログイン すべて正常・
+--       Console 赤エラーなし・Network 応答に PIN なし
+--       管理者同値保存：初回は既存 session の期限切れで update_genka_admin_secure
+--       HTTP 400（Invalid or expired session・Preserve log ON で過去ログ残存）。
+--       ★policy 削除障害ではない★。再ログイン後に同値保存成功・
+--       direct REST write なし・名前/有効状態不変。
+--       ★未実施の明記★：新規管理者作成（create_genka_admin_secure）は実データ
+--       変更を伴うため意図的に未実施。関数属性・ACL・EXECUTE 証拠
+--       （C-5/P-5/P-6・SECURITY DEFINER owner bypass により policy 非依存）で補完。
+--   - 記録先：docs/db-migrations.md「2026-07-19 Phase 4-F-7-c」
 --
 -- 【実行方法（重要）】
 --   - 実行先：Supabase SQL Editor（手動実行のみ）

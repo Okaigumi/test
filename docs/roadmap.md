@@ -220,7 +220,7 @@
 
 ## Phase 4：RLSポリシー整理
 
-状態：進行中（4-A-1 subcontractors write lockdown / 4-A-2 photos upload制限 / 4-B paid_leave 読み取りRPC化・SELECT遮断 / 4-C-1 本人日報 読み取りRPC化・reports SELECT遮断 / 4-C-2 index 管理系 report_summary 代替RPC化 / 4-C-3 genka 原価系 report_summary 代替RPC化 / 4-C-4 report_summary View 封鎖・不要 GRANT 整理 完了。report_summary の読み取り整理（4-C-1〜4-C-4）は完了。以降は Phase 4-C 系の完了後整理・他テーブルの読み取り整理が残り）
+状態：**✅ 完了（2026-07-19）**（4-A〜4-F-7-c まで全工程完了。stale policy 0本・残存 policy は現役2本（`employees.employees_read_all` / `genka_admins.ga_read`）の意図的保持のみ。クローズ判定の詳細は本セクション末尾「Phase 4 クローズ（2026-07-19）」および docs/db-migrations.md「2026-07-19 Phase 4-F-7-c」参照）
 
 ### やること
 
@@ -507,10 +507,19 @@
   - 本番 smoke 全合格（3画面＋同値保存 write smoke。`paid_leave_requests` の新規申請・承認 write は実データ変更を伴うため未実施＝関数属性・ACL・EXECUTE 証拠で補完）
   - `anon_can_update_site_budgets`（4-D-4 以来の policy-review 宿題）・`reports_all`・paid_leave write系 policy はここで解消
   - 詳細は docs/db-migrations.md「2026-07-19 Phase 4-F-7-b」
-- **4-F-7-c identity 系（未完了・後続工程）**：残存 policy 5本（`employees.employees_read_all` / `genka_admins.ga_read` / `ga_write` / `ga_update` / `anon_can_update_genka_admins`）
-  - `employees_read_all` / `ga_read` は**ログイン前の名前リスト direct SELECT（列レベル grant）を支える現役 policy の可能性が高く、削除禁止のまま実測判断**
-  - `ga_write` / `ga_update` / `anon_can_update_genka_admins` は stale 候補（write 権限 REVOKE 済み）。実測 roles 確認のうえ限定 drop を別途判断
-  - 現役 policy を意図的保持してクローズする場合は、その旨を記録してから Phase 4 完了と扱う（direct read の完全 RPC 化・PIN ハッシュ化は後続 Phase 候補）
+- 4-F-7-c identity 系（genka_admins の stale write policy 3本 DROP＋現役 read policy 2本の意図的保持）：**✅ 完了（2026-07-19）**
+  - 4-F-7-c-1 read-only 実測（I-1〜I-6）で write 系3本（`ga_write` / `ga_update` / `anon_can_update_genka_admins`）の stale を確定（想定外 role なし・write 実効権限 false・write 列 grant 0）
+  - 準備 PR #149（merge `823fdd1`）→ DB 実行 2026-07-19（GUARD＋BODY 1回のみ・Success. No rows returned・再実行禁止）
+  - PRE-CHECK C-1〜C-6 / POST-CHECK P-1〜P-6 全合格。**public schema policy 5 → 2**（想定外0）
+  - 本番 smoke 全合格（3画面のログイン前名前一覧・PIN login/logout/再ログイン・PIN 非露出・管理者同値保存。初回の HTTP 400 は期限切れ session が原因で policy 障害ではなく、再ログイン後成功。新規管理者作成は実データ変更のため未実施＝関数属性・ACL・EXECUTE 証拠で補完）
+  - **意図的保持（未整理残ではない）**：`employees.employees_read_all` / `genka_admins.ga_read` の2本は、ログイン前名前一覧の direct SELECT（table-level SELECT=false＋限定列 SELECT grant：employees 7列×2role=14 / genka_admins 3列×2role=6・pin/created_at 非公開）を支える**現役 policy として保持**
+  - 詳細は docs/db-migrations.md「2026-07-19 Phase 4-F-7-c」
+
+### Phase 4 クローズ（2026-07-19）
+
+- 「やること」（pg_policies 棚卸し / ALL true の広いポリシー確認 / S・I・U・D の役割整理 / RPC 経由に寄せる方針整理）はすべて完了。stale policy は 0本・残存2本は現役として意図的保持を記録済み。
+- **Phase 4（RLSポリシー整理）は完了**（4-F-7-c の完了と本記録をもってクローズ。db-migrations.md「2026-07-19 Phase 4-F-7-c」の「最終状態と Phase 4 クローズ判定」参照）。
+- **Phase 5 との境界**：ログイン前 direct SELECT の RPC 化（名前一覧 RPC 化＋列 grant 撤廃）・PIN ハッシュ化・ログイン失敗回数制限は Phase 5「PIN・ログイン強化」の候補として分離し、Phase 4 には含めない。
 
 ## Phase 5：PIN・ログイン強化
 

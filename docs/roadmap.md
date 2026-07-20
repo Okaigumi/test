@@ -545,7 +545,14 @@
   - 非公開スキーマ `private` に `private.login_throttle`（realm/identifier/fail_count/cooldown_until/last_failed_at/updated_at・PK(realm,identifier)）を新規作成。Data API 向け全ロールから到達不能（USAGE/table 権限を明示 REVOKE・RLS 有効・policy なし・FORCE なし）。owner=postgres。
   - 準備 PR #151（merge `ed98b0c`）→ DB 実行 2026-07-19（GUARD＋BODY 1回のみ・Success. No rows returned・再実行禁止）。PRE C-1〜C-4 / POST P-1〜P-8 全合格。Phase 4 の policy 2本・login RPC 2本は不変。
   - 詳細は docs/db-migrations.md「2026-07-19 Phase 5-C-1a」。
-- **5-C-1b（後続）**：`create_employee_session` / `create_admin_session` を **CREATE OR REPLACE**（DROP しない・同 signature/同 RETURNS/同挙動維持・クールダウン中も 0行返す互換方式）で throttle 判定を組込。発動条件「5回目失敗で cooldown 開始＝6回目以降拒否」・実在 ID のみ記録・DB 内で待たせない（即拒否）・safeupdate 対応（WHERE 付き更新）。retry_after 表示は後続 `*_session_v2`（additive）で対応。
+- **5-C-1b login RPC への cooldown 組込：✅ 完了（2026-07-20・実行済み）**
+  - `create_employee_session` / `create_admin_session` を **CREATE OR REPLACE**（DROP しない・同 signature/同 RETURNS/同 EXECUTE ACL・クールダウン中も 0行返す互換方式）で account-level cooldown を組込。
+  - 準備 PR #153（merge `f15c9f6`）→ GUARD 構文 hotfix PR #154（merge `a0c6854`・`END`→`END;`）。
+  - 実行経緯：初回 BODY 実行は GUARD 終端 `END;` 欠落の syntax error → transaction abort（DB 変更なし）。hotfix merge 後に修正版 GUARD＋BODY を1回実行して成功（Success. No rows returned）・成功適用後の再実行なし。
+  - PRE（C-1 再確認）/ POST（P-1〜P-6）全合格。本番 3画面 smoke 合格（employee `/`・admin `/admin` の cooldown 動作・genka `/genka` 回帰・終了後 throttle 行0）。
+  - 仕様：threshold=5・cooldown=固定60秒・decay=15分・成功時 throttle 行 DELETE・cooldown 中 0行・実在 ID のみ記録。throttle 時刻は `clock_timestamp()`、session 期限は互換維持で `now()`。
+  - retry_after 表示（`*_session_v2` additive）・IP 単位 rate limit は独立後続工程。
+  - 詳細は docs/db-migrations.md「2026-07-20 Phase 5-C-1b」。
 
 ## Phase 6：admin-app.html 改善
 

@@ -6240,3 +6240,74 @@ COMMIT;
 - 実 PIN・token・UUID 等の機微値は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase5c-1a-login-throttle-table.sql` の pre-check / guard / post-check に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+## 2026-07-20 Phase 5-C-1b login RPC throttle 組込（★実行済み★）
+
+### 位置づけ
+
+- Phase 5-C-1a で作成した `private.login_throttle` を用い、`create_employee_session(uuid, text)` / `create_admin_session(uuid, text)` の2本へ account-level cooldown（ログイン失敗回数抑制）を組み込む Phase 5-C 本体。
+- **CREATE OR REPLACE のみ・DROP FUNCTION なし**。signature / 戻り値（RETURNS TABLE の列）/ EXECUTE ACL は不変（CREATE OR REPLACE は既存 EXECUTE 権限を保持）。frontend・db-pre-request（IP 単位 rate limit）は非対象。
+- 本記録 PR の main merge をもって 5-C-1b をクローズ。**Phase 5 全体は未完了**（5-D/5-E PIN ハッシュ化・5-B 期限切れ session 掃除・Phase 6 カレンダー等が残る）。
+
+### Git / PR
+
+- SQL 準備 PR #153（merge commit `f15c9f6e593f40504840bc618f68e7559cbc474d`）。
+- GUARD 構文 hotfix PR #154（merge commit `a0c68540df92a440cc3703783efb48bece49d855`）。hotfix 内容：GUARD DO ブロック終端の `END` → `END;`（1 ファイル・1 insertion / 1 deletion）。
+- SQL：`docs/sql/phase5c-1b-login-throttle-rpc.sql`（本記録で STATUS を `EXECUTED 2026-07-20` に更新）。
+
+### 実行経緯（初回失敗と成功適用を明確に区別）
+
+1. **初回実行試行（失敗・DB 変更なし）**：GUARD DO ブロック終端の `END;` 欠落による syntax error（ERROR 42601 near "admin_id_input"）で transaction abort。read-only 確認で login RPC 2本の md5/length と `refs_login_throttle=false` を再確認し、BODY 未適用（baseline のまま）を確認。
+2. **hotfix merge 後（成功適用）**：PR #154 で `END`→`END;` を修正・merge 後、C-1 baseline 再確認合格 → 修正版 GUARD＋BODY を BEGIN〜COMMIT 一括で **1回実行** → `Success. No rows returned`。**成功適用後の再実行なし**（今後も再実行禁止）。
+- ※「BODY を1回しか試行していない」わけではない：初回試行（失敗・DB 無変更）と hotfix 後の成功適用の2段階。実 DB へ適用されたのは hotfix 後の成功実行のみ。
+
+### 実装仕様（account-level throttle）
+
+- threshold：5回（5回目の失敗で cooldown 開始＝6回目以降を拒否）。
+- cooldown：固定 60 秒。decay：15 分（最終失敗から `>=15 分`で有効 fail_count を 0 に減衰）。
+- cooldown 中は照合せず 0 行を返し、fail_count / cooldown_until / updated_at を更新しない（延長しない）。
+- 成功時は throttle 行を DELETE。存在しない UUID では throttle 行を作らない（誤 PIN と応答統一・肥大化防止）。
+- inactive / PIN 不一致は失敗として扱い、外部応答は従来どおり 0 行（区別しない）。
+- ロック順序（両 RPC 統一）：対象 account 行 `FOR KEY SHARE` → throttle 行 `INSERT ... ON CONFLICT DO NOTHING` → throttle 行 `FOR UPDATE`。
+- throttle の時刻判定・更新は `clock_timestamp()`（実時間）。session 期限処理（期限切れ判定・8h 期限）は互換性維持のため `now()` を維持。
+
+### 実行前確認結果（Pre-check・2026-07-20）
+
+- C-1：login RPC 2本の baseline md5/length（admin `ed50cdc59995b768b5dd31d80666e33d`/1328・employee `39b9a7cd8066a74f7e4827a38e677c92`/1517）・owner=postgres・SECURITY DEFINER・VOLATILE・search_path=public, extensions・overload=1・refs_login_throttle=false を hotfix merge 後に再確認・合格。
+- C-2〜C-4c：初回失敗直前に合格済み・その後 DB 無変更を確認済みのため再実行なし。
+
+### 実行後確認結果（Post-check P-1〜P-6・2026-07-20・全合格）
+
+- P-1：signature / 戻り値 / owner=postgres / SECURITY DEFINER / VOLATILE / search_path 不変・overload なし。
+- P-2：EXECUTE ACL 不変（PUBLIC=false / anon=true / authenticated=true / authenticator=false / service_role=true）。
+- P-3：両 RPC が `private.login_throttle` を参照・完全修飾・dynamic SQL なし・pg_sleep なし・threshold/cooldown/decay ロジック確認。**注記**：P-3 の単純 ILIKE では空白幅の差で `FOR KEY SHARE=false` と出たが、正規表現による P-3b で両 RPC とも `FOR KEY SHARE=true` を確認（両 RPC に FOR KEY SHARE は実在）。
+- P-4：private.login_throttle の構造・owner=postgres・RLS=true・FORCE=false・policy=0 不変・PUBLIC/anon/authenticated/service_role/authenticator から到達不能。
+- P-5：Phase 4 policy 2本不変・login 関連4テーブル ACL 不変・employees/genka_admins の限定列 grant 不変・pin/created_at 非公開。
+- P-6：total_rows（参考値）・invalid_realm=0・negative_fail_count=0・orphan_employee=0・orphan_admin=0（実在しない identifier の throttle 行なし）。row_count=0 は必須条件にしていない。
+
+### 本番スモークテスト（2026-07-20・全合格）
+
+- Employee `/`：正常ログイン・誤 PIN 1〜4 回は通常失敗（即再入力可）・5 回目で cooldown 開始・cooldown 中の正しい PIN も拒否（0 行）・70 秒後に正常復帰・logout 正常。
+- Admin `/admin`：上記と同一の一式を確認・合格。
+- Genka `/genka`：正常ログイン回帰を確認。
+- 全 RPC リクエスト HTTP 200・Console 赤エラーなし。終了後の `private.login_throttle` は 0 行（active cooldown 0 行）。実 PIN・氏名・UUID・token は記録しない。
+
+### 防御範囲
+
+- account-level の mitigation であり、総当り・DoS の完全防御ではない。複数アカウント並列・分散攻撃には IP 単位 rate limit（PostgREST db-pre-request 等）が別途必要で、それは独立した後続工程。retry_after 等の UI・`*_session_v2`（additive）も後続。
+
+### rollback
+
+- 未実施（SQL ファイル末尾のコメント参照用のみ・旧 login RPC 定義を CREATE OR REPLACE で復元する方式・DROP FUNCTION しない・`private.login_throttle` は残す）。
+
+### 最終状態
+
+- login RPC 2本に account-level cooldown が適用済み。signature / 戻り値 / EXECUTE ACL・Phase 4 policy・throttle テーブルの到達不能状態は不変。**DB の追加実行は不要**。
+- Phase 5-C-1b の実 DB 作業は完了。**Phase 5 全体は未完了。**
+
+### 確認手段
+
+- DB 確認・実行はユーザーが Supabase SQL Editor で手動実行。GUARD+BODY は hotfix 後に1回のみ適用（初回試行は syntax error で DB 無変更）。
+- 実 PIN・token・UUID・氏名は記録しない。
+- 手順・実測値の詳細は `docs/sql/phase5c-1b-login-throttle-rpc.sql` の pre-check / guard / post-check / smoke checklist に記録。
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。

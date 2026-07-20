@@ -3,11 +3,33 @@
 --   create_employee_session / create_admin_session を CREATE OR REPLACE で
 --   private.login_throttle を用いた失敗回数抑制（クールダウン）付きに更新する。
 -- ============================================================
--- 【実行ステータス】STATUS: PREPARED / NOT EXECUTED
---   - preparation date：2026-07-19
---   - execution date  ：（未実行・未記入）
---   - Result          ：（未実行・未記入）
---   - ★実DBへは未実行。実行済みと誤認しないこと★
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-20
+--   - preparation date：2026-07-19（準備PR #153・merge `f15c9f6`）
+--   - execution date  ：2026-07-20（JST・Supabase SQL Editor 手動実行。
+--     Claude Code CLI / Supabase CLI / psql からの DB 接続なし）
+--   - Result          ：Success. No rows returned
+--   - 実行経緯（初回失敗→hotfix→成功の順を区別）：
+--       (1) 初回実行試行：GUARD DO ブロック終端の `END;` 欠落による syntax error
+--           （ERROR 42601 near "admin_id_input"）で transaction abort。DB 変更なし。
+--           login RPC 2本の md5/length と refs_login_throttle=false を再確認し、
+--           BODY 未適用（baseline のまま）を確認。
+--       (2) GUARD 構文 hotfix：PR #154（merge `a0c6854`）で `END` → `END;`
+--           （1 ファイル・1 insertion / 1 deletion）。
+--       (3) hotfix merge 後：C-1 baseline 再確認合格 → 修正版 GUARD＋BODY を
+--           BEGIN〜COMMIT 一括で1回実行 → Success. No rows returned。
+--           成功適用後の再実行なし。★今後も再実行禁止★
+--   - PRE-CHECK：C-1 再確認合格（baseline md5/length・属性）。
+--     C-2〜C-4c は初回失敗直前に合格済みで、その後 DB 無変更を確認済みのため再実行なし。
+--   - POST-CHECK：P-1〜P-6 全合格（RPC 属性/ACL 不変・両 RPC が login_throttle 参照・
+--     threshold5/60秒/15分・FOR KEY SHARE/FOR UPDATE/clock_timestamp・
+--     dynamic SQL/pg_sleep なし・throttle 到達不能不変・Phase 4 policy/ACL/列 grant 不変・
+--     orphan/不正 realm/負 fail_count なし）。
+--   - 本番 smoke（2026-07-20・全合格）：employee `/`・admin `/admin`（cooldown 動作：
+--     誤PIN 1〜4=通常失敗・5回目 cooldown・cooldown 中の正 PIN も拒否・70秒後復帰）・
+--     genka `/genka`（通常ログイン回帰）。全 RPC HTTP 200・Console 赤エラーなし・
+--     logout 正常。smoke 終了後の private.login_throttle 残存 0 行・active cooldown 0 行。
+--     実 PIN・氏名・UUID・token は記録しない。
+--   - 記録先：docs/db-migrations.md「2026-07-20 Phase 5-C-1b」
 --
 -- 【対象 RPC（2本・CREATE OR REPLACE のみ・DROP FUNCTION 禁止）】
 --   - public.create_employee_session(uuid, text)

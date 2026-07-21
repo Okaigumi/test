@@ -158,6 +158,36 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
   .modal-header{padding:16px;}
   .modal-footer{padding:12px 16px;}
 }
+/* ===== 日報カレンダー（Phase 6-C・管理者・読み取り専用） ===== */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.cal-nav{display:flex;align-items:center;gap:8px;}
+.cal-title{font-size:15px;font-weight:700;color:var(--text);min-width:92px;text-align:center;}
+.cal-nav-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);min-width:40px;height:34px;padding:0 12px;font-size:15px;cursor:pointer;color:var(--text2);font-family:'Noto Sans JP',sans-serif;}
+.cal-nav-btn:hover{background:var(--surface3);color:var(--text);}
+.cal-emp-select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);height:34px;padding:0 10px;color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:13px;max-width:220px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-wd{text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:2px 0;}
+.cal-wd.sat{color:#5B9BD5;}
+.cal-wd.sun{color:var(--red);}
+.cal-cell{min-height:56px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:3px 3px 4px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden;}
+.cal-cell.blank{border:none;background:none;cursor:default;}
+.cal-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+.cal-cell.has-report{background:var(--accent-light);}
+.cal-daynum{font-size:11px;font-weight:700;color:var(--text2);line-height:1;}
+.cal-daynum.sat{color:#5B9BD5;}
+.cal-daynum.sun{color:var(--red);}
+.cal-dot{font-size:10px;line-height:1.2;}
+.cal-site{font-size:9px;color:var(--accent);line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cal-legend{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 4px;font-size:11px;color:var(--text3);}
+.cal-legend span{display:inline-flex;align-items:center;gap:4px;}
+.cal-legend i{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--border);}
+.cal-legend i.rep{background:var(--accent-light);}
+.cal-note{color:var(--text2);font-size:13px;padding:16px 0;}
+.cal-detail-row{padding:10px 0;border-bottom:1px solid var(--border);}
+.cal-detail-row:last-child{border-bottom:none;}
+.cal-detail-time{font-weight:700;color:var(--text);font-size:14px;}
+.cal-detail-meta{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;}
+@media(max-width:600px){.cal-cell{min-height:48px;}.cal-emp-select{max-width:150px;}}
 </style>
 </head>
 <body>
@@ -220,6 +250,7 @@ select.form-input{cursor:pointer;text-overflow:ellipsis;overflow:hidden;}
       <button class="nav-item" onclick="showPage('budgets')" id="nav-budgets"><span class="nav-icon">📋</span>実行予算</button>
       <div class="nav-section">集計出力</div>
       <button class="nav-item" onclick="showPage('csv')" id="nav-csv"><span class="nav-icon">📊</span>CSV出力</button>
+      <button class="nav-item" onclick="showPage('reportcal')" id="nav-reportcal"><span class="nav-icon">📅</span>日報カレンダー</button>
       <div class="nav-section">人員</div>
       <button class="nav-item" onclick="showPage('employees')" id="nav-employees"><span class="nav-icon">👷</span>従業員</button>
       <button class="nav-item" onclick="showPage('admins')" id="nav-admins"><span class="nav-icon">🔐</span>管理者</button>
@@ -266,6 +297,8 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 let currentUser=null;
 let aPin_str='';
 let _sites=[],_employees=[],_machines=[],_unitRates={};
+// 日報カレンダー（Phase 6-C）専用状態。_employees / _sites は読み取りのみ。
+let _calEmployees=[],_calMonth=new Date(),_calEmployeeId=null,_calAllReports=[],_calLoadedMonthKey=null,_calError='',_calDayData={};
 let _companies=[];
 let _editSiteId=null,_editInvId=null,_editBudgetId=null,_editEmpId=null,_editAdminId=null,_editMachineId=null;
 let _invoiceTab='active';
@@ -349,11 +382,11 @@ async function startApp(){
 async function showPage(name){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('nav-'+name)?.classList.add('active');
-  const titles={sites:'現場一覧',invoices:'請求書',invoicePdf:'請求書PDF',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理',csv:'CSV出力'};
+  const titles={sites:'現場一覧',invoices:'請求書',invoicePdf:'請求書PDF',rates:'単価設定',budgets:'実行予算',employees:'従業員',admins:'管理者',machines:'重機管理',leave:'有給管理',notices:'お知らせ管理',csv:'CSV出力',reportcal:'日報カレンダー'};
   document.getElementById('pageTitle').textContent=titles[name]||'';
   document.getElementById('pageSub').textContent='';
   document.getElementById('topbarActions').innerHTML='';
-  const pages={sites:pageSites,invoices:pageInvoices,invoicePdf:pageInvoicePdf,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices,csv:pageCsv};
+  const pages={sites:pageSites,invoices:pageInvoices,invoicePdf:pageInvoicePdf,rates:pageRates,budgets:pageBudgets,employees:pageEmployees,admins:pageAdmins,machines:pageMachines,leave:pageLeave,notices:pageNotices,csv:pageCsv,reportcal:pageReportCal};
   if(pages[name]) await pages[name]();
 }
 
@@ -365,6 +398,145 @@ function openModal(title,body,footer=''){
   document.getElementById('modalOverlay').classList.add('show');
 }
 function closeModal(){document.getElementById('modalOverlay').classList.remove('show');}
+
+// ===== 日報カレンダー（Phase 6-C・管理者・読み取り専用） =====
+// 既存 _employees（active）/ _sites は読み取りのみ。list_admin_reports_secure を
+// 月単位で1回だけ取得し、従業員切替はクライアント側フィルタで再描画する（RPC再実行なし）。
+function _calMonthKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function _calYmd(y,mo,d){return y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+function _calFmtMins(m){m=Number(m)||0;if(m<=0)return '0h';const h=Math.floor(m/60),min=m%60;return min>0?`${h}h${min}m`:`${h}h`;}
+function _calSiteName(id){const s=_sites.find(x=>x.id===id);return s?s.name:'不明な現場';}
+
+async function pageReportCal(){
+  // active 従業員をカレンダー専用配列へコピー（_employees は変更しない・role 除外なし）
+  _calEmployees=(_employees||[]).map(e=>({id:e.id,name:e.name}));
+  if((_calEmployeeId===null||!_calEmployees.some(e=>e.id===_calEmployeeId))&&_calEmployees.length){
+    _calEmployeeId=_calEmployees[0].id;
+  }
+  const noEmp=_calEmployees.length===0;
+  const empOptions=_calEmployees.map(e=>`<option value="${escapeHtml(e.id)}" ${e.id===_calEmployeeId?'selected':''}>${escapeHtml(e.name)}</option>`).join('');
+  document.getElementById('pageContent').innerHTML=`
+    <div class="card">
+      <div class="card-body">
+        <div class="cal-head">
+          <select class="cal-emp-select" id="calEmpSelect" aria-label="従業員を選択" onchange="onCalEmployeeChange(this.value)" ${noEmp?'disabled':''}>
+            ${noEmp?'<option>従業員なし</option>':empOptions}
+          </select>
+          <div class="cal-nav">
+            <button class="cal-nav-btn" onclick="changeCalMonth(-1)" aria-label="前月">‹</button>
+            <button class="cal-nav-btn" onclick="calToToday()">今月</button>
+            <button class="cal-nav-btn" onclick="changeCalMonth(1)" aria-label="次月">›</button>
+            <div class="cal-title" id="calTitle"></div>
+          </div>
+        </div>
+        <div id="calBody"></div>
+        <div class="cal-legend"><span><i class="rep"></i>日報あり</span><span>📝 提出</span></div>
+      </div>
+    </div>`;
+  if(noEmp){
+    document.getElementById('calTitle').textContent='';
+    document.getElementById('calBody').innerHTML='<div class="cal-note">有効な従業員がいません。</div>';
+    return;
+  }
+  await loadCalMonth();
+}
+
+async function loadCalMonth(){
+  const y=_calMonth.getFullYear(),mo=_calMonth.getMonth();
+  const titleEl=document.getElementById('calTitle');
+  if(titleEl)titleEl.textContent=`${y}年${mo+1}月`;
+  const key=_calMonthKey(_calMonth);
+  // 同一月は取得済みデータを再利用（従業員切替では再取得しない）
+  if(_calLoadedMonthKey!==key){
+    const body=document.getElementById('calBody');
+    if(body)body.innerHTML='<div class="cal-note">読み込み中…</div>';
+    const token=currentUser?.session_token;
+    if(!token){_calError='セッションが無効です。再ログインしてください。';renderCalGrid();return;}
+    const from=_calYmd(y,mo+1,1);
+    const last=new Date(y,mo+1,0).getDate();
+    const to=_calYmd(y,mo+1,last);
+    const{data,error}=await sb.rpc('list_admin_reports_secure',{session_token_input:token,from_date_input:from,to_date_input:to});
+    if(error){
+      console.error('list_admin_reports_secure error:',error.message);
+      _calAllReports=[];_calLoadedMonthKey=null;_calError='日報の取得に失敗しました。';
+      renderCalGrid();return;
+    }
+    _calAllReports=data||[];_calLoadedMonthKey=key;_calError='';
+  }
+  renderCalGrid();
+}
+
+function renderCalGrid(){
+  const grid=document.getElementById('calBody');
+  if(!grid)return;
+  if(_calError){grid.innerHTML=`<div class="cal-note">${escapeHtml(_calError)}</div>`;return;}
+  const y=_calMonth.getFullYear(),mo=_calMonth.getMonth();
+  const prefix=_calMonthKey(_calMonth); // 'YYYY-MM'
+  // 選択従業員の当月日報を日付（YYYY-MM-DD 文字列）でまとめる。日付は UTC 変換しない。
+  const byDate={};
+  (_calAllReports||[]).forEach(r=>{
+    if(r.employee_id!==_calEmployeeId)return;
+    const rd=r.report_date||'';
+    if(!rd.startsWith(prefix))return;
+    (byDate[rd]=byDate[rd]||[]).push(r);
+  });
+  _calDayData=byDate;
+  const wd=['日','月','火','水','木','金','土'];
+  let html='<div class="cal-grid">';
+  html+=wd.map((w,i)=>`<div class="cal-wd${i===0?' sun':i===6?' sat':''}">${w}</div>`).join('');
+  const firstDow=new Date(y,mo,1).getDay();
+  const lastDate=new Date(y,mo+1,0).getDate();
+  for(let i=0;i<firstDow;i++)html+='<div class="cal-cell blank"></div>';
+  const todayStr=localDate();
+  for(let d=1;d<=lastDate;d++){
+    const dateStr=_calYmd(y,mo+1,d);
+    const dow=new Date(y,mo,d).getDay();
+    const cell=byDate[dateStr];
+    const cls=['cal-cell'];
+    if(dateStr===todayStr)cls.push('today');
+    if(cell&&cell.length)cls.push('has-report');
+    const numCls='cal-daynum'+(dow===0?' sun':dow===6?' sat':'');
+    let inner=`<div class="${numCls}">${d}</div>`;
+    if(cell&&cell.length){
+      const r=cell[0];
+      const names=(r.site_ids||[]).map(id=>_calSiteName(id)).filter(Boolean);
+      let siteLabel=names[0]||'現場なし';
+      if(names.length>1)siteLabel=`${names[0]}他${names.length-1}`;
+      const more=cell.length>1?`<span style="color:var(--text3);">+${cell.length-1}</span>`:'';
+      inner+=`<div class="cal-dot">📝${more}</div><div class="cal-site">${escapeHtml(siteLabel)}</div>`;
+    }
+    html+=`<div class="${cls.join(' ')}" onclick="onCalDay('${dateStr}')">${inner}</div>`;
+  }
+  html+='</div>';
+  grid.innerHTML=html;
+}
+
+function changeCalMonth(delta){_calMonth=new Date(_calMonth.getFullYear(),_calMonth.getMonth()+delta,1);loadCalMonth();}
+function calToToday(){const n=new Date();_calMonth=new Date(n.getFullYear(),n.getMonth(),1);loadCalMonth();}
+// 従業員切替は取得済み月データで再描画するのみ（RPC は呼ばない）
+function onCalEmployeeChange(id){_calEmployeeId=id;renderCalGrid();}
+
+function onCalDay(dateStr){
+  const reports=(_calDayData||{})[dateStr]||[];
+  const empName=(_calEmployees.find(e=>e.id===_calEmployeeId)||{}).name||'';
+  let body;
+  if(!reports.length){
+    body='<div class="cal-note">この日の日報はありません。</div>';
+  }else{
+    body=reports.map(r=>{
+      const names=(r.site_ids||[]).map(id=>_calSiteName(id));
+      const siteStr=names.length?names.map(n=>escapeHtml(n)).join('・'):'現場なし';
+      const matCount=Array.isArray(r.material_ids)?r.material_ids.length:0;
+      const matLine=matCount>0?`<br>材料 ${matCount}件`:'';
+      const memoLine=r.memo?`<br>memo：${escapeHtml(r.memo)}`:'';
+      return `<div class="cal-detail-row">
+        <div class="cal-detail-time">${escapeHtml(r.start_time||'')}〜${escapeHtml(r.end_time||'')}</div>
+        <div class="cal-detail-meta">通常 ${_calFmtMins(r.normal_mins)} ／ 残業 ${_calFmtMins(r.overtime_mins)}<br>現場：${siteStr}${matLine}${memoLine}</div>
+      </div>`;
+    }).join('');
+  }
+  openModal(`📋 ${escapeHtml(empName)}　${escapeHtml(dateStr)}`,body,`<button class="btn btn-secondary" onclick="closeModal()">閉じる</button>`);
+}
 
 // ===== SITES PAGE =====
 async function pageSites(){

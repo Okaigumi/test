@@ -282,3 +282,23 @@
 - `/okg-status`：**実装・merge・実運用確認 完了**。
 - **`/okg-go` は未実装。`/okg-closeout` は未実装。**
 - 次工程：3 者合意（Section 12）のうえ、Type 1（frontend-only）専用の `/okg-go` の仕様検討へ進む。
+
+---
+
+## 14. オーナー目的と `/okg-go`（Type 1 frontend-only）運用ルール（恒久）
+
+### オーナー目的と要望の扱い（恒久・全作業に適用）
+- オーナーの目的は「**岡井組にとって総合的にプラスになる社内業務システムを作ること**」。
+- 画面要望は目的ではなく、その**手段・入口**である。字義どおりに追認しない。
+- ChatGPT と Claude は各要望について、**業務効率・社員/管理者/経営者の負担・安全性・信頼性・保守性・費用対効果・過剰実装・代替案**を独立に評価する。
+- より良い案があれば**理由とともに提示**する。ただし **3 者合意（ユーザー・ChatGPT・Claude）までは実装しない**。
+- Claude の私的 memory 領域は補助情報に過ぎず、**正式な根拠はリポジトリ内文書（本ファイル等）**とする。
+
+### `/okg-go` の責務と境界
+- `/okg-go` は **Type 1 frontend-only 専用**（対象例: 表示・文言・CSS・レイアウト・スマホ対応・ボタン・モーダル・カレンダー等）。DB/SQL/RPC/RLS/認証/session/PIN/allow-guard/settings/migration/データ削除等は対象外で、判明したら変更せず停止する。
+- 3 者合意済み仕様を入力とし、**preflight → branch → 調査 → Type1/価値確認 → 実装 → 3レビュー（frontend-design・security・test-evidence 必須）→ commit → push → PR作成 → checks → merge判断報告** まで行い、**PR 作成と merge判断報告までで停止**する。
+- **merge判断報告 18 項目**（結論／岡井組への効果／推奨と理由／仕様の項目別照合／変更内容／変更していない範囲／既存機能への影響／frontend-design・security・test-evidence 各 review／static・自動テスト／Vercel checks／残存リスク／未確認事項／Preview 確認項目／復旧方法／branch・commit・PR・base・head 整合性／決めてほしいこと）を必須出力する。仕様照合は「実装済み/未実装/変更あり/対象外/確認不能」で分類し、未実装・変更あり・確認不能があれば先頭で明示する。
+
+### merge の分離（恒久）
+- **Claude は merge コマンドを提示も実行もしない。** merge の最終判断は ChatGPT とユーザーが行う。
+- 流れ: Claude が merge判断報告 → ChatGPT 確認 → ユーザー Preview 確認 → ChatGPT が可と判断した場合のみ実行 1 行を提示 → ユーザーが実行。

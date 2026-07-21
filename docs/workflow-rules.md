@@ -250,3 +250,35 @@
 - 3 者の認識が揃うまで**実装を開始しない**。
 - Claude の検討結果・成果は**ChatGPT へ貼り戻す**（Claude 自身が最終判断しない）。
 - ユーザーは主に業務要件・使い勝手・優先順位・Preview／本番確認を担当する。
+
+---
+
+## 13. custom command `/okg-status` 追加（2026-07-21・PR #160 記録）
+
+承認ゲート付き開発フロー MVP の第 1 弾として、read-only の工程ステータス報告コマンド `/okg-status` を追加した開発運用・安全基盤の記録。**application の Phase 完了実績ではなく、DB 変更（migration）でもない。** application HTML／SQL／RPC／DB／allow-guard／settings は変更していない。
+
+### Git / PR
+- PR #160「Add read-only okg status command」（state: MERGED・Merge commit 方式）。
+- implementation commit `bee14337686b645530be330208ab9e0531052bf6`。
+- merge commit `94ec9557c41705b9dafe7523d10de598ad72b17d`。
+- mergedAt `2026-07-21T07:27:13Z`。
+- 追加ファイルは 1 つのみ：`.claude/commands/okg-status.md`。
+
+### 実装内容
+- Git／PR／checks／工程状態を **read-only** で収集し、決定ブロック（結論→推奨→決めてほしいこと→リスク→状態→停止条件→証拠）を先頭固定で短く報告する。
+- 引数なし（現状把握）と PR 番号指定に対応。PR 番号は `^[0-9]+$`（数字のみ）を検証し、不正時は GitHub コマンドを実行せず停止。
+- Claude の推奨は示すが、**merge 可否・Phase 完了などの最終判断は行わず ChatGPT とユーザーへ返す**。
+- write 操作・merge・DB 操作を行わない。secret／PIN／token／UUID／氏名／本番データを出力しない（commit hash・PR 番号・URL のみ可）。
+
+### 実運用確認（2026-07-21）
+- 引数なし：main・clean・main=origin/main・open PR 0 の待機状態を正しく判定。
+- `/okg-status 160`：PR #160 の MERGED・head commit・merge commit・mergedAt・Vercel checks SUCCESS を取得し、merge commit と main HEAD の一致を確認。
+
+### レビュー
+- security review（read-only）：critical 0 / high 0（medium/low の指摘は allow-guard による二重防御・doc クリア化で対応済み）。
+- test-evidence review（read-only）：全確認合格。read-only 保証を確認済み。
+
+### 状態と次工程
+- `/okg-status`：**実装・merge・実運用確認 完了**。
+- **`/okg-go` は未実装。`/okg-closeout` は未実装。**
+- 次工程：3 者合意（Section 12）のうえ、Type 1（frontend-only）専用の `/okg-go` の仕様検討へ進む。

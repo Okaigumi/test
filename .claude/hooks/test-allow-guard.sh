@@ -71,6 +71,32 @@ check_raw() {
   fi
 }
 
+# check_state <expect> <branch> <clean> <sync> <local_refs> <remote_refs> <cmd>
+# branch 作成 / main 同期系のように repo 状態に依存する判定を検証する。
+# clean = clean|dirty / sync = sync|ahead|behind|nosync / *_refs = 空白区切り既存 branch 名。
+check_state() {
+  local expect="$1" branch="$2" clean="$3" sync="$4" lrefs="$5" rrefs="$6" cmd="$7"
+  local json code got
+  json="$(mkjson "$cmd")"
+  total=$((total + 1))
+  printf '%s' "$json" | env \
+    ALLOW_GUARD_TEST_BRANCH="$branch" \
+    ALLOW_GUARD_TEST_STAGED="$DEF_STAGED" \
+    ALLOW_GUARD_TEST_CLEAN="$clean" \
+    ALLOW_GUARD_TEST_SYNC="$sync" \
+    ALLOW_GUARD_TEST_LOCAL_REFS="$lrefs" \
+    ALLOW_GUARD_TEST_REMOTE_REFS="$rrefs" \
+    bash "$HOOK" >/dev/null 2>&1
+  code=$?
+  if [ "$code" -eq 0 ]; then got="allow"; else got="deny"; fi
+  if [ "$got" = "$expect" ]; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    echo "MISMATCH(state) expected=$expect got=$got (exit=$code) branch=[$branch] clean=[$clean] sync=[$sync] lrefs=[$lrefs] rrefs=[$rrefs] cmd=[$cmd]" >&2
+  fi
+}
+
 # ===== ALLOW: read-only(ブランチ非依存) =====
 check allow "$FEAT" "$DEF_STAGED" 'git status'
 check allow "main" "$DEF_STAGED" 'git status'
@@ -230,6 +256,114 @@ check deny "$FEAT" "$DEF_STAGED" 'psql -c "select 1"'
 check deny "$FEAT" "$DEF_STAGED" 'find . -name x'
 check deny "$FEAT" "$DEF_STAGED" 'npm install'
 check deny "$FEAT" "$DEF_STAGED" 'rm -rf docs'
+
+# =====================================================================
+# 追加(workflow improvements): 読み取り拡張 / 安全な branch 作成・main 同期
+# =====================================================================
+
+# ----- ALLOW: git branch 読み取り -----
+check allow "$FEAT" "$DEF_STAGED" 'git branch --show-current'
+check allow "main" "$DEF_STAGED" 'git branch --show-current'
+check allow "$FEAT" "$DEF_STAGED" 'git branch --list'
+check allow "$FEAT" "$DEF_STAGED" 'git branch -r'
+
+# ----- ALLOW: gh pr list(完全一致) -----
+check allow "$FEAT" "$DEF_STAGED" 'gh pr list --state open --json number,title,headRefName'
+
+# ----- ALLOW: gh pr view の拡張 field -----
+check allow "$FEAT" "$DEF_STAGED" 'gh pr view 100 --json headRefOid'
+check allow "$FEAT" "$DEF_STAGED" 'gh pr view 100 --json mergedAt,mergeCommit,reviewDecision'
+check allow "$FEAT" "$DEF_STAGED" 'gh pr view 100 --json state,mergeable,statusCheckRollup,url,headRefName,baseRefName,headRefOid,mergedAt,mergeCommit,reviewDecision'
+
+# ----- ALLOW: 安全な branch 作成(clean・同期済み main から・各許可 prefix) -----
+check_state allow "main" "clean" "sync" "" "" 'git switch -c feature/new-cal'
+check_state allow "main" "clean" "sync" "" "" 'git switch -c fix/bug-1'
+check_state allow "main" "clean" "sync" "" "" 'git switch -c docs/record-x'
+check_state allow "main" "clean" "sync" "" "" 'git switch -c chore/cleanup'
+
+# ----- ALLOW: main 切替(clean) / fetch / pull -----
+check_state allow "$FEAT" "clean" "sync" "" "" 'git switch main'
+check allow "$FEAT" "$DEF_STAGED" 'git fetch --prune origin'
+check_state allow "main" "clean" "sync" "" "" 'git pull --ff-only origin main'
+
+# ----- DENY: branch 作成の状態条件違反 -----
+check_state deny "$FEAT" "clean" "sync"   "" "" 'git switch -c feature/x'   # 現在 branch が main でない
+check_state deny "main" "dirty" "sync"    "" "" 'git switch -c feature/x'   # dirty
+check_state deny "main" "clean" "ahead"   "" "" 'git switch -c feature/x'   # ahead
+check_state deny "main" "clean" "behind"  "" "" 'git switch -c feature/x'   # behind
+check_state deny "main" "clean" "nosync"  "" "" 'git switch -c feature/x'   # diverged/未同期
+check_state deny "main" "clean" "sync" "feature/dup" "" 'git switch -c feature/dup'  # local に同名
+check_state deny "main" "clean" "sync" "" "feature/dup" 'git switch -c feature/dup'  # remote に同名
+
+# ----- DENY: branch 名の不正 -----
+check_state deny "main" "clean" "sync" "" "" 'git switch -c bugfix/x'      # 許可外 prefix
+check_state deny "main" "clean" "sync" "" "" 'git switch -c randombranch'  # prefix なし
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/'      # prefix 直後が空
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a..b'  # ..
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a@{0}' # @{
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a//b'  # //
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/x.lock' # .lock
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a b'   # 空白(5トークン)
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a:b'   # 許可外文字 :
+check_state deny "main" "clean" "sync" "" "" 'git switch -c feature/a*b'   # 許可外文字 *
+check_state deny "main" "clean" "sync" "" "" 'git switch -c /feature/x'    # 先頭スラッシュ
+
+# ----- DENY: 強制作成 / 別コマンド -----
+check_state deny "main" "clean" "sync" "" "" 'git switch -C feature/x'
+check_state deny "main" "clean" "sync" "" "" 'git switch --create feature/x'
+check_state deny "main" "clean" "sync" "" "" 'git checkout -b feature/x'
+check_state deny "main" "clean" "sync" "" "" 'git switch feature/other'
+check_state deny "main" "clean" "sync" "" "" 'git switch -c main'
+
+# ----- DENY: main 切替の dirty -----
+check_state deny "$FEAT" "dirty" "sync" "" "" 'git switch main'
+
+# ----- DENY: fetch の過剰許可 -----
+check deny "$FEAT" "$DEF_STAGED" 'git fetch'
+check deny "$FEAT" "$DEF_STAGED" 'git fetch origin'
+check deny "$FEAT" "$DEF_STAGED" 'git fetch --all'
+check deny "$FEAT" "$DEF_STAGED" 'git fetch --prune upstream'
+check deny "$FEAT" "$DEF_STAGED" 'git fetch --prune origin --tags'
+check deny "$FEAT" "$DEF_STAGED" 'git fetch --prune --force origin'
+
+# ----- DENY: pull の過剰許可 / 条件違反 -----
+check deny "main" "$DEF_STAGED" 'git pull'
+check deny "main" "$DEF_STAGED" 'git pull origin main'
+check deny "main" "$DEF_STAGED" 'git pull --rebase origin main'
+check deny "main" "$DEF_STAGED" 'git pull --no-ff origin main'
+check deny "main" "$DEF_STAGED" 'git pull --ff-only origin develop'
+check_state deny "$FEAT" "clean" "sync" "" "" 'git pull --ff-only origin main'  # main 以外
+check_state deny "main" "dirty" "sync" "" "" 'git pull --ff-only origin main'    # dirty
+
+# ----- DENY: git branch の変更系 -----
+check deny "$FEAT" "$DEF_STAGED" 'git branch -d feature/x'
+check deny "$FEAT" "$DEF_STAGED" 'git branch -D feature/x'
+check deny "$FEAT" "$DEF_STAGED" 'git branch -m a b'
+check deny "$FEAT" "$DEF_STAGED" 'git branch --delete feature/x'
+check deny "$FEAT" "$DEF_STAGED" 'git branch --set-upstream-to origin/main'
+check deny "$FEAT" "$DEF_STAGED" 'git branch feature/x'
+check deny "$FEAT" "$DEF_STAGED" 'git branch'
+
+# ----- DENY: gh pr list の過剰許可 -----
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --state closed --json number,title,headRefName'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --state open --json number,title,headRefName,body'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --state open --json number'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --state open --json number,title,headRefName --limit 5'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --state all --json number,title,headRefName'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr list --search foo --state open --json number,title,headRefName'
+
+# ----- DENY: gh pr view の未許可 field / gh api 継続拒否 -----
+check deny "$FEAT" "$DEF_STAGED" 'gh pr view 100 --json mergedBy'
+check deny "$FEAT" "$DEF_STAGED" 'gh pr view 100 --json headRefOid,secret'
+check deny "$FEAT" "$DEF_STAGED" 'gh api repos/owner/repo/commits/abc/status'
+
+# ----- DENY: merge / rebase / reset / force push の継続拒否 -----
+check deny "main" "$DEF_STAGED" 'git merge feature/x'
+check deny "$FEAT" "$DEF_STAGED" 'git rebase main'
+check deny "$FEAT" "$DEF_STAGED" 'git reset --hard origin/main'
+check deny "$FEAT" "$DEF_STAGED" 'git stash'
+check deny "$FEAT" "$DEF_STAGED" 'git push -u origin feature/test-branch --force'
 
 echo "total=$total pass=$pass fail=$fail"
 if [ "$fail" -eq 0 ]; then

@@ -195,3 +195,58 @@
 - 区切りに到達したら、次の変更作業へ進む前に、まずこの報告を出す。
 - 報告の詳細フォーマットが必要な場合は Section 9 のフォーマットを併用してよい。
 - 報告は「進捗管理チャットへそのまま貼れる」ことを前提とし、実装チャットの作業ログと混ぜない（Section 1・Section 2 参照）。
+
+---
+
+## 11. allow-guard 許可範囲の拡張（2026-07-21・PR #158 記録）
+
+承認ゲート付き開発フローの基盤として、`.claude/hooks/allow-guard.sh` に「安全な Git／GitHub 操作」を追加した開発運用・安全基盤の改善記録。**これは application の Phase 完了実績ではなく、また DB 変更（migration）でもない。** DB／SQL／RPC／application（HTML）は一切変更していない。
+
+### 目的
+- 承認ゲート付き開発フローのために、危険操作は遮断したまま、read-only 情報取得と「安全な条件を満たしたときだけの Git 操作」を Claude Code の Bash tool から実行できるようにする。
+
+### Git / PR
+- PR #158「Expand allow-guard for safe workflow operations」（state: MERGED・Merge commit 方式）。
+- implementation commit `d006e0402dc1482b60f8e6fbc27a06c6013e4440`。
+- merge commit `1e8758f1130dfaea84b46ac7173ca1a5e97cfcb1`。
+- mergedAt `2026-07-21T06:03:19Z`。
+- 変更ファイルは 2 つのみ：`.claude/hooks/allow-guard.sh` / `.claude/hooks/test-allow-guard.sh`（341 insertions / 4 deletions）。
+
+### 追加した安全な許可
+- `git branch --show-current` / `git branch --list` / `git branch -r`（read-only のみ）。
+- `gh pr list --state open --json number,title,headRefName`（この 1 形式の完全一致のみ）。
+- `gh pr view --json` の read-only field 拡張（`headRefOid` / `mergedAt` / `mergeCommit` / `reviewDecision` を追加。未知 field が 1 つでも含まれれば拒否）。
+- 条件付き `git switch -c <feature|fix|docs|chore>/<name>`（現在 branch が main・working tree clean・local HEAD == origin/main・同名の local/remote branch なし・branch 名の厳格検証を満たしたときのみ）。
+- `git switch main`（working tree clean のときのみ）。
+- `git fetch --prune origin`（完全一致のみ）。
+- `git pull --ff-only origin main`（main 上・clean のときのみ）。
+
+### 引き続き禁止している危険操作（変更なし）
+- `gh pr merge` / `git merge` / `git rebase` / `git reset` / force push / `git commit --amend`。
+- main への直接 `git add` / `commit` / `push`。
+- 任意の `gh api` / 任意スクリプト実行 / `supabase` / `psql`。
+- shell metacharacter（パイプ・リダイレクト・`;`・`&&`・`||`・`$()` 等）を含むコマンド。
+- `git checkout -b` / `git switch -C` / `--create`、branch の削除・改名・作成（`git branch <name>` 等）。
+
+### テスト・レビュー
+- allow-guard テスト：total 206 / pass 206 / fail 0（ユーザーが `bash .claude/hooks/test-allow-guard.sh` を実行して確認）。
+- security review（read-only）：critical 0 / high 0（medium/low の指摘はいずれも既存の `git check-ref-format` や前段の fail-closed ゲートで実害なしと確認・任意ハードニングは未適用）。
+- test evidence review（read-only）：全確認合格。
+- 新 hook 経由の branch 作成 実地確認：`git switch -c docs/allow-guard-workflow-improvements-record` が main／clean／同期済み／許可 prefix／同名 branch なしの条件を満たして**成功**。
+
+### 状態と次工程
+- **custom command は未実装**（今回は allow-guard の許可範囲拡張のみ）。`.claude/commands/` は作成していない。
+- 次工程：承認ゲート付き開発フロー全体を、ユーザー・ChatGPT・Claude の 3 者で検討し、仕様合意後に custom command の MVP へ進む（下記 Section 12）。
+
+---
+
+## 12. 次工程の仕様決定ルール（3 者合意）
+
+開発フロー自動化（custom command 等）の仕様は、以下のルールで決定する。実装は仕様合意後に開始する。
+
+- 仕様は**ユーザー・ChatGPT・Claude の 3 者**で決定する。
+- ChatGPT と Claude は**それぞれ独立に**、要望整理・仕様案・工程判断・リスク判断・代替案を検討する。
+- Claude は ChatGPT 案を**単に追認せず**、相違点・反対意見・見落としを明示的に提示する。
+- 3 者の認識が揃うまで**実装を開始しない**。
+- Claude の検討結果・成果は**ChatGPT へ貼り戻す**（Claude 自身が最終判断しない）。
+- ユーザーは主に業務要件・使い勝手・優先順位・Preview／本番確認を担当する。

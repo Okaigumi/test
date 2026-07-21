@@ -616,6 +616,32 @@ Storage 設計：
 お知らせ自体の削除機能は実装せず、`is_active = false` による非表示管理に統一。
 本番確認済み URL: https://system.okaigumi.co.jp/admin / https://system.okaigumi.co.jp/
 
+### 日報カレンダー（Phase 6-C・追加済み・2026-07-21）
+
+admin-app.html の「日報カレンダー」メニューで、管理者が従業員別の日報提出状況を月別カレンダーで確認できる（閲覧専用MVP）。
+
+- 目的：管理者が全従業員の日報提出状況を月別カレンダーで俯瞰する（従業員を選択して1人ずつ月表示）。
+- 実装範囲：sidebar に「📅 日報カレンダー」追加（`showPage('reportcal')`）／active 従業員全員を select で選択（`role` 除外なし）／前月・次月・今月移動／`YYYY年M月`見出し／日〜土の曜日行・土日色分け・今日強調／日報提出日の強調表示／同日複数日報の `+N`／日付クリックで当日の全日報を詳細modal表示（開始/終了時刻・通常/残業時間・現場名・材料件数・memo）／空日は「この日の日報はありません」表示のみ（新規作成へ遷移しない）／loading・empty・error表示・スマホ幅対応。
+- データ取得：既存 `list_admin_reports_secure(text, date, date)` を**再利用**（月単位で1回取得・月移動時のみ再取得・従業員切替は取得済みデータをクライアント側で再利用）。**新規RPC・signature変更なし**。
+- **DB／SQL／RPC／Supabase 設定の変更なし**（frontend `admin-app.html` のみ・174 insertions / 2 deletions）。DB migration ではないため db-migrations.md には記録しない。
+- レビュー：security review（critical 0 / high 0）・test evidence review（全合格）・frontend-design review 実施済み（must-fix 0。指摘の S1「`.card-body` による余白統一」・S2「select へ `aria-label`」を commit 前に反映）。
+- Preview smoke（Vercel Preview・2026-07-21）：管理者ログイン／section表示／従業員切替／前月・次月・今月／日報マーカー／同日複数 `+N`／詳細modal／空日表示／スマホ表示／`list_admin_reports_secure` HTTP 200／Console 赤エラーなし／既存 admin section 回帰／`/` 本人カレンダー・`/genka` ログイン回帰、すべて合格。
+- Production smoke（2026-07-21）：Vercel Production デプロイ SUCCESS。Preview と同じ主要項目・回帰項目を本番（https://system.okaigumi.co.jp/admin）で確認し、すべて合格。
+- Git：PR #156（`Phase 6-C: 管理者日報カレンダー MVP（admin-app.html・read-only・DB変更なし）`・MERGED）／implementation commit `93f40c0`／merge commit `25789c6322c139ffbefe848e7bdc43f38c53e1cd`／mergedAt `2026-07-21T02:14:10Z`（Merge commit 方式）。
+- 本番確認日：2026-07-21。
+
+対象外（今回のMVPに含めない）：DB／SQL／RPC変更・有休表示・inactive従業員選択・材料名/数量明細・日報作成/編集/無効化UI・全従業員マトリクス・Phase 5関連変更。
+
+後続候補（未着手・完了扱いにしない）：
+- inactive（退職・無効化済み）従業員の過去日報閲覧（selector 拡張）
+- 管理者向け日別有休表示（admin 対応の日別有休 read の検討）
+- 材料名・数量明細の表示（`list_materials_secure` は employee-session 専用のため、admin 対応の別read RPC 検討）
+- 全従業員マトリクス（1画面同時表示）
+- accessibility 強化（日付セルの keyboard 操作・button `type` 等）
+- iPhone Safari でログイン/PINパッド等の連打時にダブルタップ拡大される問題への対策候補：`/`・`/admin`・`/genka` のログイン・PIN操作へ `touch-action: manipulation` を限定適用する案を別PRで検討（viewport によるページ全体の拡大禁止は行わない）。
+
+※ Phase 6 全体は引き続き「一部完了」。上記後続候補・有休表示等は未完了であり、Phase 6 全体を完了扱いにはしない。Phase 6-D（本記録）はこの記録PRの main merge をもってクローズとする。
+
 ## Phase 7：バックアップ・復旧
 
 状態：一部完了

@@ -67,7 +67,7 @@ fn AS (
   SELECT p.oid::regprocedure::text                                    AS signature,
          pg_get_userbyid(p.proowner)                                   AS owner,
          p.prosecdef                                                    AS secdef,
-         p.provolatile                                                  AS volatility,
+         p.provolatile::text                                            AS volatility,
          COALESCE(array_to_string(p.proconfig, ', '), '(none)')         AS proconfig,
          length(pg_get_functiondef(p.oid))                              AS def_len,
          md5(pg_get_functiondef(p.oid))                                 AS def_md5

@@ -618,7 +618,7 @@ BEGIN
     '%8 hours%'
   ];
   FOREACH v_pattern IN ARRAY v_required LOOP
-    IF v_text NOT ILIKE v_pattern THEN
+    IF v_norm NOT ILIKE v_pattern THEN
       RAISE EXCEPTION
         'PC-11 failed: required string % not found in function body', v_pattern;
     END IF;

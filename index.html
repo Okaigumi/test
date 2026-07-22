@@ -39,7 +39,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:white;transition:background .15s;}
 .pin-dot.filled{background:var(--accent);border-color:var(--accent);}
 .pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.pin-key{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:20px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;text-align:center;transition:all .1s;}
+.pin-key{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:20px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;text-align:center;transition:all .1s;touch-action:manipulation;}
 .pin-key:active{background:var(--accent-light);transform:scale(.95);}
 
 /* Header */

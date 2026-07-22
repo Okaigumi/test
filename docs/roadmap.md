@@ -554,6 +554,37 @@
   - retry_after 表示（`*_session_v2` additive）・IP 単位 rate limit は独立後続工程。
   - 詳細は docs/db-migrations.md「2026-07-20 Phase 5-C-1b」。
 
+### 5-D employees PIN ハッシュ化（Phase 5-D・5-E 分離方針）
+
+- **5-D 対象：employees のみ**（`genka_admins` は Phase 5-E で対応）
+- **5-E 対象：genka_admins**（5-D 完了後に独立工程として実施）
+- Phase 5-D と 5-E は設計を共通化しつつ、DB 変更・RPC 更新・smoke を分離して安全に進める。
+
+#### 5-D-1 schema 追加 + login RPC hash 優先 dual-read 化
+
+**状態：実装 SQL 準備中（PR #164）／DB 未実行**
+
+- `employees.pin_hash text NULL` 追加（nullable・default なし・既存 11 行は NULL のまま）
+- `create_employee_session(uuid,text)` を `CREATE OR REPLACE` で hash 優先 dual-read に更新
+  - `pin_hash IS NOT NULL` → `extensions.crypt` による bcrypt 照合のみ（平文 fallback なし）
+  - `pin_hash IS NULL`     → 既存の平文 `pin` 照合（移行前互換）
+- 対象は `employees` のみ。`genka_admins` / `create_admin_session` は変更しない。
+- frontend 変更なし（PIN は plain text で RPC 渡し、照合はすべて DB 側）
+- RLS / policy / GRANT / REVOKE 変更なし
+- backfill 未実施（5-D-3 で対応）。hash 生成・bcrypt cost は backfill 時に確定。
+- plaintext `employees.pin` は引き続き現役（dual-read で互換維持中）
+- 準備 PR #164（`docs/sql/phase5d-1-employee-pin-hash-dual-read.sql` のみ追加）
+- DB 実行は 3 者合意・smoke 計画確認後に Supabase SQL Editor で手動実施予定
+- **Phase 5-D は未完了**（5-D-2 dual-write / 5-D-3 backfill / 5-D-4 観察 / 5-D-5 hash-only / 5-D-6 pin 列 DROP が残る）
+
+#### 5-D の残工程（未着手）
+
+- **5-D-2**：employee create / update RPC への dual-write 追加（新規・変更 PIN も hash に保存）
+- **5-D-3**：backfill（既存全員の平文 PIN を bcrypt hash へ変換）
+- **5-D-4**：観察・smoke（dual-write + backfill 完了後の確認期間）
+- **5-D-5**：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）
+- **5-D-6**：`employees.pin` 列 DROP（不可逆ゲート・3者合意必須）
+
 ## Phase 6：admin-app.html 改善
 
 状態：一部完了

@@ -6418,3 +6418,102 @@ COMMIT;
 - `employees.pin`：text NOT NULL のまま（平文 PIN は現役）
 - `create_employee_session`：hash 優先 dual-read 動作中（pin_hash IS NULL 行は平文照合で互換維持）
 - Phase 5-D-1 の実 DB 作業は完了。**Phase 5-D 全体は未完了（5-D-2 dual-write 以降が残る）。次工程は 5-D-2。**
+
+---
+
+## 2026-07-23 Phase 5-D-2 employees create / update RPC dual-write 化（★実行済み★）
+
+### 目的
+
+- `create_employee_secure` / `update_employee_secure` の2本を `CREATE OR REPLACE` で dual-write（pin + pin_hash 同時書込み）に更新する。
+- 新規作成時：単一 INSERT で pin と pin_hash を原子的に保存（bcrypt cost 12）。
+- PIN 変更時：単一 UPDATE で pin と pin_hash を原子的に更新。
+- PIN 未変更時：pin も pin_hash も触れない（既存 NULL 行を勝手に hash 化しない）。
+- PIN バリデーション強化：`'^[0-9]{4}$'`（半角数字4桁）。
+
+### 対象 DB オブジェクト
+
+| オブジェクト | 変更内容 |
+|---|---|
+| `public.create_employee_secure(text,text,text,text,uuid,boolean)` | `CREATE OR REPLACE`（PIN regex 強化 + INSERT に pin_hash 追加） |
+| `public.update_employee_secure(text,uuid,text,text,boolean,uuid,text)` | `CREATE OR REPLACE`（PIN regex 強化 + PIN 変更 UPDATE に pin_hash 追加） |
+
+### 非対象（今回変更しない）
+
+- 既存 10 件の backfill（Phase 5-D-3 で対応）
+- plaintext employees.pin の削除
+- create_employee_session / genka_admins / create_admin_session
+- employees.pin_hash 列（5-D-1 で追加済み）
+- frontend / RLS / policy / GRANT / REVOKE
+
+### 実行日・手順
+
+- 実行日：2026-07-23（JST・Supabase SQL Editor 手動実行）
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし
+- 実行順序：PRE-CHECK（全合格確認）→ BODY（BEGIN〜COMMIT・1回のみ）→ POST-COMMIT（read-only）→ Production smoke
+- SQL：`docs/sql/phase5d-2-employee-pin-dual-write.sql`（STATUS: EXECUTED 2026-07-23）
+
+### 準備 PR・fix PR
+
+| PR | 内容 |
+|---|---|
+| #169 | SQL 準備ファイル追加・roadmap 更新 |
+| #170 | RPC エラーメッセージ・ROLLBACK 定義を実 DB baseline へ修正 |
+
+### 実行後 fingerprint（5-D-3 GUARD および ROLLBACK GUARD の baseline）
+
+| 関数 | length | md5 |
+|---|---|---|
+| create_employee_secure | **1433** | **`33ea12279533b4a808a4d14bf11bb0a9`** |
+| update_employee_secure | **1915** | **`848eec0d7310c84cdffd05939b6c7a3b`** |
+
+### POST-COMMIT 全合格（P-1〜P-6・2026-07-23）
+
+- P-1：新 fingerprint（create 1433/33ea... / update 1915/848e...）
+- P-2：pin（text / NO / (none)）・pin_hash（text / YES / (none)）変化なし
+- P-3：total=11 / pin_hash_null=11 / pin_hash_not_null=0（BODY 直後）
+- P-4：両 RPC の pin_hash 参照・extensions.crypt・cost 12・4桁 regex・admin_sessions 維持・_verify_management_session 未使用 確認
+- P-5：pin / pin_hash の anon/authenticated 列権限 全 false 維持
+- P-6：両 RPC の EXECUTE 権限 全 true 維持
+
+### Production smoke（2026-07-23・全合格）
+
+- **S-1 PIN 未変更保存**：update_employee_secure HTTP 204。前後 total=11 / pin_hash_null=11 / pin_hash_not_null=0。PIN 未変更時に hash 化されないことを確認。
+- **S-2 PIN 変更**：update_employee_secure HTTP 204。保存後 pin_hash_not_null=1 に変化確認。
+- **S-3 新 PIN ログイン**：成功。hash-first dual-read により bcrypt 照合が機能。
+- **S-4 旧 PIN ログイン**：拒否。平文 PIN へ fallback しないことを確認。
+- **S-5 回帰確認**：管理者ログイン成功・原価管理ログイン成功。
+- **検証後復元**：検証対象従業員を元の PIN へ変更（HTTP 204）。元の PIN でログイン成功。pin_hash は NULL へ戻さず、元の PIN に対応する cost 12 hash を維持。
+- 実 PIN・氏名・UUID・token は記録しない。
+
+### create 経路の本番 smoke
+
+- **未実施**（安全な cleanup RPC 未整備のため・事前計画どおり）。
+- コードレビュー・内部 POST-CHECK（PC-4/PC-5）・POST-COMMIT（P-4: create_insert_has_pin_hash=true）で dual-write コードの存在を確認済み。
+- create の本番 smoke は、cleanup RPC が整備された後の別工程で実施予定。
+
+### 最終 DB 状態（smoke 後・2026-07-23）
+
+| 項目 | 値 |
+|---|---|
+| total_rows | 11 |
+| pin_hash_null | 10 |
+| pin_hash_not_null | 1 |
+| hash_matches_plaintext | 1（cost 12 hash が元 PIN と一致）|
+| bcrypt_cost12 | 1（cost 12 で hash 済みの行）|
+
+pin_hash_not_null=1 は smoke 検証後の復元操作によるもの（5-D-2 BODY 直後は 0）。
+
+### rollback
+
+- ROLLBACK SQL は `docs/sql/phase5d-2-employee-pin-dual-write.sql` Part 4 に記載。
+- ROLLBACK GUARD プレースホルダーは実測値（create 1433/33ea... / update 1915/848e...）へ確定済み。
+- 順序：両 RPC を 5-D-2 適用前 baseline へ CREATE OR REPLACE → RC-1〜RC-4 確認（単一 transaction）。
+- employees.pin_hash 列は DROP しない（5-D-1 で追加済み・5-D-1 ROLLBACK が担当）。
+
+### 最終状態
+
+- `employees.pin_hash`：10 行 NULL / 1 行 NOT NULL（smoke で1件 hash 済み）。backfill は 5-D-3 で実施。
+- `employees.pin`：text NOT NULL のまま（平文 PIN は現役・dual-read で互換維持）。
+- `create_employee_secure` / `update_employee_secure`：dual-write 動作中。
+- **Phase 5-D-2 の実 DB 作業は完了。Phase 5-D 全体は未完了（5-D-3 backfill 以降が残る）。次工程は 5-D-3。**

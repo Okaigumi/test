@@ -1,9 +1,9 @@
 -- ============================================================
 -- Phase 5-D-2：employees create / update RPC dual-write 化
 -- ============================================================
--- 【実行ステータス】STATUS: PENDING（★DB 未実行★）
---   - preparation date：2026-07-23（準備 PR #169）
---   - execution date  ：未定（3者合意・smoke 計画確認後に Supabase SQL Editor で手動実行）
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-23
+--   - preparation date：2026-07-23（準備 PR #169、fix PR #170）
+--   - execution date  ：2026-07-23（Supabase SQL Editor 手動実行・1回のみ・再実行なし）
 --   - ★ BODY は1回のみ実行。再実行禁止★
 --     （GUARD が baseline fingerprint 不一致・二重適用を fail-closed で停止）
 --
@@ -916,10 +916,10 @@ DECLARE
   v_len            integer;
   v_create_oid     oid;
   v_update_oid     oid;
-  v_new_create_md5 text    := '<FILL_IN_FROM_5D2_POST_COMMIT_create_md5>';
-  v_new_create_len integer := 0;
-  v_new_update_md5 text    := '<FILL_IN_FROM_5D2_POST_COMMIT_update_md5>';
-  v_new_update_len integer := 0;
+  v_new_create_md5 text    := '33ea12279533b4a808a4d14bf11bb0a9';
+  v_new_create_len integer := 1433;
+  v_new_update_md5 text    := '848eec0d7310c84cdffd05939b6c7a3b';
+  v_new_update_len integer := 1915;
 BEGIN
 
   -- ★ プレースホルダー未設定チェック（安全ロック）
@@ -1200,15 +1200,18 @@ COMMIT;
 -- ============================================================
 -- Part 6：実行記録（DB 実行後に記入）
 -- ============================================================
--- execution date        ：未定
--- executed by           ：（Supabase SQL Editor・手動）
--- GUARD result          ：未実行
--- BODY result           ：未実行
--- POST-CHECK result     ：未実行
--- new_create_def_length ：<FILL_IN_FROM_5D2_POST_COMMIT_create_length>
--- new_create_def_md5    ：<FILL_IN_FROM_5D2_POST_COMMIT_create_md5>
--- new_update_def_length ：<FILL_IN_FROM_5D2_POST_COMMIT_update_length>
--- new_update_def_md5    ：<FILL_IN_FROM_5D2_POST_COMMIT_update_md5>
--- smoke result          ：未実施
--- docs/db-migrations.md 記録日：未定
+-- execution date        ：2026-07-23
+-- executed by           ：Supabase SQL Editor・手動（1回のみ・再実行なし）
+-- GUARD result          ：全 11 チェック合格
+-- BODY result           ：Success. No rows returned（COMMIT 済み）
+-- POST-CHECK result     ：PC-1〜PC-14 全合格（内部 POST-CHECK）
+-- new_create_def_length ：1433
+-- new_create_def_md5    ：33ea12279533b4a808a4d14bf11bb0a9
+-- new_update_def_length ：1915
+-- new_update_def_md5    ：848eec0d7310c84cdffd05939b6c7a3b
+-- smoke result          ：全合格（S-1 PIN未変更／S-2 PIN変更／S-3〜S-4 login／S-5 回帰）
+-- create 本番 smoke     ：未実施（安全な cleanup RPC 未整備のため・事前計画どおり）
+--                        コードレビュー・内部 POST-CHECK・POST-COMMIT で dual-write を確認済み
+-- 最終 DB 状態          ：total=11／pin_hash_null=10／pin_hash_not_null=1
+-- docs/db-migrations.md 記録日：2026-07-23
 -- ============================================================

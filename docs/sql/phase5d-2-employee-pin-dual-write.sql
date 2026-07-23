@@ -580,6 +580,7 @@ DECLARE
   v_new_update_md5 text;
   v_create_oid     oid;
   v_update_oid     oid;
+  v_nochange_branch text;
 BEGIN
 
   -- 新 OID 取得（CREATE OR REPLACE 後）
@@ -674,6 +675,56 @@ BEGIN
   IF v_text NOT ILIKE '%new_pin_input IS NULL%' THEN
     RAISE EXCEPTION
       'PC-8 failed: update_employee_secure no-change branch (IS NULL) missing';
+  END IF;
+
+  -- PC-8b: PIN 未変更分岐（IS NULL 〜 ELSE 間）に pin / pin_hash / hash 生成が混入していない
+  -- lower(v_norm) で大小文字を統一した上で、IS NULL THEN と最初の ELSE の間だけを切り出す
+  -- split_part(..., 'if new_pin_input is null then', 2) → IS NULL 以降全体
+  -- split_part(..., 'else', 1)                         → IS NULL 分岐内（最初の ELSE 手前まで）
+  v_nochange_branch :=
+    split_part(
+      split_part(
+        lower(v_norm),
+        'if new_pin_input is null then',
+        2
+      ),
+      'else',
+      1
+    );
+
+  -- 抽出に失敗した場合（空文字列または NULL）は fail-closed で停止
+  IF v_nochange_branch IS NULL OR v_nochange_branch = '' THEN
+    RAISE EXCEPTION
+      'PC-8b failed: could not extract IS NULL branch from update_employee_secure '
+      '(structure mismatch -- abort to prevent unverified execution)';
+  END IF;
+
+  -- pin = ... が存在しないこと（word-boundary 正規表現・lower 適用済みのため大小文字不問）
+  IF v_nochange_branch ~ '(^|[^a-z0-9_])pin[[:space:]]*=' THEN
+    RAISE EXCEPTION
+      'PC-8b failed: update no-change branch (IS NULL) contains pin assignment '
+      '(must not touch pin or pin_hash in no-change path)';
+  END IF;
+
+  -- pin_hash = ... が存在しないこと
+  IF v_nochange_branch ~ '(^|[^a-z0-9_])pin_hash[[:space:]]*=' THEN
+    RAISE EXCEPTION
+      'PC-8b failed: update no-change branch (IS NULL) contains pin_hash assignment '
+      '(must not touch pin or pin_hash in no-change path)';
+  END IF;
+
+  -- extensions.crypt(...) が存在しないこと
+  IF v_nochange_branch LIKE '%extensions.crypt(%' THEN
+    RAISE EXCEPTION
+      'PC-8b failed: update no-change branch (IS NULL) calls extensions.crypt '
+      '(hash generation must not occur in no-change path)';
+  END IF;
+
+  -- extensions.gen_salt(...) が存在しないこと
+  IF v_nochange_branch LIKE '%extensions.gen_salt(%' THEN
+    RAISE EXCEPTION
+      'PC-8b failed: update no-change branch (IS NULL) calls extensions.gen_salt '
+      '(hash generation must not occur in no-change path)';
   END IF;
 
   -- PC-9: update の extensions.crypt / gen_salt / cost 12 / 4桁 regex が存在する

@@ -1,9 +1,9 @@
 -- ============================================================
 -- Phase 5-D-1：employees.pin_hash 追加 + 従業員 login RPC hash 優先 dual-read 化
 -- ============================================================
--- 【実行ステータス】STATUS: PENDING（★DB 未実行★）
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-23
 --   - preparation date：2026-07-22（準備 PR #164）
---   - execution date  ：未定（3者合意・smoke 確認後に Supabase SQL Editor で手動実行）
+--   - execution date  ：2026-07-23（Supabase SQL Editor 手動実行・再実行なし）
 --   - ★ BODY は1回のみ実行。再実行禁止★
 --     （GUARD G-4 が pin_hash 既存を検知・GUARD G-2 が md5 不一致を検知して停止）
 --
@@ -847,8 +847,8 @@ DECLARE
   v_count   integer;
   v_md5     text;
   v_len     integer;
-  v_new_md5 text    := '<FILL_IN_FROM_5D1_POST_COMMIT_new_def_md5>';
-  v_new_len integer := 0;
+  v_new_md5 text    := '006550c3455e34aa9d1d61bd60bb85ad';
+  v_new_len integer := 3798;
 BEGIN
 
   -- ★ プレースホルダー未設定チェック（安全ロック）
@@ -1153,13 +1153,24 @@ COMMIT;
 -- ============================================================
 -- Part 6：実行記録（DB 実行後に記入）
 -- ============================================================
--- execution date   ：未定
--- executed by      ：（Supabase SQL Editor・手動）
--- GUARD result     ：未実行
--- BODY result      ：未実行
--- POST-CHECK result：未実行
--- new_def_length   ：<FILL_IN_FROM_5D1_POST_COMMIT_new_def_length>
--- new_def_md5      ：<FILL_IN_FROM_5D1_POST_COMMIT_new_def_md5>
--- smoke result     ：未実施
--- docs/db-migrations.md 記録日：未定
+-- execution date   ：2026-07-23
+-- executed by      ：Supabase SQL Editor・手動（1回のみ・再実行なし）
+-- GUARD result     ：全 8 チェック合格
+-- BODY result      ：Success. No rows returned（COMMIT 済み）
+-- POST-CHECK result：PC-1〜PC-thr-3 全合格（内部 POST-CHECK）
+-- new_def_length   ：3798
+-- new_def_md5      ：006550c3455e34aa9d1d61bd60bb85ad
+-- smoke result     ：全合格（従業員ログイン / cooldown / 管理者・原価 ログイン回帰）
+-- docs/db-migrations.md 記録日：2026-07-23
+-- ============================================================
+--
+-- 【補足：実行中の abort 記録】
+-- (1) PRE-CHECK 初回：p.provolatile の "char"/text UNION 型不一致で SQL Editor エラー。
+--     DB 書込みなし。PR #165 で provolatile::text キャストへ修正後、全合格確認。
+-- (2) BODY 初回：内部 PC-11 で %FOR KEY SHARE% が v_text ILIKE で false negative のため
+--     transaction abort。DB 変更残存なし。
+--     rollback 確認：baseline_restored=true / pin_hash_absent=true /
+--     function md5=af51db14986a5617de3091086a94db64 / length=3520 / employees=11
+--     PR #166 で PC-11 を v_norm ILIKE へ修正後、最終 BODY が Success. No rows returned。
+-- (3) POST-COMMIT P-4 key-share は PR #167 で whitespace 正規化を反映して最終確認。
 -- ============================================================

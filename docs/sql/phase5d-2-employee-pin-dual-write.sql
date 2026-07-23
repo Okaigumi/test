@@ -1000,11 +1000,11 @@ BEGIN
     WHERE  s.token_hash = encode(digest(session_token_input, 'sha256'), 'hex')
       AND  s.expires_at > now()
   ) THEN
-    RAISE EXCEPTION 'セッションが無効または期限切れです';
+    RAISE EXCEPTION 'Invalid or expired session';
   END IF;
 
   IF name_input IS NULL OR trim(name_input) = '' THEN
-    RAISE EXCEPTION '名前は必須です';
+    RAISE EXCEPTION 'Name is required';
   END IF;
 
   IF pin_input IS NULL OR length(pin_input) <> 4 THEN
@@ -1045,11 +1045,11 @@ BEGIN
     WHERE  s.token_hash = encode(digest(session_token_input, 'sha256'), 'hex')
       AND  s.expires_at > now()
   ) THEN
-    RAISE EXCEPTION 'セッションが無効または期限切れです';
+    RAISE EXCEPTION 'Invalid or expired session';
   END IF;
 
   IF name_input IS NULL OR trim(name_input) = '' THEN
-    RAISE EXCEPTION '名前は必須です';
+    RAISE EXCEPTION 'Name is required';
   END IF;
 
   IF new_pin_input IS NOT NULL AND length(new_pin_input) <> 4 THEN

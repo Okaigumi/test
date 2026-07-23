@@ -6311,3 +6311,110 @@ COMMIT;
 - 実 PIN・token・UUID・氏名は記録しない。
 - 手順・実測値の詳細は `docs/sql/phase5c-1b-login-throttle-rpc.sql` の pre-check / guard / post-check / smoke checklist に記録。
 - Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし。
+
+---
+
+## 2026-07-23 Phase 5-D-1 employees.pin_hash 追加 + login RPC hash 優先 dual-read 化（★実行済み★）
+
+### 目的
+
+- `employees` テーブルに `pin_hash text NULL` 列を追加し、従業員ログイン RPC `create_employee_session(uuid,text)` の PIN 照合を hash 優先 dual-read に更新する。
+- `pin_hash IS NOT NULL` の行：`extensions.crypt` で bcrypt 照合（平文へ fallback しない）。
+- `pin_hash IS NULL` の行：既存の平文 `employees.pin` 照合（移行前互換）。
+- DB 情報が漏えいした場合でも、従業員 PIN を容易に読み取られないための第一段階。
+
+### 対象オブジェクト
+
+| オブジェクト | 変更内容 |
+|---|---|
+| `public.employees.pin_hash` | `text NULL` 列追加（nullable・default なし） |
+| `public.create_employee_session(uuid,text)` | `CREATE OR REPLACE`（step (6) の PIN 照合条件のみ変更） |
+
+### 非対象（今回変更しない）
+
+- `genka_admins` / `create_admin_session`（Phase 5-E で対応）
+- employee create/update RPC（5-D-2 dual-write で対応）
+- frontend・RLS / policy・GRANT / REVOKE
+- backfill・hash 生成・bcrypt cost 決定（5-D-3 以降）
+
+### 実行日・手順
+
+- 実行日：2026-07-23（JST・Supabase SQL Editor 手動実行）
+- Claude Code CLI からの DB 接続・Supabase CLI・psql 使用なし
+- 実行順序：PRE-CHECK（全合格確認）→ BODY（BEGIN〜COMMIT・1回のみ）→ POST-COMMIT（read-only）→ 本番 smoke
+- SQL：`docs/sql/phase5d-1-employee-pin-hash-dual-read.sql`（STATUS: EXECUTED 2026-07-23）
+
+### 準備 PR・fix PR
+
+| PR | 内容 |
+|---|---|
+| #164 | SQL 準備ファイル追加・roadmap 更新 |
+| #165 | PRE-CHECK `provolatile::text` キャスト fix（"char"/text UNION 型不一致） |
+| #166 | 内部 POST-CHECK PC-11 whitespace 正規化 fix（`v_text` → `v_norm`） |
+| #167 | POST-COMMIT P-4 `has_key_share` whitespace 正規化 fix |
+
+### 実行前確認結果（PRE-CHECK 全合格・2026-07-23）
+
+- `create_employee_session` md5：`af51db14986a5617de3091086a94db64` / length：`3520`（baseline 一致）
+- `employees.pin`：text NOT NULL・`employees.pin_hash`：未存在（pin_hash_absent=true）
+- employees：total=11 / active=11 / pin NULL=0 / 4桁数字以外=0 / PIN 重複=0
+- pgcrypto：version=1.3 / schema=extensions / `crypt(text,text)` 存在 / `gen_salt(text,integer)` 存在
+- anon/authenticated の `employees.pin` 実効権限：全 false
+
+### 実行後確認結果（POST-CHECK PC-1〜PC-thr-3 全合格・2026-07-23）
+
+- `employees.pin_hash`：text NULL 追加確認・pg_attrdef default なし確認
+- employees total=11 / pin_hash IS NULL=11 / pin_hash IS NOT NULL=0
+- `employees.pin`：text NOT NULL のまま
+- function 属性：owner=postgres / SECURITY DEFINER=true / VOLATILE / proconfig=`search_path=public, extensions`（完全一致）
+- RETURNS TABLE 8列（id/name/role/is_active/company_id/can_genka/can_admin/session_token）維持
+- function prosrc：pin_hash 参照・extensions.crypt 参照・hash-first CASE パターン・OR fallback なし・throttle/session ロジック 13 文字列すべて確認
+- pin / pin_hash 列権限（anon/authenticated）：全 false
+- private.login_throttle：存在・schema USAGE false・table 7権限 all false
+
+### 実行後 fingerprint（5-D-2 GUARD および ROLLBACK GUARD の baseline）
+
+| 項目 | 値 |
+|---|---|
+| 旧 length（5-C-1b baseline） | 3520 |
+| 旧 md5（5-C-1b baseline） | `af51db14986a5617de3091086a94db64` |
+| **新 length（5-D-1 適用後）** | **3798** |
+| **新 md5（5-D-1 適用後）** | **`006550c3455e34aa9d1d61bd60bb85ad`** |
+
+### POST-COMMIT 全合格（P-1〜P-6b・2026-07-23）
+
+- P-1：新 fingerprint（length=3798 / md5=`006550c3455e34aa9d1d61bd60bb85ad`）
+- P-2：pin（text / NO / (none)）・pin_hash（text / YES / (none)）
+- P-3：total=11 / pin_hash_null=11 / pin_hash_not_null=0
+- P-4：全 17 項目 true（pin_hash 参照 / extensions.crypt / hash-first CASE / OR fallback なし / FOR KEY SHARE 他）
+- P-5：pin / pin_hash の anon/authenticated 権限 全 false
+- P-6a：anon/authenticated の private schema USAGE false
+- P-6b：private.login_throttle 7権限 全 false
+
+### 本番スモークテスト（2026-07-23・全合格）
+
+- 従業員画面（index.html）：正しい PIN → ログイン成功
+- 従業員画面：誤 PIN 1回 → 拒否
+- 誤 PIN 5回後：正しい PIN でも拒否（60 秒 cooldown 確認）
+- cooldown 終了後（70 秒以上）：正しい PIN → ログイン成功
+- 管理者画面（/admin）：正常ログイン（回帰確認）
+- 原価管理画面（/genka）：正常ログイン（回帰確認）
+- 実 PIN・氏名・UUID・token は記録しない。
+
+### abort 記録（DB 変更残存なし・記録のみ）
+
+1. **PRE-CHECK 初回（DB 未変更）**：`p.provolatile` の `"char"`/text UNION 型不一致で SQL Editor エラー。DB 書込みなし。PR #165 で `provolatile::text` キャストへ修正後、全合格。
+2. **BODY 初回（transaction abort・DB 変更なし）**：内部 POST-CHECK PC-11 が `v_text NOT ILIKE '%FOR KEY SHARE%'` で false negative（関数本体は `FOR    KEY SHARE` と複数空白）のため RAISE EXCEPTION で abort。rollback 確認：baseline_restored=true / pin_hash_absent=true / function md5=`af51db14986a5617de3091086a94db64` / length=3520 / employees=11。PR #166 で PC-11 を `v_norm NOT ILIKE` へ修正後、最終 BODY が成功。
+3. **POST-COMMIT P-4 修正（DB 未変更）**：`has_key_share` の whitespace false negative を PR #167 で修正し最終確認。DB 状態は変更なし。
+
+### rollback
+
+- ROLLBACK SQL は `docs/sql/phase5d-1-employee-pin-hash-dual-read.sql` Part 4 に記載。ROLLBACK GUARD プレースホルダーは実測値（length=3798 / md5=`006550c3455e34aa9d1d61bd60bb85ad`）へ確定済み。
+- 順序：function を 5-C-1b baseline（平文照合）へ CREATE OR REPLACE → RC-1/RC-2 確認 → `employees.pin_hash` DROP（CASCADE なし）→ RF-1/RF-2 最終確認（単一 transaction）。
+
+### 最終状態
+
+- `employees.pin_hash`：全 11 行 NULL（hash 未生成・backfill 未実施）
+- `employees.pin`：text NOT NULL のまま（平文 PIN は現役）
+- `create_employee_session`：hash 優先 dual-read 動作中（pin_hash IS NULL 行は平文照合で互換維持）
+- Phase 5-D-1 の実 DB 作業は完了。**Phase 5-D 全体は未完了（5-D-2 dual-write 以降が残る）。次工程は 5-D-2。**

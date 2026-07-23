@@ -562,7 +562,7 @@
 
 #### 5-D-1 schema 追加 + login RPC hash 優先 dual-read 化
 
-**状態：実装 SQL 準備中（PR #164）／DB 未実行**
+**状態：✅ 完了（2026-07-23・実行済み）**
 
 - `employees.pin_hash text NULL` 追加（nullable・default なし・既存 11 行は NULL のまま）
 - `create_employee_session(uuid,text)` を `CREATE OR REPLACE` で hash 優先 dual-read に更新
@@ -573,13 +573,17 @@
 - RLS / policy / GRANT / REVOKE 変更なし
 - backfill 未実施（5-D-3 で対応）。hash 生成・bcrypt cost は backfill 時に確定。
 - plaintext `employees.pin` は引き続き現役（dual-read で互換維持中）
-- 準備 PR #164（`docs/sql/phase5d-1-employee-pin-hash-dual-read.sql` のみ追加）
-- DB 実行は 3 者合意・smoke 計画確認後に Supabase SQL Editor で手動実施予定
-- **Phase 5-D は未完了**（5-D-2 dual-write / 5-D-3 backfill / 5-D-4 観察 / 5-D-5 hash-only / 5-D-6 pin 列 DROP が残る）
+- 準備 PR #164 + fix PR #165・#166・#167（`docs/sql/phase5d-1-employee-pin-hash-dual-read.sql`）
+- DB 実行：2026-07-23（Supabase SQL Editor・手動・1回のみ・Success. No rows returned）
+- PRE-CHECK 全合格・GUARD 8チェック合格・内部 POST-CHECK（PC-1〜PC-thr-3）全合格
+- POST-COMMIT 全合格・本番 smoke 全合格（従業員ログイン / cooldown / 管理者・原価 回帰）
+- 新 function fingerprint：length=3798 / md5=`006550c3455e34aa9d1d61bd60bb85ad`
+- **Phase 5-D は未完了**（5-D-2 以降が残る）
+- 詳細は docs/db-migrations.md「2026-07-23 Phase 5-D-1」参照
 
-#### 5-D の残工程（未着手）
+#### 5-D の残工程（次工程：5-D-2）
 
-- **5-D-2**：employee create / update RPC への dual-write 追加（新規・変更 PIN も hash に保存）
+- **5-D-2**（次工程）：employee create / update RPC への dual-write 追加（新規・変更 PIN も hash に保存）
 - **5-D-3**：backfill（既存全員の平文 PIN を bcrypt hash へ変換）
 - **5-D-4**：観察・smoke（dual-write + backfill 完了後の確認期間）
 - **5-D-5**：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）

@@ -581,9 +581,24 @@
 - **Phase 5-D は未完了**（5-D-2 以降が残る）
 - 詳細は docs/db-migrations.md「2026-07-23 Phase 5-D-1」参照
 
-#### 5-D の残工程（次工程：5-D-2）
+#### 5-D-2 employee create / update RPC dual-write 化
 
-- **5-D-2**（次工程）：employee create / update RPC への dual-write 追加（新規・変更 PIN も hash に保存）
+**状態：実装 SQL 準備中（PR #169）／DB 未実行**
+
+- `create_employee_secure` / `update_employee_secure` を `CREATE OR REPLACE` で dual-write に更新
+- bcrypt cost 12・`extensions.crypt(pin_input, extensions.gen_salt('bf', 12))`
+- PIN バリデーション：`'^[0-9]{4}$'`（半角数字4桁に厳格化）
+- 新規作成：単一 INSERT で `pin` と `pin_hash` を原子的に保存
+- PIN 変更：単一 UPDATE で `pin` と `pin_hash` を原子的に更新
+- PIN 未変更（`new_pin_input IS NULL`）：`pin` も `pin_hash` も触れない
+- frontend 変更なし（PIN は plain text で RPC 渡し、hash 生成は RPC 内）
+- genka_admins / `_verify_management_session` は変更しない
+- 既存 11 件の backfill は 5-D-3 で実施
+- 準備 PR #169（`docs/sql/phase5d-2-employee-pin-dual-write.sql`）
+- DB 実行は 3 者合意・smoke 計画確認後に Supabase SQL Editor で手動実施予定
+
+#### 5-D の残工程
+
 - **5-D-3**：backfill（既存全員の平文 PIN を bcrypt hash へ変換）
 - **5-D-4**：観察・smoke（dual-write + backfill 完了後の確認期間）
 - **5-D-5**：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）

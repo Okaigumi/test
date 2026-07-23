@@ -981,20 +981,14 @@ $rb_guard$;
 -- ★ DROP FUNCTION 禁止。CREATE OR REPLACE のみ。★
 -- ★ employees.pin_hash 列は DROP しない（5-D-1 で追加済み・5-D-1 ROLLBACK で処理）★
 
-CREATE OR REPLACE FUNCTION public.create_employee_secure(
-  session_token_input text,
-  name_input          text,
-  pin_input           text,
-  role_input          text,
-  company_id_input    uuid,
-  is_active_input     boolean DEFAULT true
-)
-RETURNS TABLE (id uuid, name text)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions
-AS $$
+CREATE OR REPLACE FUNCTION public.create_employee_secure(session_token_input text, name_input text, pin_input text, role_input text, company_id_input uuid, is_active_input boolean DEFAULT true)
+ RETURNS TABLE(id uuid, name text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
 BEGIN
+  -- Verify session token
   IF NOT EXISTS (
     SELECT 1 FROM public.admin_sessions s
     WHERE  s.token_hash = encode(digest(session_token_input, 'sha256'), 'hex')
@@ -1003,14 +997,16 @@ BEGIN
     RAISE EXCEPTION 'Invalid or expired session';
   END IF;
 
+  -- Validate inputs
   IF name_input IS NULL OR trim(name_input) = '' THEN
     RAISE EXCEPTION 'Name is required';
   END IF;
 
   IF pin_input IS NULL OR length(pin_input) <> 4 THEN
-    RAISE EXCEPTION 'PINは4桁で入力してください';
+    RAISE EXCEPTION 'PIN must be 4 digits';
   END IF;
 
+  -- Insert new employee
   RETURN QUERY
   INSERT INTO public.employees (name, pin, role, company_id, is_active)
   VALUES (
@@ -1022,24 +1018,17 @@ BEGIN
   )
   RETURNING employees.id, employees.name;
 END;
-$$;
+$function$;
 
 
-CREATE OR REPLACE FUNCTION public.update_employee_secure(
-  session_token_input text,
-  id_input            uuid,
-  name_input          text,
-  role_input          text,
-  is_active_input     boolean,
-  company_id_input    uuid,
-  new_pin_input       text DEFAULT NULL
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions
-AS $$
+CREATE OR REPLACE FUNCTION public.update_employee_secure(session_token_input text, id_input uuid, name_input text, role_input text, is_active_input boolean, company_id_input uuid, new_pin_input text DEFAULT NULL::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
 BEGIN
+  -- Verify session token
   IF NOT EXISTS (
     SELECT 1 FROM public.admin_sessions s
     WHERE  s.token_hash = encode(digest(session_token_input, 'sha256'), 'hex')
@@ -1048,14 +1037,16 @@ BEGIN
     RAISE EXCEPTION 'Invalid or expired session';
   END IF;
 
+  -- Validate inputs
   IF name_input IS NULL OR trim(name_input) = '' THEN
     RAISE EXCEPTION 'Name is required';
   END IF;
 
   IF new_pin_input IS NOT NULL AND length(new_pin_input) <> 4 THEN
-    RAISE EXCEPTION 'PINは4桁で入力してください';
+    RAISE EXCEPTION 'PIN must be 4 digits';
   END IF;
 
+  -- Update without changing PIN
   IF new_pin_input IS NULL THEN
     UPDATE public.employees e
     SET    name       = trim(name_input),
@@ -1064,6 +1055,7 @@ BEGIN
            company_id = company_id_input
     WHERE  e.id = id_input;
   ELSE
+  -- Update including PIN change
     UPDATE public.employees e
     SET    name       = trim(name_input),
            role       = role_input,
@@ -1073,7 +1065,7 @@ BEGIN
     WHERE  e.id = id_input;
   END IF;
 END;
-$$;
+$function$;
 
 
 -- ---- ROLLBACK 内部確認（fail-closed） ----

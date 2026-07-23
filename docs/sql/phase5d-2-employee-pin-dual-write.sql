@@ -713,17 +713,19 @@ BEGIN
       '(must not touch pin or pin_hash in no-change path)';
   END IF;
 
-  -- extensions.crypt(...) が存在しないこと
-  IF v_nochange_branch LIKE '%extensions.crypt(%' THEN
+  -- crypt(...) / extensions.crypt(...) が存在しないこと
+  -- スキーマ修飾の有無・`(`前の空白に依存しない正規表現（lower 適用済みのため大小文字不問）
+  -- `.` は [^a-z0-9_] に一致するため extensions.crypt も未修飾 crypt も両方検出する
+  IF v_nochange_branch ~ '(^|[^a-z0-9_])crypt[[:space:]]*\(' THEN
     RAISE EXCEPTION
-      'PC-8b failed: update no-change branch (IS NULL) calls extensions.crypt '
+      'PC-8b failed: update no-change branch (IS NULL) calls crypt '
       '(hash generation must not occur in no-change path)';
   END IF;
 
-  -- extensions.gen_salt(...) が存在しないこと
-  IF v_nochange_branch LIKE '%extensions.gen_salt(%' THEN
+  -- gen_salt(...) / extensions.gen_salt(...) が存在しないこと
+  IF v_nochange_branch ~ '(^|[^a-z0-9_])gen_salt[[:space:]]*\(' THEN
     RAISE EXCEPTION
-      'PC-8b failed: update no-change branch (IS NULL) calls extensions.gen_salt '
+      'PC-8b failed: update no-change branch (IS NULL) calls gen_salt '
       '(hash generation must not occur in no-change path)';
   END IF;
 

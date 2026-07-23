@@ -758,7 +758,8 @@ SELECT
        ILIKE '%e.pin = pin_input OR%'
        OR regexp_replace(p.prosrc, '\s+', ' ', 'g')
        ILIKE '%OR e.pin = pin_input%')                 AS no_or_fallback,
-  (p.prosrc ILIKE '%FOR KEY SHARE%')                   AS has_key_share,
+  (regexp_replace(p.prosrc, '\s+', ' ', 'g')
+     ILIKE '%FOR KEY SHARE%')                          AS has_key_share,
   (p.prosrc ILIKE '%private.login_throttle%')          AS has_throttle,
   (p.prosrc ILIKE '%FOR UPDATE%')                      AS has_for_update,
   (p.prosrc ILIKE '%clock_timestamp()%')               AS has_clock_ts,

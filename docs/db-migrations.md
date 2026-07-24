@@ -6517,3 +6517,74 @@ pin_hash_not_null=1 は smoke 検証後の復元操作によるもの（5-D-2 BO
 - `employees.pin`：text NOT NULL のまま（平文 PIN は現役・dual-read で互換維持）。
 - `create_employee_secure` / `update_employee_secure`：dual-write 動作中。
 - **Phase 5-D-2 の実 DB 作業は完了。Phase 5-D 全体は未完了（5-D-3 backfill 以降が残る）。次工程は 5-D-3。**
+
+---
+
+## Phase 5-D-3 employees PIN hash backfill 準備（★DB 未実行★）
+
+### 状態
+
+STATUS: PREPARED / NOT EXECUTED（PR #172 で SQL 準備ファイル追加）
+
+### 目的
+
+`employees.pin_hash IS NULL` の 10 件に bcrypt cost 12 で hash を一括生成（backfill）する。
+
+- active / inactive 問わず `pin_hash IS NULL` の全 10 件が対象
+- 既に hash 済みの 1 件は変更禁止
+- `employees.pin` は保持（dual-read 互換維持）
+- login / create / update RPC は変更しない・frontend 変更なし
+
+### GUARD baseline（5-D-3 実行前確認値）
+
+| 関数 | length | md5 |
+|---|---|---|
+| create_employee_secure | 1433 | `33ea12279533b4a808a4d14bf11bb0a9` |
+| update_employee_secure | 1915 | `848eec0d7310c84cdffd05939b6c7a3b` |
+| create_employee_session | 3798 | `006550c3455e34aa9d1d61bd60bb85ad` |
+
+開始 DB 状態：total=11 / pin_hash_null=10 / pin_hash_not_null=1
+
+### transaction / lock 設計
+
+- `LOCK TABLE public.employees IN SHARE ROW EXCLUSIVE MODE`
+  - ロック取得 5 秒でタイムアウト → abort して時間帯変更
+  - employee create / update / delete を backfill 中だけ待機
+  - login 等の SELECT は継続可能
+- `SET LOCAL statement_timeout = '60s'`（10 件 × ~297ms = ~3 秒で余裕あり）
+- BEGIN / COMMIT で原子実行
+
+### transaction 設計
+
+1. GUARD：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 / cost12=1
+2. 既存 hash 済み 1 件の UUID と pin_hash を PL/pgSQL 変数へ一時保持
+   （SELECT 結果・NOTICE・docs への出力なし・transaction 終了時に破棄）
+3. `UPDATE employees SET pin_hash = extensions.crypt(pin, extensions.gen_salt('bf', 12)) WHERE pin_hash IS NULL`
+4. `GET DIAGNOSTICS v_updated = ROW_COUNT` で更新件数=10 確認
+5. POST-CHECK：total=11 / NULL=0 / NOT NULL=11 / hash 整合=11 / cost12=11
+   / 既存 1 件の pin_hash が保存値と完全一致
+6. COMMIT
+
+### rollback / forward-fix 方針
+
+- COMMIT 前：GUARD または POST-CHECK 失敗 → transaction 自動 abort（DB 無変更）
+- COMMIT 後：rollback SQL は用意しない
+  - 理由：UUID 永続記録が必要になりセキュリティ上問題
+  - 理由：hash-first 動作中に pin_hash=NULL へ戻すとセキュリティ後退
+  - 問題発生時は forward-fix（PIN 再設定 via update_employee_secure）を 3 者合意で決定
+
+### Production smoke 計画
+
+1. DB final count：NULL=0 / NOT NULL=11
+2. 旧 NULL 代表 1 名でログイン成功（hash-first 照合確認）
+3. 同一従業員で誤 PIN 1 回 → 拒否
+4. 正 PIN で再ログイン → throttle 正常化
+5. 5-D-2 既存 hash 済み代表 1 名でログイン成功
+6. 管理者ログイン成功（/admin）
+7. 原価管理ログイン成功（/genka）
+
+氏名・PIN・UUID は記録しない。全員手作業確認不要（同一 UPDATE + POST-CHECK hash_integ=11 で十分）。
+
+### 準備 SQL
+
+`docs/sql/phase5d-3-employee-pin-hash-backfill.sql`（STATUS: PREPARED / NOT EXECUTED）

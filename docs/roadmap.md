@@ -604,18 +604,25 @@
 - **Phase 5-D は未完了**（5-D-3 以降が残る）
 - 詳細は docs/db-migrations.md「2026-07-23 Phase 5-D-2」参照
 
-#### 5-D の残工程（次工程：5-D-3）
+#### 5-D-3 backfill
 
-- **5-D-3**（次工程）：backfill — **SQL 準備中（PR #172）／DB 未実行**
-  - 対象：`pin_hash IS NULL` の 10 件（active / inactive 問わず）
-  - bcrypt cost 12・`extensions.crypt(pin, extensions.gen_salt('bf', 12))`
-  - 既に hash 済みの 1 件は変更禁止（transaction 内で UUID/hash 値を変数保持し一致確認）
-  - 平文 `employees.pin` はまだ削除しない
-  - login / create / update RPC は変更しない・frontend 変更なし
-  - COMMIT 後の rollback SQL は用意しない（forward-fix 方針）
-  - 準備 SQL：`docs/sql/phase5d-3-employee-pin-hash-backfill.sql`
-  - DB 実行は 3 者合意・PRE-CHECK 全合格後に Supabase SQL Editor で手動実施
-- **5-D-4**：観察・smoke（dual-write + backfill 完了後の確認期間）
+**状態：✅ 完了（2026-07-24・実行済み）**
+
+- 対象 10 件（pin_hash IS NULL）に bcrypt cost 12 で hash 生成
+- 既存 hash 済み 1 件は transaction 内で非変更を確認
+- ROW_COUNT=10・hash 整合=11・cost12=11
+- PRE-CHECK 全合格・BODY 成功・POST-COMMIT 全合格・Production smoke 全合格
+- DB 最終状態：total=11 / pin_hash_null=0 / pin_hash_not_null=11
+- `employees.pin` は全 11 件保持（dual-read 互換維持）
+- 準備 PR #172・実行記録 PR #173
+- 詳細は docs/db-migrations.md「2026-07-24 Phase 5-D-3」参照
+- **Phase 5-D は未完了**（5-D-4 observation 以降が残る）
+
+#### 5-D の残工程（次工程：5-D-4）
+
+- **5-D-4**（次工程）：observation
+  - pin_hash_null=0・pin_hash_not_null=11・全員 hash-first 認証
+  - observation 期間・監視項目・移行条件は 3 者合意後に決定
 - **5-D-5**：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）
 - **5-D-6**：`employees.pin` 列 DROP（不可逆ゲート・3者合意必須）
 

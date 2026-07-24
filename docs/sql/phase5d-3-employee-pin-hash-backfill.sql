@@ -1,9 +1,9 @@
 -- ============================================================
 -- Phase 5-D-3：employees PIN hash backfill
 -- ============================================================
--- 【実行ステータス】STATUS: PREPARED / NOT EXECUTED
+-- 【実行ステータス】STATUS: EXECUTED 2026-07-24
 --   - preparation date：2026-07-24（準備 PR #172）
---   - execution date  ：未定（3者合意・smoke 計画確認後に Supabase SQL Editor で手動実行）
+--   - execution date  ：2026-07-24（Supabase SQL Editor 手動実行・1回のみ・再実行なし）
 --
 -- 【目的】
 --   `employees.pin_hash IS NULL` の 10 件に対して bcrypt cost 12 で
@@ -537,11 +537,15 @@ ORDER BY 1, 2;
 -- ============================================================
 -- Part 6：実行記録（DB 実行後に記入）
 -- ============================================================
--- execution date     ：未定
--- executed by        ：（Supabase SQL Editor・手動）
--- GUARD result       ：未実行
--- BODY result        ：未実行
--- POST-CHECK result  ：未実行
--- smoke result       ：未実施
--- db-migrations 記録日：未定
+-- execution date     ：2026-07-24
+-- executed by        ：Supabase SQL Editor・手動（1回のみ・再実行なし）
+-- GUARD result       ：全合格（total=11 / NULL=10 / NOT NULL=1 / 不正PIN=0 / 整合=1 / cost12=1）
+-- BODY result        ：Success. No rows returned（ROW_COUNT=10 / 既存1件hash一致確認 / COMMIT）
+-- POST-CHECK result  ：全合格（total=11 / NULL=0 / NOT NULL=11 / 整合=11 / cost12=11 / pin保持）
+-- smoke result       ：全合格（旧NULL代表ログイン成功・誤PIN拒否・既存hash代表ログイン成功・管理者・原価管理成功）
+-- rollback           ：未実行・不要
+-- forward-fix        ：未実施・不要
+-- DB最終状態         ：total=11 / pin_hash_null=0 / pin_hash_not_null=11 / hash_integrity=11 / cost12=11
+-- db-migrations 記録日：2026-07-24
+-- UUID／PIN／hash値／氏名は記録していない
 -- ============================================================

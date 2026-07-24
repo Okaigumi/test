@@ -6520,22 +6520,23 @@ pin_hash_not_null=1 は smoke 検証後の復元操作によるもの（5-D-2 BO
 
 ---
 
-## Phase 5-D-3 employees PIN hash backfill 準備（★DB 未実行★）
-
-### 状態
-
-STATUS: PREPARED / NOT EXECUTED（PR #172 で SQL 準備ファイル追加）
+## 2026-07-24 Phase 5-D-3 employees PIN hash backfill（★実行済み★）
 
 ### 目的
 
-`employees.pin_hash IS NULL` の 10 件に bcrypt cost 12 で hash を一括生成（backfill）する。
+`employees.pin_hash IS NULL` の 10 件に bcrypt cost 12 で hash を一括生成（backfill）した。
 
 - active / inactive 問わず `pin_hash IS NULL` の全 10 件が対象
-- 既に hash 済みの 1 件は変更禁止
+- 既に hash 済みの 1 件は変更禁止（transaction 内で確認）
 - `employees.pin` は保持（dual-read 互換維持）
 - login / create / update RPC は変更しない・frontend 変更なし
 
-### GUARD baseline（5-D-3 実行前確認値）
+### 実行日・手順
+
+- 実行日：2026-07-24（Supabase SQL Editor 手動実行・1回のみ・再実行なし）
+- SQL：`docs/sql/phase5d-3-employee-pin-hash-backfill.sql`（STATUS: EXECUTED 2026-07-24）
+
+### GUARD baseline（PRE-CHECK で再確認済み）
 
 | 関数 | length | md5 |
 |---|---|---|
@@ -6543,48 +6544,58 @@ STATUS: PREPARED / NOT EXECUTED（PR #172 で SQL 準備ファイル追加）
 | update_employee_secure | 1915 | `848eec0d7310c84cdffd05939b6c7a3b` |
 | create_employee_session | 3798 | `006550c3455e34aa9d1d61bd60bb85ad` |
 
-開始 DB 状態：total=11 / pin_hash_null=10 / pin_hash_not_null=1
+PRE-CHECK 全合格：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 / cost12=1 / RPC baseline 一致
 
 ### transaction / lock 設計
 
-- `LOCK TABLE public.employees IN SHARE ROW EXCLUSIVE MODE`
-  - ロック取得 5 秒でタイムアウト → abort して時間帯変更
-  - employee create / update / delete を backfill 中だけ待機
-  - login 等の SELECT は継続可能
-- `SET LOCAL statement_timeout = '60s'`（10 件 × ~297ms = ~3 秒で余裕あり）
-- BEGIN / COMMIT で原子実行
+- `LOCK TABLE public.employees IN SHARE ROW EXCLUSIVE MODE`（lock_timeout=5s）
+- `SET LOCAL statement_timeout = '60s'`
+- 実績：~3 秒で完了。タイムアウト発生なし。
 
-### transaction 設計
+### BODY 実行結果
 
-1. GUARD：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 / cost12=1
-2. 既存 hash 済み 1 件の UUID と pin_hash を PL/pgSQL 変数へ一時保持
-   （SELECT 結果・NOTICE・docs への出力なし・transaction 終了時に破棄）
-3. `UPDATE employees SET pin_hash = extensions.crypt(pin, extensions.gen_salt('bf', 12)) WHERE pin_hash IS NULL`
-4. `GET DIAGNOSTICS v_updated = ROW_COUNT` で更新件数=10 確認
-5. POST-CHECK：total=11 / NULL=0 / NOT NULL=11 / hash 整合=11 / cost12=11
-   / 既存 1 件の pin_hash が保存値と完全一致
-6. COMMIT
+- `Success. No rows returned`
+- GUARD：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 / cost12=1 → 全合格
+- 既存 hash 済み 1 件の UUID と pin_hash を PL/pgSQL 変数へ一時保持（docs への出力なし）
+- `UPDATE employees SET pin_hash = extensions.crypt(pin, extensions.gen_salt('bf', 12)) WHERE pin_hash IS NULL`
+- `GET DIAGNOSTICS` ROW_COUNT=10（10件更新を確認）
+- transaction 内 POST-CHECK：total=11 / NULL=0 / NOT NULL=11 / hash 整合=11 / cost12=11 / 既存 1 件 pin_hash 一致 / pin=11 件保持 → 全合格
+- COMMIT 成功
 
-### rollback / forward-fix 方針
+### POST-COMMIT 最終状態（2026-07-24）
 
-- COMMIT 前：GUARD または POST-CHECK 失敗 → transaction 自動 abort（DB 無変更）
-- COMMIT 後：rollback SQL は用意しない
-  - 理由：UUID 永続記録が必要になりセキュリティ上問題
-  - 理由：hash-first 動作中に pin_hash=NULL へ戻すとセキュリティ後退
-  - 問題発生時は forward-fix（PIN 再設定 via update_employee_secure）を 3 者合意で決定
+| 項目 | 値 |
+|---|---|
+| total | 11 |
+| pin_hash_null | 0 |
+| pin_hash_not_null | 11 |
+| pin_notnull | 11 |
+| hash_integrity | 11（全員 bcrypt 照合一致） |
+| cost12 | 11（全員 bcrypt cost 12）|
 
-### Production smoke 計画
+- anon / authenticated の pin / pin_hash 列権限 16 件：全 false（不変）
+- RPC EXECUTE 権限 6 件：全 true（不変）
+- RPC fingerprint 3 本：baseline と完全一致（不変）
 
-1. DB final count：NULL=0 / NOT NULL=11
-2. 旧 NULL 代表 1 名でログイン成功（hash-first 照合確認）
-3. 同一従業員で誤 PIN 1 回 → 拒否
-4. 正 PIN で再ログイン → throttle 正常化
-5. 5-D-2 既存 hash 済み代表 1 名でログイン成功
-6. 管理者ログイン成功（/admin）
-7. 原価管理ログイン成功（/genka）
+### Production smoke（2026-07-24・全合格）
 
-氏名・PIN・UUID は記録しない。全員手作業確認不要（同一 UPDATE + POST-CHECK hash_integ=11 で十分）。
+- 旧 NULL 対象代表従業員：正しい PIN でログイン成功（hash-first bcrypt 照合確認）
+- 同従業員：誤 PIN 1 回 → 拒否
+- 同従業員：正しい PIN で再ログイン → throttle 正常化
+- 5-D-2 既存 hash 済み代表従業員：ログイン成功
+- 管理者ログイン（/admin）：成功
+- 原価管理ログイン（/genka）：成功
+- 氏名・PIN・UUID は記録しない。
 
-### 準備 SQL
+### rollback / forward-fix
 
-`docs/sql/phase5d-3-employee-pin-hash-backfill.sql`（STATUS: PREPARED / NOT EXECUTED）
+- COMMIT 前の失敗：transaction 全体 abort（実際の実行では発生なし）
+- COMMIT 後の rollback：未実行・用意していない（UUID 永続記録不可・セキュリティ後退のため）
+- forward-fix：未実施・不要
+
+### 最終状態
+
+- `employees.pin_hash`：全 11 件 NOT NULL（backfill 完了）
+- `employees.pin`：全 11 件保持（平文 PIN は現役・dual-read で互換維持）
+- `create_employee_session`：hash-first dual-read 動作中（pin_hash IS NOT NULL 行では bcrypt のみ・平文 fallback なし）
+- **Phase 5-D-3 の実 DB 作業は完了。Phase 5-D 全体は未完了（5-D-4 observation 以降が残る）。**

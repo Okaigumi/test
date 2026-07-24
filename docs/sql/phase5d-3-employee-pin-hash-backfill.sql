@@ -22,7 +22,8 @@
 --   1 件でも不一致なら COMMIT 前に例外で全体 abort する。
 --   「平文 fallback により業務継続できる」の前提は置かない。
 --
--- 【GUARD baseline（実 DB 確認済み・2026-07-24 時点）】
+-- 【GUARD baseline（Phase 5-D-2 closeout 時に実 DB 確認済み・2026-07-23）】
+-- Phase 5-D-3 実行前に Part 1 PRE-CHECK で再確認する
 --   create_employee_secure(text,text,text,text,uuid,boolean): len=1433 / md5=33ea12279533b4a808a4d14bf11bb0a9
 --   update_employee_secure(text,uuid,text,text,boolean,uuid,text): len=1915 / md5=848eec0d7310c84cdffd05939b6c7a3b
 --   create_employee_session(uuid,text):                           len=3798 / md5=006550c3455e34aa9d1d61bd60bb85ad
@@ -335,14 +336,21 @@ BEGIN
   END IF;
 
   -- PC-4: 既存 hash 済み 1 件の pin_hash が保存前と完全一致
-  --       （UUID・hash 値は RAISE NOTICE・出力に含めない）
-  SELECT (pin_hash = v_existing_pinhash) INTO v_preserved
-  FROM   public.employees
-  WHERE  id = v_existing_uuid;
+  --       （UUID・hash 値は RAISE NOTICE・SELECT 結果・docs に含めない）
+  --       EXISTS + IS DISTINCT FROM TRUE で fail-closed:
+  --         - 対象行が存在しない場合 → EXISTS=false → abort
+  --         - pin_hash が NULL の場合 → IS NOT DISTINCT FROM は NULL-safe 比較 → false → abort
+  --         - pin_hash が相違する場合 → abort
+  SELECT EXISTS (
+    SELECT 1
+    FROM   public.employees
+    WHERE  id        = v_existing_uuid
+      AND  pin_hash  IS NOT DISTINCT FROM v_existing_pinhash
+  ) INTO v_preserved;
 
-  IF NOT v_preserved THEN
+  IF v_preserved IS DISTINCT FROM TRUE THEN
     RAISE EXCEPTION
-      'PC-7 failed: pre-existing hash was modified (must not change)';
+      'PC-7 failed: pre-existing hash was modified or missing';
   END IF;
 
   RAISE NOTICE

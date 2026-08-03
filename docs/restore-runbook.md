@@ -786,14 +786,20 @@ Phase 7-A（PR #174）は MERGED（2026-08-03）。Phase 7-A docs は main 反�
 
 Phase 7-B（本書）§16〜§18 のpost-check 項目を yes / no で答えられる一行形式にチェックリスト化する。Phase 7-D 実施時の記録用紙として使用する。
 
+**Phase 7-C 成果物（作成済み）：**
+- checklist：`docs/phase7c-restore-smoke-checklist.md`
+- post-check SQL（read-only）：`docs/sql/phase7c-restore-postcheck.sql`
+- photo URL rewrite SQL（TARGET のみ）：`docs/sql/phase7d-target-photo-url-rewrite.sql`
+- Storage policy restore SQL（TARGET のみ）：`docs/sql/phase7d-storage-policy-restore.sql`
+
 ### Phase 7-D 開始前 human gate
 
 以下が全て揃ってから Phase 7-D を開始する：
 
 - [ ] Phase 7-B runbook（本書）について 3 者合意済み
-- [ ] Phase 7-C smoke checklist 作成済み
-- [ ] psql 実行方式（候補 A / 候補 B）決定済み
-- [ ] restore-lab 専用フォルダの場所決定済み
+- [ ] Phase 7-C smoke checklist（`docs/phase7c-restore-smoke-checklist.md`）作成済み
+- [ ] psql 実行方式：Docker exec（local Supabase DB コンテナ内 psql）に決定済み
+- [ ] restore-lab 専用フォルダ：`C:\Users\okai1\Documents\supabase-restore-lab` に決定済み
 - [ ] 岡井さんが「Phase 7-D 開始してよい」と明示承認済み
 
 ### Phase 7-D 完了後の次工程

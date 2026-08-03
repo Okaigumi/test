@@ -616,14 +616,21 @@
 - `employees.pin` は全 11 件保持（dual-read 互換維持）
 - 準備 PR #172・実行記録 PR #173
 - 詳細は docs/db-migrations.md「2026-07-24 Phase 5-D-3」参照
-- **Phase 5-D は未完了**（5-D-4 observation 以降が残る）
+- **Phase 5-D は未完了**（5-D-5 以降が残る）
 
-#### 5-D の残工程（次工程：5-D-4）
+#### 5-D-4 observation
 
-- **5-D-4**（次工程）：observation
-  - pin_hash_null=0・pin_hash_not_null=11・全員 hash-first 認証
-  - observation 期間・監視項目・移行条件は 3 者合意後に決定
-- **5-D-5**：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）
+**状態：✅ クローズ（2026-08-03）**
+
+- observation 期間：2026-07-27〜2026-07-30（4営業日・1日短縮・残存リスク受容済み）
+- 運用異常5項目すべて0件
+- 最終 DB 確認：全項目 baseline 一致（total=11 / pin_hash_null=0 / pin_hash_not_null=11 / hash_integrity=11 / cost12=11）
+- 詳細は docs/phase5d-4-observation-closeout.md 参照
+- **Phase 5-D は未完了**（5-D-5 以降が残る）
+
+#### 5-D の残工程（次工程：5-D-5）
+
+- **5-D-5**（次工程）：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）
 - **5-D-6**：`employees.pin` 列 DROP（不可逆ゲート・3者合意必須）
 
 ## Phase 6：admin-app.html 改善

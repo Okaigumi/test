@@ -6598,4 +6598,36 @@ PRE-CHECK 全合格：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 
 - `employees.pin_hash`：全 11 件 NOT NULL（backfill 完了）
 - `employees.pin`：全 11 件保持（平文 PIN は現役・dual-read で互換維持）
 - `create_employee_session`：hash-first dual-read 動作中（pin_hash IS NOT NULL 行では bcrypt のみ・平文 fallback なし）
-- **Phase 5-D-3 の実 DB 作業は完了。Phase 5-D 全体は未完了（5-D-4 observation 以降が残る）。**
+- **Phase 5-D-3 の実 DB 作業は完了。Phase 5-D 全体は未完了（5-D-5 以降が残る）。**
+
+---
+
+## 2026-08-03 Phase 5-D-4 observation closeout
+
+### 概要
+
+- observation 期間：2026-07-27〜2026-07-30（4営業日・当初5営業日を岡井さんの判断で1日短縮）
+- 最終 read-only DB 確認：2026-08-03
+- 残存リスク：1日短縮による微小リスクを3者合意で受容済み
+
+### 運用観察結果（2026-07-27〜2026-07-30・岡井さん確認）
+
+正しい PIN でログインできない事象：0件 / cooldown・lockout 重大異常：0件 / 管理画面回帰：0件 / 原価管理回帰：0件 / 認証画面・Network 重大エラー：0件
+
+### 最終 DB 確認結果（2026-08-03・read-only）
+
+- total=11 / pin_hash_null=0 / pin_hash_not_null=11 / pin_notnull=11 / hash_integrity=11 / cost12=11
+- RPC fingerprint 3本（create_employee_secure / update_employee_secure / create_employee_session）：baseline_match=true
+- column privileges（anon/authenticated、pin/pin_hash 列 16項目）：すべて false
+- RPC EXECUTE 権限（anon/authenticated × 3 RPC）：すべて true
+- PIN 値・hash 値・氏名・UUID は記録しない
+
+詳細は docs/phase5d-4-observation-closeout.md を参照。
+
+### Phase 5-D 現在地
+
+- **Phase 5-D-4 observation：クローズ（2026-08-03）**
+- `employees.pin`：11件残存（dual-read 互換維持）
+- login：hash-first dual-read のまま
+- create / update：dual-write のまま
+- **Phase 5-D 全体は未完了（5-D-5 以降が残る）。**

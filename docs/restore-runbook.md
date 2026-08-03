@@ -1,6 +1,6 @@
 # Phase 7-B Restore Runbook
 
-**状態：仕様確認・commit済み（2026-07-27）。未push・未PR・未merge。Phase 7-D restore testは未開始。復旧可能性は未検証。**
+**状態：main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-D restore testは未開始。復旧可能性は未検証。**
 
 ---
 
@@ -10,7 +10,7 @@ Phase 7-A で取得したバックアップ（DB ZIP および Storage 写真 ZI
 
 Phase 7-D の非本番 restore test で使用することを目的とし、Production（SOURCE）への直接 restore は採用しない。
 
-本ドキュメントは仕様確認・commit 済み。push・PR 作成・merge は未実施。Phase 7-D restore test 開始前に Phase 7-C smoke checklist を作成し、ChatGPT・岡井さん・Claude の 3 者で内容を確認すること。
+本ドキュメントは main 反映済み（PR #175 MERGED・2026-08-03T06:48:08Z・merge commit `8f317420a909503bc1c54f7e01acb088b139e93f`）。Phase 7-D restore test 開始前に Phase 7-C smoke checklist を作成し、ChatGPT・岡井さん・Claude の 3 者で内容を確認すること。
 
 ---
 
@@ -19,7 +19,7 @@ Phase 7-D の非本番 restore test で使用することを目的とし、Produ
 - **対象**：Phase 7-D 非本番 restore test（local Supabase / restore-lab）
 - **対象外**：Production への直接 restore（Phase 7-B の範囲外）
 - **バックアップ取得日**：2026-07-26
-- **Phase 7-A の状態**：PR #174 OPEN・未 merge。Phase 7-A docs は main 未反映
+- **Phase 7-A の状態**：PR #174 MERGED（2026-08-03）。Phase 7-A docs は main 反映済み
 
 ---
 
@@ -775,12 +775,12 @@ TARGET DB を初期化して Step R-DB-1 から再試行する。
 ### Phase 7-B の状態
 
 ```
-Phase 7-B restore runbook：仕様確認・commit済み（2026-07-27）。未push・未PR・未merge。
-Phase 7-D restore testは未開始。
+Phase 7-B restore runbook：main反映済み（PR #175 MERGED・2026-08-03）。
+Phase 7-C：未開始。Phase 7-D restore test：未開始。
 復旧可能性は未検証。
 ```
 
-Phase 7-A（PR #174）は OPEN・未 merge。
+Phase 7-A（PR #174）は MERGED（2026-08-03）。Phase 7-A docs は main 反映済み。
 
 ### Phase 7-C（smoke checklist）への引き継ぎ
 

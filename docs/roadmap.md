@@ -744,21 +744,29 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 7-A | backup inventory（`docs/backup-recovery-inventory.md`） | **実装・内容確認・commit済み、未push・未merge** |
-| 7-B | restore runbook | 未着手 |
+| 7-A | backup inventory（`docs/backup-recovery-inventory.md`） | **main反映済み（PR #174 MERGED・2026-08-03）** |
+| 7-B | restore runbook（`docs/restore-runbook.md`） | **main反映済み（PR #175 MERGED・2026-08-03）** |
 | 7-C | smoke checklist／復旧判定表 | 未着手 |
 | 7-D | non-production restore test | 未着手 |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
 
-### Phase 7-A：backup inventory（2026-07-26・実装・内容確認・commit済み、未push・未merge）
+### Phase 7-A：backup inventory（2026-07-26 実施・2026-08-03 main反映）
 
 - 2026-07-26 に現行方式による**最新世代バックアップ**（DB / Storage photos）の取得が成功。**完全バックアップではない**。
 - 取得世代・サイズ・SHA-256・対象範囲・対象外・実行環境の前提は `docs/backup-recovery-inventory.md` に記録。
 - 判明事項：Supabase CLI の `db dump` には **Docker Desktop が必須**（未導入時は `LegacyDockerRunError`）。`docs/backup-policy.md` の前提ツールへ追記した。
 - DB dump には `employees.pin` が残存するため、**平文PINを含む可能性のある機密バックアップ**として厳重管理する。
 - 復旧可能性は**未検証**（復元手順は 7-B、復元テストは 7-D）。「復旧可能」とは断定しない。
-- 状態：Phase 7-A は inventory 作成・内容確認・commit 済み。**未push・未merge・main 未反映**。**Phase 7 全体は未完了**。
+- 状態：Phase 7-A は main 反映済み。PR #174 MERGED（2026-08-03T06:13:56Z・merge commit `7455c4190f844c0d50a183b7390bb1e1ff5295b8`）。**Phase 7 全体は未完了**。
+
+### Phase 7-B：restore runbook（2026-07-27 作成・2026-08-03 main反映）
+
+- restore runbook（`docs/restore-runbook.md`）を作成し main に反映済み。
+- Production への直接 restore 禁止・SOURCE / TARGET 分離・local restore-lab 方針・psql 単一 transaction 構造を記録。
+- Phase 7-D restore test 開始前に Phase 7-C smoke checklist を 3 者で確認すること。
+- Phase 7-C：未開始。Phase 7-D：未開始。復旧可能性：未検証。
+- 状態：PR #175 MERGED（2026-08-03T06:48:08Z・merge commit `8f317420a909503bc1c54f7e01acb088b139e93f`）。
 
 ## Phase 8：業務効率化
 

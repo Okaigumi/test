@@ -27,18 +27,25 @@
 -- ============================================================
 
 -- ============================================================
+-- GATE 0: ON_ERROR_STOP — DO $$ RAISE EXCEPTION 発生時に即停止
+-- ============================================================
+\set ON_ERROR_STOP on
+
+-- ============================================================
 -- GATE 1: confirmed 変数チェック
+-- confirmed=yes / confirmed=true / confirmed=1 → TRUE（続行）
+-- confirmed=no  / confirmed=false / confirmed=0 → FALSE（停止）
+-- 未設定 → 停止
 -- ============================================================
 \if :{?confirmed}
 \else
-  \echo 'ERROR: psql variable :confirmed is not set.'
-  \echo 'Pass -v confirmed=yes to proceed.'
+  \echo 'ERROR: confirmed variable is required. Pass -v confirmed=yes to proceed.'
   \quit
 \endif
 
-\if :confirmed = 'yes'
+\if :confirmed
 \else
-  \echo 'ERROR: :confirmed is not yes. Aborting.'
+  \echo 'ERROR: confirmed must be a true value such as yes.'
   \quit
 \endif
 
@@ -84,7 +91,8 @@ $$;
 
 -- ============================================================
 -- STEP 1: 変換前確認（read-only）
--- SOURCE URL prefix を含む reports 件数を表示
+-- STEP 2 UPDATE と同じ prefix 先頭一致条件で件数を表示
+-- この件数が STEP 2 の UPDATE 件数・STEP 3 の残存 0件と整合する
 -- ============================================================
 SELECT
   COUNT(*) AS reports_with_source_url
@@ -94,8 +102,7 @@ WHERE photo_urls IS NOT NULL
   AND EXISTS (
     SELECT 1
     FROM UNNEST(photo_urls) AS u
-    WHERE u LIKE ('%' || :'source_prefix' || '%')
-       OR u LIKE ('%' || split_part(:'source_prefix', '/storage/', 1) || '%')
+    WHERE u LIKE (:'source_prefix' || '%')
   );
 
 -- ============================================================

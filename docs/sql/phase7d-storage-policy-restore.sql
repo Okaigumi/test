@@ -30,18 +30,25 @@
 -- ============================================================
 
 -- ============================================================
+-- GATE 0: ON_ERROR_STOP — DO $$ RAISE EXCEPTION 発生時に即停止
+-- ============================================================
+\set ON_ERROR_STOP on
+
+-- ============================================================
 -- GATE 1: confirmed 変数チェック
+-- confirmed=yes / confirmed=true / confirmed=1 → TRUE（続行）
+-- confirmed=no  / confirmed=false / confirmed=0 → FALSE（停止）
+-- 未設定 → 停止
 -- ============================================================
 \if :{?confirmed}
 \else
-  \echo 'ERROR: psql variable :confirmed is not set.'
-  \echo 'Pass -v confirmed=yes to proceed.'
+  \echo 'ERROR: confirmed variable is required. Pass -v confirmed=yes to proceed.'
   \quit
 \endif
 
-\if :confirmed = 'yes'
+\if :confirmed
 \else
-  \echo 'ERROR: :confirmed is not yes. Aborting.'
+  \echo 'ERROR: confirmed must be a true value such as yes.'
   \quit
 \endif
 

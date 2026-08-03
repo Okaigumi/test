@@ -4,10 +4,15 @@
 
 - Node.js（npx が使えること）
 - npx --yes supabase（Supabase CLI を npx 経由で実行）
+- **Docker Desktop（現行方式では必須）**：現行の Supabase CLI による Windows 上のバックアップ方式では、`db dump` の実行に Docker を使用します。Docker が未導入または未起動だと `LegacyDockerRunError` で失敗します。
+  - 検証済み環境：この自宅 PC（Windows）では Docker Desktop を **WSL 2 backend** で使用しています（WSL 2 は本環境での構成であり、全 OS 共通の必須条件ではありません）。
 - Windows PowerShell 5.1 以上（PowerShell 7 推奨）
 - `.env.backup.local`（接続文字列を記載したローカル専用ファイル）
 
 Node.js と npx がインストールされていない場合、スクリプトは起動直後に停止します。
+Docker Desktop が起動していない場合、DBバックアップは dump 実行時に失敗します。事前に Docker Desktop を起動してください。
+
+取得実績（世代・checksum・対象範囲）は `docs/backup-recovery-inventory.md` に記録します。
 
 ## バックアップ対象
 
@@ -45,8 +50,15 @@ Node.js と npx がインストールされていない場合、スクリプト�
 
 **方式：** `reports.photo_urls` に記録済みの Public URL をもとにダウンロードする。
 
-**対象：** 日報 (`reports`) テーブルの `photo_urls` に記録された写真のみ。  
-Storage 上の孤立ファイル（アップロード成功後に DB 更新が失敗した例外ケース）は対象外。
+**対象：** `photos` バケットのうち、日報 (`reports`) テーブルの `photo_urls` に記録された写真のみ。
+
+**対象外（現行方式でバックアップされないもの）：**
+
+- Storage 上の孤立ファイル（アップロード成功後に DB 更新が失敗した例外ケース）
+- バケット `notice-attachments`
+- バケット `invoice-pdfs`
+
+このため、DB バックアップと Storage バックアップを両方取得しても「完全バックアップ」にはなりません。対象範囲の全体像は `docs/backup-recovery-inventory.md` を参照してください。
 
 **秘密情報：** service role key は使用しない。Supabase Storage List API は使用しない。  
 `.env.backup.local` への追加設定は不要（写真は Public URL から直接ダウンロードできる）。

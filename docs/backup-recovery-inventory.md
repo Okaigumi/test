@@ -2,7 +2,7 @@
 
 作成日：2026-07-26
 対象：Phase 7-A（backup inventory）
-状態：**Phase 7-A：inventory作成・内容確認・commit済み。未push・未merge・main未反映。Phase 7全体は未完了。**（2026-07-26 時点）
+状態：**Phase 7-A：main反映済み（PR #174 MERGED・2026-08-03）。Phase 7全体は未完了。**（作成日：2026-07-26）
 
 ---
 
@@ -139,14 +139,14 @@ zip 内容：
 
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 7-A | backup inventory（本ファイル） | **inventory作成・内容確認・commit済み（未push・未merge・main未反映）** |
-| 7-B | restore runbook（復旧手順書） | 未着手 |
+| 7-A | backup inventory（本ファイル） | **main反映済み（PR #174 MERGED・2026-08-03）** |
+| 7-B | restore runbook（復旧手順書） | **main反映済み（PR #175 MERGED・2026-08-03）** |
 | 7-C | smoke checklist／復旧判定表 | 未着手 |
 | 7-D | non-production restore test（非本番での復元テスト） | 未着手 |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
 
-Phase 7-A：inventory作成・内容確認・commit済み。未push・未merge・main未反映。**Phase 7 全体は未完了**であり、本ファイル作成をもって Phase 7 をクローズとはしない。
+Phase 7-A：main反映済み（PR #174 MERGED・2026-08-03）。Phase 7-B：restore runbook 作成・main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-C・7-D：未開始。復旧可能性：未検証。**Phase 7 全体は未完了**であり、本ファイル作成をもって Phase 7 をクローズとはしない。
 
 ---
 

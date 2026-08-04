@@ -282,6 +282,17 @@ tr.att-empty td{color:var(--muted);background:#fcfcfd;}
   /* 詳細（従来明細）の emp-block はページ跨ぎを許可＝空白ページ防止（本ビュー限定・既存 empMonthly ビューには非適用） */
   #page-monthlyReport .emp-block{break-inside:auto;page-break-inside:auto;}
 
+  /* 従業員別 月別出勤簿（印刷）：帳票先頭から連続して表示する。
+     - card の break-inside:avoid を解除 → reportHeader 直後の空白ページを防ぐ
+     - emp-block の break-inside:avoid を解除 → 月別ブロックをページまたぎ可に
+     - emp-head / emp-meta 後では改ページしない → 見出しと表が分離しないように
+     - 合計行（total-row）の直前では改ページしない → 合計行だけの単独ページを抑制 */
+  #page-empMonthly .card{break-inside:auto;page-break-inside:auto;}
+  #page-empMonthly .emp-block{break-inside:auto;page-break-inside:auto;}
+  #page-empMonthly .emp-head,
+  #page-empMonthly .emp-meta{break-after:avoid;page-break-after:avoid;}
+  #page-empMonthly tr.total-row{break-before:avoid;page-break-before:avoid;}
+
   /* 会計提出用 月次集計（印刷）：A4縦（既定）。サマリー表のみで空白ページ懸念は小。 */
   #page-accountingReport .mrpt-title{font-size:15px;}
   #page-accountingReport .mrpt-sub{font-size:11px;}

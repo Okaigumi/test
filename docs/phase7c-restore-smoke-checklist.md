@@ -2,7 +2,7 @@
 
 **目的：** Phase 7-D restore test の実施記録用紙。Phase 7-B restore runbook を参照しながら使用する。
 
-**状態：** 作成済み・docs準備段階。Phase 7-D 未開始。restore viability 未検証。
+**状態：** 完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D 未開始。restore viability 未検証。restore test 未実施。DB／Production 変更なし。
 
 **restore本体コマンド：** `docs/restore-runbook.md` を正本とする。本 checklist へ複製しない。
 

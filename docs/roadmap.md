@@ -746,7 +746,7 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 |---|---|---|
 | 7-A | backup inventory（`docs/backup-recovery-inventory.md`） | **main反映済み（PR #174 MERGED・2026-08-03）** |
 | 7-B | restore runbook（`docs/restore-runbook.md`） | **main反映済み（PR #175 MERGED・2026-08-03）** |
-| 7-C | smoke checklist／復旧判定表 | **docs準備段階（checklist・post-check SQL・TARGET補助SQL 作成済み）。Phase 7-D 未開始。** |
+| 7-C | smoke checklist／復旧判定表 | **完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D 未開始。** |
 | 7-D | non-production restore test | 未着手 |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
@@ -765,10 +765,10 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - restore runbook（`docs/restore-runbook.md`）を作成し main に反映済み。
 - Production への直接 restore 禁止・SOURCE / TARGET 分離・local restore-lab 方針・psql 単一 transaction 構造を記録。
 - Phase 7-D restore test 開始前に Phase 7-C smoke checklist を 3 者で確認すること。
-- Phase 7-C：docs 準備段階（Phase 7-D 未開始）。Phase 7-D：未開始。復旧可能性：未検証。
+- Phase 7-C：完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D：未開始。復旧可能性：未検証。
 - 状態：PR #175 MERGED（2026-08-03T06:48:08Z・merge commit `8f317420a909503bc1c54f7e01acb088b139e93f`）。
 
-### Phase 7-C：smoke checklist（docs準備段階）
+### Phase 7-C：smoke checklist（完了・main反映済み・2026-08-04）
 
 - checklist：`docs/phase7c-restore-smoke-checklist.md`（46項目・7区分）
 - post-check SQL（read-only）：`docs/sql/phase7c-restore-postcheck.sql`

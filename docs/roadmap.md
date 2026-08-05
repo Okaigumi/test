@@ -747,7 +747,7 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 | 7-A | backup inventory（`docs/backup-recovery-inventory.md`） | **main反映済み（PR #174 MERGED・2026-08-03）** |
 | 7-B | restore runbook（`docs/restore-runbook.md`） | **main反映済み（PR #175 MERGED・2026-08-03）** |
 | 7-C | smoke checklist／復旧判定表 | **完了・main反映済み（PR #178 MERGED・2026-08-04）** |
-| 7-D | non-production restore test | **正式クローズ候補（2026-08-06）。技術検証完了・Restore Viability：CONFIRMED。tooling 修正後の正本 SQL 無改変再検証も合格。残るクローズ条件は PR-2（restore tooling fixes）の main merge と 3 者合意のみ。** |
+| 7-D | non-production restore test | **正式クローズ済み（2026-08-06）。技術検証完了・Restore Viability：CONFIRMED。PR #181（実行記録）・PR #182（tooling fixes）ともに main merge 済み。3 者合意成立。** |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
 
@@ -778,9 +778,9 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - Phase 7-D は 2026-08-05 に実施。restore viability：**CONFIRMED**。
 - Phase 7-D の実施により、post-check SQL の stale `public.rates` 参照と、photo URL rewrite SQL の psql 変数展開エラーが判明した。→ **PR-2 で修正済み。2026-08-06 に正本 SQL を無改変実行して再検証合格**（実行記録 §14）。
 
-### Phase 7-D：non-production restore test（2026-08-05 実施・技術検証完了／2026-08-06 再検証合格・正式クローズ候補）
+### Phase 7-D：non-production restore test（2026-08-05 実施・技術検証完了／2026-08-06 再検証合格・正式クローズ済み）
 
-**判定：Phase 7-D Technical Validation：COMPLETE ／ Restore Viability：CONFIRMED ／ Phase 7-D Close：PR-2 merge 後（正式クローズ候補）**
+**判定：Phase 7-D Technical Validation：COMPLETE ／ Restore Viability：CONFIRMED ／ Phase 7-D Close：正式クローズ済み（2026-08-06）**
 
 - 実行記録の正本：`docs/phase7d-restore-test-record.md`
 - 2026-07-26 取得のバックアップ（DB ZIP / Storage photos ZIP）から、local restore-lab（`C:\Users\okai1\Documents\supabase-restore-lab`・repo 外）へ復元し、**DB restore／Storage restore／photo URL 変換／3 画面 read smoke／write smoke まですべて合格**。バックアップからの復旧可能性は実証済み。
@@ -796,8 +796,9 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - **PR-2 再検証（2026-08-06・実行記録 §14）**：修正後の正本 SQL を**無改変で実行**し合格。post-check は SECTION 0〜5 完走・psql 終了コード 0・expected objects 23 件全件存在・unexpected 0・base_tables 22／rls_enabled 22／rls_disabled 0／views 1。photo URL rewrite は冪等（UPDATE 0・SOURCE 残存 0・local URL 5 件・Storage 実体 5/5 一致）。negative test は SAFETY ABORT 表示・psql 終了コード 3・変更処理未到達・DB 変更なし。gate 方式は `\quit` に終了コードを渡す方式が機能しないことが実証されたため、`ON_ERROR_STOP` + 静的 `DO` ブロックの `RAISE EXCEPTION` に確定。
 - **時点の区別**：上記再検証の件数（`reports` 216／`employee_rates` 14／sessions 各 1／photos 5）は **application / write smoke 後**の値であり、restore 直後 baseline（`reports` 215／`employee_rates` 13／sessions 0／photos 4）とは別時点である。差分は local smoke による正常な状態変化であり、restore 失敗ではない。
 - 記録の範囲：smoke checklist 46 項目の**項目別チェック表は未作成**。主要検証結果は実行記録本文に記録済みであり、**Restore Viability：CONFIRMED はこの主要検証結果に基づく**。PR-2 で「項目別チェック表は毎回必須とせず、主要検証結果と不合格項目を記録する」運用に確定。
-- Phase 7-D クローズ条件：PR-1 merge（本記録・完了）＋ **PR-2 merge（未了）** ＋ 3 者合意（未了）。**PR-2 merge 前に Phase 7-D をクローズとはしない。**
-- **Phase 7 全体は引き続き未完了**（7-E / 7-F 未着手）。
+- **Phase 7-D 正式クローズ（2026-08-06）**：クローズ条件をすべて充足した。PR #181（実行記録・PR-1）merge commit `3b084ecb49c14bda7b169b385a529185abb6eb57`／PR #182（restore tooling fixes・PR-2）merge commit `d3c1295d1b62b7b282bf3a1e60ba9a51dbaba584`／3 者（岡井さん・ChatGPT・Claude）合意成立／Production 変更なし。Restore Viability：**CONFIRMED** を維持する。
+- クローズ対象は **Phase 7-D のみ**。`data.sql` への `auth` / `storage` COPY 27 ブロック混入の原因分析は **PR-3（backup pipeline hardening）に残る**。
+- **Phase 7 全体は引き続き未完了**（7-E / 7-F 未着手）。Phase 7-D の正式クローズをもって Phase 7 をクローズとはしない。
 
 ## Phase 8：業務効率化
 

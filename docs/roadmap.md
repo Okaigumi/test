@@ -736,9 +736,9 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 
 ### 残り
 
-- 重要テーブルのCSVエクスポート手順整理
-- 復旧手順作成
-- 復旧テスト
+- 重要テーブルのCSVエクスポート手順整理（未着手）
+- 復旧手順作成 ✅ 完了（Phase 7-B・`docs/restore-runbook.md`。PR-2 で改訂予定）
+- 復旧テスト ✅ 完了（Phase 7-D・2026-08-05・Restore Viability CONFIRMED）
 
 ### Phase 7 の分割（2026-07-26 整理）
 
@@ -746,8 +746,8 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 |---|---|---|
 | 7-A | backup inventory（`docs/backup-recovery-inventory.md`） | **main反映済み（PR #174 MERGED・2026-08-03）** |
 | 7-B | restore runbook（`docs/restore-runbook.md`） | **main反映済み（PR #175 MERGED・2026-08-03）** |
-| 7-C | smoke checklist／復旧判定表 | **完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D 未開始。** |
-| 7-D | non-production restore test | 未着手 |
+| 7-C | smoke checklist／復旧判定表 | **完了・main反映済み（PR #178 MERGED・2026-08-04）** |
+| 7-D | non-production restore test | **技術検証完了（2026-08-05）。Restore Viability：CONFIRMED。正式クローズは PR-2（restore tooling fixes）merge 後。** |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
 
@@ -757,16 +757,17 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - 取得世代・サイズ・SHA-256・対象範囲・対象外・実行環境の前提は `docs/backup-recovery-inventory.md` に記録。
 - 判明事項：Supabase CLI の `db dump` には **Docker Desktop が必須**（未導入時は `LegacyDockerRunError`）。`docs/backup-policy.md` の前提ツールへ追記した。
 - DB dump には `employees.pin` が残存するため、**平文PINを含む可能性のある機密バックアップ**として厳重管理する。
-- 復旧可能性は**未検証**（復元手順は 7-B、復元テストは 7-D）。「復旧可能」とは断定しない。
+- 復旧可能性は Phase 7-D（2026-08-05）で**検証済み・CONFIRMED**（`docs/phase7d-restore-test-record.md`）。※本節作成時点（2026-07-26）では未検証だった。
 - 状態：Phase 7-A は main 反映済み。PR #174 MERGED（2026-08-03T06:13:56Z・merge commit `7455c4190f844c0d50a183b7390bb1e1ff5295b8`）。**Phase 7 全体は未完了**。
+- Phase 7-D で、backup dump の `data.sql` に `auth` / `storage` の COPY が 27 ブロック含まれていた事実を確認した。本節の対象範囲記述との関係および機密区分への影響は **Phase 7-E 前提整備（PR-3 backup pipeline hardening）で評価する**。
 
 ### Phase 7-B：restore runbook（2026-07-27 作成・2026-08-03 main反映）
 
 - restore runbook（`docs/restore-runbook.md`）を作成し main に反映済み。
 - Production への直接 restore 禁止・SOURCE / TARGET 分離・local restore-lab 方針・psql 単一 transaction 構造を記録。
-- Phase 7-D restore test 開始前に Phase 7-C smoke checklist を 3 者で確認すること。
-- Phase 7-C：完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D：未開始。復旧可能性：未検証。
+- Phase 7-C：完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D：技術検証完了（2026-08-05）。復旧可能性：**CONFIRMED**。
 - 状態：PR #175 MERGED（2026-08-03T06:48:08Z・merge commit `8f317420a909503bc1c54f7e01acb088b139e93f`）。
+- Phase 7-D の実施により、本 runbook に**未記載の手順・禁止事項**が判明した（PowerShell 5.1 での SQL 加工禁止・UTF-8 strict / LF / TAB 保持・clean TARGET 限定・明示 BEGIN / COMMIT 方式・stale browser session の clear 手順・application smoke 手順・rollback 検証手順）。改訂は **PR-2（restore tooling fixes）で実施する**。
 
 ### Phase 7-C：smoke checklist（完了・main反映済み・2026-08-04）
 
@@ -774,7 +775,27 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - post-check SQL（read-only）：`docs/sql/phase7c-restore-postcheck.sql`
 - TARGET photo URL rewrite SQL：`docs/sql/phase7d-target-photo-url-rewrite.sql`
 - TARGET Storage policy restore SQL：`docs/sql/phase7d-storage-policy-restore.sql`
-- Phase 7-D 未開始。restore viability 未検証。
+- Phase 7-D は 2026-08-05 に実施。restore viability：**CONFIRMED**。
+- Phase 7-D の実施により、post-check SQL の stale `public.rates` 参照と、photo URL rewrite SQL の psql 変数展開エラーが判明した。修正は **PR-2（restore tooling fixes）で実施する**。
+
+### Phase 7-D：non-production restore test（2026-08-05 実施・技術検証完了）
+
+**判定：Phase 7-D Technical Validation：COMPLETE ／ Restore Viability：CONFIRMED ／ Phase 7-D Close：PR-2 merge 後**
+
+- 実行記録の正本：`docs/phase7d-restore-test-record.md`
+- 2026-07-26 取得のバックアップ（DB ZIP / Storage photos ZIP）から、local restore-lab（`C:\Users\okai1\Documents\supabase-restore-lab`・repo 外）へ復元し、**DB restore／Storage restore／photo URL 変換／3 画面 read smoke／write smoke まですべて合格**。バックアップからの復旧可能性は実証済み。
+- DB restore：`roles.sql` → `schema.sql` → `data-restore-safe.sql` を clean TARGET へ明示 BEGIN / COMMIT の単一 transaction で適用し成功。`auth` / `storage` の COPY 27 ブロックと setval 1 件は除外。
+- post-check 主要値：public 21 テーブル／private 1 テーブル／`employees` 11／`reports` 215／`pin_hash` NULL 0／bcrypt cost 12／`public`・`private` 22 テーブルすべて RLS enabled。`employees` 11・`pin_hash` NULL 0・cost 12 は Phase 5-D-3 の baseline と一致。
+- session / throttle は TARGET 限定で 0 件化（`employee_sessions` / `admin_sessions` / `private.login_throttle`）。
+- Storage：`photos` bucket・policy 2 本を再現し、写真 4 件をアップロード（HTTP 200 × 4・Content-Type `image/jpeg`）。`reports.photo_urls` は local TARGET のみで UPDATE 4 件・SOURCE 残存 0 件。
+- application smoke：repo 外の一時 HTML コピーで実施し、**repo 内の HTML は変更なし**。3 画面すべてログイン成功・RPC 200・Request URL は `127.0.0.1:54321` のみ・`supabase.co` への業務通信なし。write smoke（`upsert_employee_rate_secure` 同値保存）も 200 OK で合格。
+- **Production / SOURCE DB / Vercel への接続・変更：0 件。SAFETY ABORT 該当事象：0 件。**
+- 既知課題は restore 自体ではなく **tooling / documentation 側**（post-check SQL の stale 参照・photo URL rewrite SQL の psql 変数展開エラー・runbook への手順未記載）。PR-2 で対応する。
+- backup dump の `data.sql` に `auth` / `storage` の COPY が 27 ブロック含まれていた事実を確認。**原因分析・設計改善・scope 見直しは PR-3（backup pipeline hardening）で実施する**（現時点で特定スクリプトを原因と断定しない）。
+- 正本 SQL の実行状況：`phase7d-storage-policy-restore.sql` は**正本どおり実行・post-check 合格**。`phase7c-restore-postcheck.sql` は stale 参照で途中停止し、主要項目は代替 read-only SQL で確認（正本を完走させた証拠はない）。`phase7d-target-photo-url-rewrite.sql` は変数展開エラーで実行不可のため代替 runtime SQL を使用（詳細は実行記録 §13）。
+- 記録の範囲：smoke checklist 46 項目の**項目別チェック表は未作成**。主要検証結果は実行記録本文に記録済みであり、**Restore Viability：CONFIRMED はこの主要検証結果に基づく**。
+- Phase 7-D クローズ条件：PR-1 merge（本記録）＋ PR-2 merge ＋ 3 者合意。
+- **Phase 7 全体は引き続き未完了**（7-E / 7-F 未着手）。
 
 ## Phase 8：業務効率化
 

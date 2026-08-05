@@ -2,7 +2,11 @@
 
 **目的：** Phase 7-D restore test の実施記録用紙。Phase 7-B restore runbook を参照しながら使用する。
 
-**状態：** 完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D 未開始。restore viability 未検証。restore test 未実施。DB／Production 変更なし。
+**状態：** 完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D restore test は 2026-08-05 に実施・技術検証完了。restore viability：**CONFIRMED**。DB／Production 変更なし。
+
+**実施結果の正本：** `docs/phase7d-restore-test-record.md`。本 checklist は Phase 7-C の成果物（記録様式）であり、実施結果は書き込まない。
+
+Phase 7-D では本 checklist 46 項目の**項目別チェック表は未作成**であり、主要検証結果は実行記録の本文に記録されている。**Restore Viability：CONFIRMED の判定はその主要検証結果に基づく**（実行記録 §13 参照）。46 項目の運用方針は PR-2 の runbook 改訂時に整理する。
 
 **restore本体コマンド：** `docs/restore-runbook.md` を正本とする。本 checklist へ複製しない。
 

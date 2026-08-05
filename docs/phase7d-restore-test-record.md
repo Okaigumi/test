@@ -157,6 +157,7 @@ Phase 7-D をまだ「クローズ」としないのは、restore そのもの�
 - これは **restore の失敗ではなく、post-check SQL 側の stale 参照**である
 - **ただし、正本 SQL 全体をそのまま完走させた証拠はない。** 上記の主要項目は代替 read-only SQL により確認したものである
 - 修正は **PR-2** で実施する。修正後に正本 SQL を完走させる再検証は PR-2 の検証項目とする
+- **→ 2026-08-06 の PR-2 再検証（§14-2）で完走・終了コード 0 を確認し、本項の残課題は解消した**
 
 ---
 
@@ -214,6 +215,7 @@ local TARGET のみで更新。
 - 代替の runtime SQL で local TARGET のみを更新し、上記の結果を得た
 - 一時 runtime SQL は削除済み
 - 修正は **PR-2** で実施する
+- **→ 2026-08-06 の PR-2 再検証（§14-3）で正本 SQL の無改変実行に成功し、本項の残課題は解消した**
 
 ---
 
@@ -320,9 +322,9 @@ restore そのものではなく、tooling と documentation 側の課題であ�
 
 | # | 対象 | 内容 | 対応 PR |
 |---|---|---|---|
-| T-1 | `docs/sql/phase7c-restore-postcheck.sql` | stale な `public.rates` 参照。`employee_rates` / `unit_rates` へ更新が必要 | PR-2 |
-| T-2 | `docs/sql/phase7d-target-photo-url-rewrite.sql` | `DO` ブロック内の psql 変数参照が syntax error。変数を SQL literal へ安全に渡す方式へ修正が必要 | PR-2 |
-| T-3 | `docs/restore-runbook.md` | PowerShell 5.1 での SQL 加工禁止／UTF-8 strict・LF・TAB 保持手順／clean TARGET 限定／明示 BEGIN・COMMIT 方式／stale browser session の clear・再ログイン手順／application smoke 手順／localhost-only 確認／SOURCE・TARGET URL の取り扱い／失敗時の rollback 検証手順 | PR-2 |
+| T-1 | `docs/sql/phase7c-restore-postcheck.sql` | stale な `public.rates` 参照。`employee_rates` / `unit_rates` へ更新が必要 | PR-2（**修正済み・§14-2 で再検証合格**） |
+| T-2 | `docs/sql/phase7d-target-photo-url-rewrite.sql` | `DO` ブロック内の psql 変数参照が syntax error。変数を SQL literal へ安全に渡す方式へ修正が必要 | PR-2（**修正済み・§14-3 で再検証合格**） |
+| T-3 | `docs/restore-runbook.md` | PowerShell 5.1 での SQL 加工禁止／UTF-8 strict・LF・TAB 保持手順／clean TARGET 限定／明示 BEGIN・COMMIT 方式／stale browser session の clear・再ログイン手順／application smoke 手順／localhost-only 確認／SOURCE・TARGET URL の取り扱い／失敗時の rollback 検証手順 | PR-2（**改訂済み・runbook §24**） |
 | T-4 | `scripts/backup-supabase.ps1` | schema dump と data dump の対象スキーマ範囲の不一致／schema・data を別プロセス・別 snapshot で取得している点／`backup-info.txt` の時刻・scope・checksum 等の不足 | PR-3 |
 | T-5 | restore 用自動検査（新規） | COPY header 列数と byte `0x09` の実測／mojibake・CR・BOM 検査／orphan COPY 検出／`auth`・`storage` 操作 0 の確認／auto restore smoke／成功後のみ ZIP 化／SHA256・manifest 生成 | PR-3 |
 
@@ -335,10 +337,10 @@ restore そのものではなく、tooling と documentation 側の課題であ�
 | 正本 SQL | 実行状況 |
 |---|---|
 | `docs/sql/phase7d-storage-policy-restore.sql` | **正本どおり実行・post-check 合格済み**（§6 参照）。代替 SQL・手動代替手順は使用していない |
-| `docs/sql/phase7c-restore-postcheck.sql` | **`public.rates` の stale 参照で途中停止**。その後、代替 read-only SQL により主要項目を確認した（§4-3 参照）。**正本 SQL 全体をそのまま完走させた証拠はない** |
-| `docs/sql/phase7d-target-photo-url-rewrite.sql` | **psql 変数展開エラーにより実行不可**。代替 runtime SQL で local TARGET のみ更新した（§7 参照）。一時 runtime SQL は削除済み |
+| `docs/sql/phase7c-restore-postcheck.sql` | 2026-08-05：**`public.rates` の stale 参照で途中停止**（§4-3）。→ 2026-08-06 PR-2 修正後：**無改変で SECTION 0〜5 完走・終了コード 0**（§14-2） |
+| `docs/sql/phase7d-target-photo-url-rewrite.sql` | 2026-08-05：**psql 変数展開エラーにより実行不可**（§7）。→ 2026-08-06 PR-2 修正後：**無改変で実行成功・冪等性および negative test 合格**（§14-3） |
 
-正本 SQL 2 本（post-check / photo URL rewrite）を修正し、修正後に正本のまま完走させる再検証を行うことは、**PR-2 の検証項目**とする。
+正本 SQL 2 本（post-check / photo URL rewrite）を修正し、修正後に正本のまま完走させる再検証を行うことは PR-2 の検証項目としていたが、**2026-08-06 に完了・合格した（§14）。** これにより「repo の正本どおりに実行して同じ結果を再現できる」状態に戻っている。
 
 ### 13-2. 記録の範囲（区別すべき 3 点）
 
@@ -346,21 +348,108 @@ restore そのものではなく、tooling と documentation 側の課題であ�
 - **主要検証結果は、本実行記録の本文（§2〜§9）に記録済みである。** DB restore・data.sql 検証・post-check 実測値・session / throttle・Storage restore・photo_urls rewrite・read smoke・write smoke がこれにあたる
 - **Restore Viability：CONFIRMED の判定は、この主要検証結果に基づく。** 46 項目の項目別内訳の有無によって左右されるものではない
 
-46 項目の項目別チェック表を今後どう運用するか（実施のたびに作成するのか、主要結果の記録で足りるとするのか）は、**PR-2 の runbook 改訂時に記録様式の方針として整理する**。
+46 項目の項目別チェック表を今後どう運用するかは、PR-2 で次の方針に確定した。**項目別チェック表は毎回必須としない。主要検証結果と不合格項目を記録する運用とする。**
 
 ---
 
-## 14. Phase 7-D close 条件
+## 14. PR-2 tooling 修正後の再検証（2026-08-06）
+
+PR-2 で正本 SQL を修正したうえで、**修正後の正本を無改変で実行**して再検証した。実施は岡井さん（Claude は DB 操作を行っていない）。
+
+### 14-1. 実施時点の区別（重要）
+
+本節の件数は **application / write smoke を実施した後の TARGET 状態**である。§4-1 の restore 直後 baseline とは別時点の値であり、突き合わせてはならない。
+
+| 項目 | restore 直後 baseline（§4-1・§5・§7） | 本節の smoke 後再検証 |
+|---|---|---|
+| `reports` | 215 | 216 |
+| `employee_rates` | 13 | 14 |
+| `employee_sessions` | 0 | 1 |
+| `admin_sessions` | 0 | 1 |
+| `private.login_throttle` | 0 | 0 |
+| photos（local URL） | 4 | 5 |
+
+差分は §8 の write smoke と、smoke 時の再ログインによる正常な状態変化である。**restore の失敗ではない。**
+
+### 14-2. `phase7c-restore-postcheck.sql`（修正後・無改変実行）
+
+| 確認項目 | 結果 |
+|---|---|
+| SECTION 0〜5 の完走 | **完走**（途中停止なし） |
+| psql 終了コード | **0** |
+| expected objects（SECTION 0-1） | 23 件・全件存在 |
+| unexpected objects（SECTION 0-2） | **0 件** |
+| base_tables（SECTION 0-3） | 22 |
+| rls_enabled | 22 |
+| rls_disabled | **0** |
+| views | 1（`public.report_summary`） |
+| RLS 個別確認（SECTION 2-1） | 22 件すべて `rls_enabled=true` |
+
+§4-3 で「正本 SQL 全体をそのまま完走させた証拠はない」としていた点は、**本再検証により解消した。** `public.rates` の stale 参照修正は合格である。
+
+なお本再検証では、期待リストからの `public.notice_attachments` 削除と、`public.company_categories` / `public.site_categories` の追加が必要であることが SECTION 0 の drift 検出により判明し、正本へ反映済みである。
+
+### 14-3. `phase7d-target-photo-url-rewrite.sql`（修正後・無改変実行）
+
+**正常系（冪等性確認）：**
+
+| 確認項目 | 結果 |
+|---|---|
+| GATE 1 / GATE 2 / GATE 3 | すべて通過 |
+| `reports_with_source_url` | 0 |
+| UPDATE | **0**（冪等） |
+| `remaining_source_url_reports` | 0 |
+| `final_source_url_check` | 0 |
+| local URL | 5 件 |
+| Storage 実体との一致 | 5/5（missing=0） |
+| psql 終了コード | **0** |
+
+§7 で「psql 変数展開エラーにより実行不可」としていた点は、**本再検証により解消した。**
+
+**negative test（GATE 2・非 local なダミー `target_base` を指定）：**
+
+| 確認項目 | 結果 |
+|---|---|
+| SAFETY ABORT の表示 | あり |
+| psql 終了コード | **3** |
+| BEGIN / UPDATE / COMMIT | **未到達** |
+| 実行前後の DB 状態 | 216 / 5 / 5 / 0 で一致（**DB 変更なし**） |
+
+### 14-4. `phase7d-storage-policy-restore.sql`（negative test）
+
+| 確認項目 | 結果 |
+|---|---|
+| `confirmed` 未設定時の拒否 | あり |
+| SAFETY ABORT の表示 | あり |
+| psql 終了コード | **3** |
+| bucket / policy 変更処理 | **未到達** |
+
+### 14-5. gate 方式の確定（`\quit` は使用不可）
+
+当初 PR-2 では `\quit 2` / `\quit 3` による非ゼロ終了を実装したが、negative test で**機能しないことが実証された**（`warning: \quit: extra argument "3" ignored` が出力され、終了コードは 0 のまま）。psql の `\quit` は終了コード引数を受け取らない。
+
+そのため、全ての実行拒否経路を次の方式へ変更した。
+
+1. ファイル冒頭で `\set ON_ERROR_STOP on`
+2. `\echo` で拒否理由を表示
+3. **psql 変数を一切含まない静的な `DO` ブロック**で `RAISE EXCEPTION`
+
+この方式で psql 終了コード 3 が得られることを、14-3 / 14-4 の negative test で確認した。runbook §24-5 に恒久ルールとして記録済み。
+
+---
+
+## 15. Phase 7-D close 条件
 
 - [x] restore test 実施・技術検証完了
 - [x] Restore Viability：CONFIRMED
 - [x] 実行記録の main 反映（本ファイル・PR-1）
-- [ ] **PR-2（restore tooling fixes）の main merge**
+- [x] 正本 SQL の修正と、修正後の無改変実行による再検証合格（§14・2026-08-06）
+- [ ] **PR-2（restore tooling fixes）の main merge** ← 未了。Phase 7-D のクローズはこの merge 後である
 - [ ] 3 者（岡井さん・ChatGPT・Claude）による「Phase 7-D クローズ可」の合意
 
 ---
 
-## 15. 次工程
+## 16. 次工程
 
 - **PR-2**：restore tooling fixes（post-check SQL / photo URL rewrite SQL / restore-runbook 改善）→ merge 後に Phase 7-D を正式クローズ
 - **PR-3**：backup pipeline hardening（backup script 改善 / validation 追加 / scope 見直し）→ Phase 7-E の前提整備

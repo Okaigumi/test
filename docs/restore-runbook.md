@@ -2,7 +2,7 @@
 
 **状態：main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-D restore test は 2026-08-05 に実施・技術検証完了。復旧可能性：CONFIRMED（`docs/phase7d-restore-test-record.md`）。**
 
-**⚠️ 本 runbook は Phase 7-D 実施前の内容であり、実施で判明した手順・禁止事項（PowerShell 5.1 での SQL 加工禁止／UTF-8 strict・LF・TAB 保持／clean TARGET 限定／明示 BEGIN・COMMIT 方式／stale browser session の clear 手順／application smoke 手順／rollback 検証手順）が未反映である。改訂は PR-2（restore tooling fixes）で実施する。実際に何をどう実行したかは `docs/phase7d-restore-test-record.md` を参照すること。**
+**⚠️ §1〜§23 は Phase 7-D 実施前に書かれた内容である。実施で判明した手順・禁止事項・確定した実行方法は §24（Phase 7-D 実施結果に基づく改訂事項）に集約した。§1〜§23 と §24 の記述が食い違う場合は、常に §24 を優先する。実際に何をどう実行したかは `docs/phase7d-restore-test-record.md` を参照すること。**
 
 ---
 
@@ -294,6 +294,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 
 ## 11. DB restore
 
+> **⚠️ §24-1 / §24-2 を先に読むこと。** Phase 7-D では data.sql を PowerShell 5.1 で加工したことによる文字コード破損が発生し、実際に使用できたのは `data-restore-safe.sql` のみである。本節の「候補 A / 候補 B」も Docker exec 方式に確定済み。
+
 ### restore 方式
 
 roles.sql・schema.sql・data.sql を **1 回の psql 呼び出し**で適用する。
@@ -506,7 +508,7 @@ local Storage 管理画面（Studio）または API で object 件数が 4 件�
 
 **TARGET DB 内のみで実施する。SOURCE Production DB では絶対に実行しない。**
 
-**⚠️ 最終 SQL は Phase 7-D 前に別途レビューする。以下は要件レベルの仕様案。**
+**⚠️ 最終 SQL は確定済み（`docs/sql/phase7d-target-photo-url-rewrite.sql`）。実行方法は §24-4 を参照すること。以下 Step PU-1〜PU-4 は要件レベルの仕様案であり、正本 SQL の内部に同等の確認が含まれているため、個別実行は必須ではない。**
 
 ### Step PU-1: 変換前確認（read-only）
 
@@ -565,7 +567,7 @@ WHERE EXISTS (
 
 ## 16. DB post-check
 
-read-only で実施する。
+read-only で実施する。実行方法は §24-3（post-check 修正版）を参照すること。件数系の期待値を読む前に、必ず §24-7（restore 直後 baseline と smoke 後再検証値の区別）を確認すること。
 
 ### 固定期待値（repo 記録から確定）
 
@@ -707,6 +709,8 @@ Get-ChildItem ".\html-smoke\"
 
 ## 20. cleanup
 
+> **⚠️ cleanup を実行すると復元済み DB / Storage は失われる。** 再検証・追加調査の可能性がある場合は §24-9（Docker volume 保持オプション）を先に読むこと。
+
 ### Phase 7-D 完了後の cleanup
 
 ```powershell
@@ -754,7 +758,7 @@ TARGET DB を初期化して Step R-DB-1 から再試行する。
 
 | 制限 | 内容 |
 |------|------|
-| 復旧可能性未検証 | Phase 7-D 完了まで実証なし |
+| ~~復旧可能性未検証~~ | **解消**：Phase 7-D（2026-08-05）で復旧可能性 CONFIRMED |
 | `notice-attachments` 実ファイル | 現行バックアップ非対象（Phase 7-F） |
 | `invoice-pdfs` 実ファイル | 現行バックアップ非対象（Phase 7-F） |
 | Storage 孤立ファイル | バックアップ対象外 |
@@ -763,11 +767,13 @@ TARGET DB を初期化して Step R-DB-1 から再試行する。
 | schema.sql supabase_admin エラー | 発生する可能性（Phase 7-D 実施時に確認） |
 | data.sql 含有スキーマ | session / throttle の実際の含有は Step C-4 で確認 |
 | supabase_admin default privileges | Phase 4-F-1b 未実施。Step D-1/D-2 で TARGET 確認・対処 |
-| psql 実行方式 | 候補 A / 候補 B を Phase 7-D 前に選択 |
-| write smoke 実施可否 | Phase 7-D 前 human gate で決定 |
-| photos URL 変換 SQL 最終版 | Phase 7-D 前に別途レビュー |
-| Storage policy 再現 SQL 最終版 | Phase 7-D 前に別途レビュー |
-| local Storage へのアップロードコマンド | Phase 7-D 前に確認 |
+| psql 実行方式 | **確定**：Docker exec 方式（§24-2） |
+| write smoke 実施可否 | Phase 7-D で実施済み（§24-7 の値の差はこの結果） |
+| photos URL 変換 SQL 最終版 | **確定**：`docs/sql/phase7d-target-photo-url-rewrite.sql`（§24-4） |
+| Storage policy 再現 SQL 最終版 | **確定**：`docs/sql/phase7d-storage-policy-restore.sql` |
+| local Storage へのアップロードコマンド | Phase 7-D で確認済み（記録は実行記録を参照） |
+| PowerShell 5.1 での SQL 加工 | **禁止**（文字コード破損・§24-1） |
+| 再 restore | clean TARGET 限定（§24-2） |
 | local 環境の実測 port / key | `supabase start` 実行後に確認 |
 
 ---
@@ -809,3 +815,143 @@ Phase 7-B（本書）§16〜§18 のpost-check 項目を yes / no で答えら�
 - Phase 7-D 合格後 → Phase 7-A（PR #174）merge を検討
 - Phase 7-E：automation / rotation / off-site
 - Phase 7-F：Storage backup 拡張（notice-attachments / invoice-pdfs）
+
+---
+
+## 24. Phase 7-D 実施結果に基づく改訂事項（PR-2・2026-08-06）
+
+Phase 7-D restore test（2026-08-05 実施）と PR-2 の再検証で確定した事項。**§1〜§23 と食い違う場合は本節が優先する。**
+
+### 24-1. PowerShell 5.1 での SQL 加工は禁止（文字コード破損リスク）
+
+Windows PowerShell 5.1 の `Get-Content` は既定で UTF-8 を CP932 として解釈するため、dump SQL を読み込んで加工・書き戻すと次の破損が起きる。
+
+- 非 ASCII 文字が化ける
+- **COPY 行の TAB 区切りが失われ、列が欠落する**（restore 途中で列数不一致エラー、または誤ったデータ投入）
+
+したがって、**dump SQL を PowerShell で読み書きして加工してはならない。** Phase 7-D では加工版が複数生成されたが、破損していないことを確認できたのは `data-restore-safe.sql` の 1 本のみで、他の派生ファイルは使用禁止とした。
+
+やむを得ず加工が必要な場合は、以下を厳守した .NET API 直接呼び出しで生成する。
+
+| 項目 | 必須設定 |
+|------|---------|
+| 読み込み | `New-Object System.Text.UTF8Encoding($false, $true)`（strict：不正バイトで例外） |
+| 書き出し | `New-Object System.Text.UTF8Encoding($false)`（**BOM なし**） |
+| 改行 | LF（`StreamWriter.NewLine` に LF を設定する。CRLF のままにしない） |
+| TAB | 一切変換しない（trim・正規化・整形をかけない） |
+
+生成後は行数・バイト数・COPY ブロック数を原本と比較して差分がないことを確認する。
+
+### 24-2. DB restore は clean TARGET 限定・`data-restore-safe.sql` を使用する
+
+- **clean TARGET 限定**：restore は `supabase stop` → `supabase start` 直後の空 DB に対してのみ実行する。既にデータが入った TARGET への再 restore は行わない（部分適用・重複・FK 不整合の原因となる）。再試行時は必ず TARGET を初期化してから Step R-DB-1 に戻る。
+- **使用する data ファイルは `data-restore-safe.sql` のみ**（§24-1 参照）。
+- psql 実行方式は **Docker exec 方式に確定**（§23 の候補 A は不採用）。ファイルは `docker cp` でコンテナへ渡し、`docker exec` 内の psql に `-f` で指定する。
+- 実行後は必ず終了コードを確認する（PowerShell では `$LASTEXITCODE`）。標準出力に ERROR が出ていないことだけを根拠にしない。
+
+### 24-3. post-check SQL（修正版）の実行方法
+
+正本：`docs/sql/phase7c-restore-postcheck.sql`（PR-2 で修正済み・read-only）。
+
+- **無改変で実行する。** ファイルを編集して実行した結果は post-check の証跡として採用しない。
+- 冒頭で `\set ON_ERROR_STOP on` を設定しており、途中でエラーが出れば **fail-fast で停止し psql 終了コードは 0 以外**になる。
+- **SECTION 0（schema drift 検出）**を本体より先に実行する。`to_regclass()` ベースのため、テーブルが存在しなくてもエラーにならず drift をデータとして報告する。本体が停止した場合でも、停止原因は SECTION 0 の出力から特定できる。
+- PR-2 で修正した内容：存在しない `public.rates` への stale 参照を `public.employee_rates` へ修正、RLS 確認リストから VIEW（`public.report_summary`）を除外し `site_categories` / `company_categories` を追加、`notice_attachments` を削除。
+
+期待状態（2026-07-26 backup 世代・PR-2 S-5 再検証で確定）：
+
+| 項目 | 期待値 |
+|------|--------|
+| psql 終了コード | 0（SECTION 0〜5 完走） |
+| expected objects（SECTION 0-1） | 23 件・`obj_exists` 全件 true |
+| unexpected objects（SECTION 0-2） | 0 件 |
+| base_tables / rls_enabled / rls_disabled / views（SECTION 0-3） | 22 / 22 / 0 / 1 |
+| RLS 個別確認（SECTION 2-1） | 22 件すべて `rls_enabled=true` |
+
+件数系（`reports` 等）の判定は §24-7 を必ず参照すること。
+
+### 24-4. photo URL rewrite（正本 SQL）の実行方法
+
+正本：`docs/sql/phase7d-target-photo-url-rewrite.sql`（TARGET 専用）。
+
+- **無改変で実行する。** PowerShell 側での書き換えは §24-1 の破損リスクに直結する。
+- psql 変数は PowerShell から `-v "var=value"` 形式で渡す（値を内側のシングルクォートで囲まない）。必須変数は `confirmed` / `target_base` / `source_prefix`。
+- 冪等である。既に変換済みの TARGET に再実行しても `UPDATE 0` となり、DB は変化しない。
+- 実行後の期待値：`reports_with_source_url=0` / `remaining_source_url_reports=0` / `final_source_url_check=0` / psql 終了コード 0。
+
+**⚠️ psql 変数は dollar-quote（`$$ ... $$`）内では展開されない。** `:'var'` を DO ブロック内に書くと未展開のまま PL/pgSQL に渡り syntax error となる（Phase 7-D の GATE 2 失敗原因）。変数を使う判定は DO ブロックではなく `\gset` + `\if`（psql メタコマンド）で書くこと。
+
+### 24-5. gate 方式：`ON_ERROR_STOP` + `RAISE EXCEPTION`（`\quit` は使用不可）
+
+TARGET 専用 SQL（photo URL rewrite / Storage policy restore）の安全 gate は、次の方式に統一した。
+
+1. ファイル冒頭で `\set ON_ERROR_STOP on`
+2. 実行拒否経路では `\echo` で理由を表示
+3. 続けて、**psql 変数を一切含まない静的な DO ブロック**で `RAISE EXCEPTION` を発生させる
+
+```sql
+DO $safety_abort$
+BEGIN
+  RAISE EXCEPTION 'SAFETY ABORT: target_base is not local. No UPDATE was executed.';
+END
+$safety_abort$;
+```
+
+これにより **psql 終了コードは 3** となり、実行拒否が正常終了として扱われることを防ぐ。呼び出し側スクリプトは終了コードで失敗を検知できる。
+
+**`\quit` に終了コード引数を渡す方式は使用できない。** psql の `\quit` は引数を受け取らず、`\quit 3` と書いても `warning: \quit: extra argument "3" ignored` となり、**終了コードは 0 のまま**になる（PR-2 の negative test で実証済み）。
+
+なお、`\gset` 用の判定 read-only SELECT は DB へ送信される。「1 文も送信しない」わけではなく、正しくは「検証用 read-only SELECT だけを実行し、UPDATE / DDL 等の変更 SQL を送る前に非ゼロ終了する」である。
+
+**negative test の合格条件**（TARGET 専用 SQL を変更する際は毎回実施する）：
+
+- SAFETY ABORT が表示される
+- psql 終了コード = 3
+- BEGIN / UPDATE / COMMIT / DDL へ到達しない
+- 実行前後で DB 状態が一致する
+
+### 24-6. stale browser session の clear と再ログイン
+
+restore 直後は `employee_sessions` / `admin_sessions` / `private.login_throttle` を削除する（§12）。このとき **ブラウザ側には削除前の session token が残っている**ため、そのまま application smoke を始めると認証エラーや不正な画面状態になる。
+
+smoke 開始前に、TARGET を開くブラウザで以下を実施する。
+
+1. 対象 origin（`http://127.0.0.1:54321` および HTML を開いている origin）の **localStorage / sessionStorage / Cookie を clear** する
+2. ページを **hard reload** する
+3. **改めてログインし直す**（従業員 / 管理 / 原価の各画面）
+
+再ログインにより `employee_sessions` / `admin_sessions` に行が作成される。これは正常であり、§24-7 の対象となる。
+
+### 24-7. restore 直後 baseline と smoke 後再検証値は区別する
+
+**件数差だけを根拠に restore 失敗と判定してはならない。** post-check をどの時点で実行したかを必ず記録する。
+
+| 項目 | restore 直後 baseline | application / write smoke 後の再検証 |
+|------|---------------------|-------------------------------|
+| `reports` | 215 | 216 |
+| `employee_rates` | 13 | 14 |
+| `employee_sessions` | 0 | 1 |
+| `admin_sessions` | 0 | 1 |
+| `private.login_throttle` | 0 | 0 |
+| photos（local URL） | 4 | 5 |
+
+差分は local での smoke 操作（再ログイン・日報登録・写真アップロード）による正常な状態変化である。
+
+- session 系が 0 件であることを期待できるのは **削除直後のみ**。再ログイン後は 0 でなくなる（§24-6）。
+- `reports` / `employee_rates` / photos は write smoke の内容に応じて増える。
+- 判定に使うのは **同一時点どうしの比較**であり、baseline と smoke 後の値を突き合わせない。
+
+### 24-8. TARGET 専用 SQL 実行時の共通確認
+
+- ファイルはコンテナへ `docker cp` してから `docker exec` 内 psql に `-f` で渡す。
+- 実行のたびに psql 終了コードを記録する（`$LASTEXITCODE`）。
+- 変更を伴う SQL（photo URL rewrite / Storage policy restore）は、**必ず TARGET が local（`127.0.0.1` / `localhost`）であることを gate が通過したことを出力で確認**してから結果を採用する。
+
+### 24-9. Docker volume 保持オプション（cleanup 前に判断する）
+
+`supabase stop` の既定動作では、次回 `supabase start` 時にデータが残る構成と残らない構成がある。**復元済み DB / Storage を後日の再検証に使う予定がある場合は、volume を削除する操作（`supabase stop --no-backup`、`docker volume rm`、Docker Desktop からの volume 削除、`supabase db reset`）を行わないこと。**
+
+- 保持する場合：`supabase stop` のみを実行し、volume は残す。restore-lab フォルダと原本 backup ZIP も削除しない。
+- 破棄する場合：§20 の cleanup を実行する。**破棄後の再検証には restore のやり直し（§24-2 の clean TARGET 手順）が必要**であり、数時間規模の作業になる。
+
+判断は cleanup 実行前の human gate で行う。判断内容と実施日を `docs/phase7d-restore-test-record.md` に記録する。

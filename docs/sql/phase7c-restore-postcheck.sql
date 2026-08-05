@@ -7,6 +7,104 @@
 --   docker exec $DB_CONTAINER psql -U postgres -d postgres \
 --     -f /tmp/phase7c-restore-postcheck.sql
 -- ============================================================
+-- 実行条件（Phase 7-D follow-up / PR-2 で確定）:
+--   - ON_ERROR_STOP は ON（fail-fast）を維持する。本ファイル冒頭で明示的に設定する。
+--   - SECTION 0（schema drift 検出）を本体より先に実行する。
+--     SECTION 0 は to_regclass() ベースのため、テーブルが存在しなくてもエラーにならず、
+--     drift を「データとして」報告する。本体が fail-fast で停止した場合でも、
+--     停止原因となった drift は SECTION 0 の出力から特定できる。
+-- ============================================================
+-- Phase 7-D（2026-08-05）での実行結果と修正:
+--   - SECTION 1-2 / SECTION 2-1 が存在しないテーブル public.rates を参照しており、
+--     stale 参照により途中停止した（restore の失敗ではない）。
+--   - 現行スキーマの単価テーブルは public.employee_rates / public.unit_rates である。
+--   - SECTION 2-1 は relkind='r'（通常テーブル）のみを対象とするため、
+--     VIEW である public.report_summary は構造上返らない。RLS は VIEW に適用されない概念のため、
+--     RLS 確認リストからは除外し、存在確認は SECTION 0 で行う。
+-- ============================================================
+
+\set ON_ERROR_STOP on
+
+
+-- ============================================================
+-- SECTION 0: SCHEMA DRIFT 検出（本体より先に実行する）
+-- 期待オブジェクトの実在・種別・RLS 状態を一覧化する。
+-- 不存在でもエラーにはならない（to_regclass は NULL を返す）。
+-- ============================================================
+
+-- 0-1. 期待オブジェクトの実在確認
+-- obj_exists=false があれば、以降の SECTION が fail-fast で停止する原因となる
+-- 期待状態（Phase 7-D / PR-2 S-5 再検証で確定）:
+--   expected object 合計 23 件（base table 22 件＋VIEW 1 件）／obj_exists 全件 true
+--   public.report_summary は VIEW として存在確認の対象に含める（RLS 対象には含めない）
+SELECT
+  v.qname                              AS expected_object,
+  (to_regclass(v.qname) IS NOT NULL)   AS obj_exists,
+  c.relkind                            AS relkind,   -- r=table / p=partitioned / v=view
+  c.relrowsecurity                     AS rls_enabled
+FROM (VALUES
+  ('public.employees'),
+  ('public.employee_sessions'),
+  ('public.admin_sessions'),
+  ('public.reports'),
+  ('public.report_summary'),
+  ('public.sites'),
+  ('public.site_assignments'),
+  ('public.site_categories'),
+  ('public.materials'),
+  ('public.companies'),
+  ('public.company_categories'),
+  ('public.subcontractors'),
+  ('public.machines'),
+  ('public.machine_locations'),
+  ('public.employee_rates'),
+  ('public.unit_rates'),
+  ('public.site_budgets'),
+  ('public.invoices'),
+  ('public.notices'),
+  ('public.paid_leave_requests'),
+  ('public.paid_leave_grants'),
+  ('public.genka_admins'),
+  ('private.login_throttle')
+) AS v(qname)
+LEFT JOIN pg_class c ON c.oid = to_regclass(v.qname)
+ORDER BY v.qname;
+
+-- 0-2. 期待リストに無い実在オブジェクト（新規追加テーブル・VIEW の検出）
+-- 0件を期待しない（情報記録）。件数が増えた場合は 0-1 の期待リスト更新を検討する
+SELECT
+  n.nspname  AS schema_name,
+  c.relname  AS object_name,
+  c.relkind  AS relkind
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname IN ('public', 'private')
+  AND c.relkind IN ('r', 'p', 'v')
+  AND (n.nspname || '.' || c.relname) NOT IN (
+    'public.employees', 'public.employee_sessions', 'public.admin_sessions',
+    'public.reports', 'public.report_summary', 'public.sites',
+    'public.site_assignments', 'public.site_categories',
+    'public.materials', 'public.companies', 'public.company_categories',
+    'public.subcontractors', 'public.machines', 'public.machine_locations',
+    'public.employee_rates', 'public.unit_rates', 'public.site_budgets',
+    'public.invoices', 'public.notices',
+    'public.paid_leave_requests', 'public.paid_leave_grants',
+    'public.genka_admins', 'private.login_throttle'
+  )
+ORDER BY n.nspname, c.relname;
+
+-- 0-3. public / private の base table 総数と RLS サマリ（PASS/FAIL）
+-- 期待値（Phase 7-D 実測・2026-07-26 backup 世代）:
+--   base_tables=22 / rls_enabled=22 / rls_disabled=0 / views=1（public.report_summary）
+--   ※ base table 22 = public 21 + private 1
+SELECT
+  COUNT(*) FILTER (WHERE c.relkind IN ('r', 'p'))                              AS base_tables,
+  COUNT(*) FILTER (WHERE c.relkind IN ('r', 'p') AND c.relrowsecurity)         AS rls_enabled,
+  COUNT(*) FILTER (WHERE c.relkind IN ('r', 'p') AND NOT c.relrowsecurity)     AS rls_disabled,
+  COUNT(*) FILTER (WHERE c.relkind = 'v')                                      AS views
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname IN ('public', 'private');
 
 
 -- ============================================================
@@ -20,6 +118,11 @@ WHERE table_schema = 'public'
   AND table_type = 'BASE TABLE';
 
 -- 1-2. 主要テーブル row count（情報記録）
+-- ⚠️ 実行時点の区別（重要）:
+--   - 「restore 直後 baseline」と「application / write smoke 実施後の再検証値」は区別する。
+--   - smoke 後は reports / employee_rates / session 系などが変化し得る（local での正常な操作結果）。
+--   - したがって、件数差だけをもって restore 失敗とは判定しない。
+--   - 判定にあたっては、どの時点で実行した post-check かを必ず記録する。
 SELECT
   'employees'         AS tbl, COUNT(*) AS cnt FROM public.employees
 UNION ALL
@@ -39,7 +142,7 @@ SELECT 'machines',             COUNT(*) FROM public.machines
 UNION ALL
 SELECT 'invoices',             COUNT(*) FROM public.invoices
 UNION ALL
-SELECT 'rates',                COUNT(*) FROM public.rates
+SELECT 'employee_rates',       COUNT(*) FROM public.employee_rates
 UNION ALL
 SELECT 'unit_rates',           COUNT(*) FROM public.unit_rates
 UNION ALL
@@ -70,6 +173,9 @@ SELECT
 FROM public.employees;
 
 -- 1-5. session / throttle 件数（削除前に記録 → 削除後に 0 を確認）
+-- ⚠️ 0 件を期待できるのは「削除直後」のみ。
+--    その後に application / write smoke でログインすると session が再作成されるため、
+--    smoke 後の再検証では 0 でない値になり得る。これは restore 失敗ではない。
 SELECT 'employee_sessions' AS tbl, COUNT(*) AS cnt FROM public.employee_sessions
 UNION ALL
 SELECT 'admin_sessions',           COUNT(*) FROM public.admin_sessions
@@ -82,7 +188,11 @@ SELECT 'login_throttle',           COUNT(*) FROM private.login_throttle;
 -- ============================================================
 
 -- 2-1. critical テーブルの RLS 状態（PASS/FAIL）
--- 期待: Phase 3〜5 で RLS 設定されたテーブルが全て enabled
+-- 期待: 22 件すべて rls_enabled=true
+--       （public 21 + private 1 の base table 全件。SECTION 0-3 の base_tables / rls_enabled と一致する）
+-- ※ relkind='r' のみを対象とするため VIEW（public.report_summary）は含めない。
+--    VIEW の存在確認は SECTION 0-1 で行う。
+-- ※ public / private 全体の RLS サマリは SECTION 0-3 と突き合わせる。
 SELECT
   n.nspname  AS schema_name,
   c.relname  AS table_name,
@@ -94,10 +204,11 @@ WHERE n.nspname IN ('public', 'private')
   AND c.relkind = 'r'
   AND c.relname IN (
     'employees', 'employee_sessions', 'admin_sessions',
-    'reports', 'report_summary', 'sites', 'site_assignments',
-    'materials', 'companies', 'subcontractors', 'machines',
-    'machine_locations', 'rates', 'unit_rates', 'site_budgets',
-    'invoices', 'notices', 'notice_attachments',
+    'reports', 'sites', 'site_assignments', 'site_categories',
+    'materials', 'companies', 'company_categories',
+    'subcontractors', 'machines', 'machine_locations',
+    'employee_rates', 'unit_rates', 'site_budgets',
+    'invoices', 'notices',
     'paid_leave_requests', 'paid_leave_grants', 'genka_admins',
     'login_throttle'
   )

@@ -25,6 +25,15 @@
 --   - 再実行しても壊れない（冪等）
 --   - PIN・氏名・session token を出力しない
 -- ============================================================
+--
+-- ⚠️ psql 変数に関する重要な制約（Phase 7-D で判明・PR-2 で修正）:
+--   psql の変数展開（:var / :'var' / :"var"）は、dollar-quote（$$ ... $$）内では
+--   行われない。$$ ... $$ の内部は psql の字句解析上「文字列リテラル」として扱われ、
+--   :'target_base' は展開されないまま PL/pgSQL へ渡り syntax error となる。
+--   → GATE 2 は DO ブロックではなく、\gset + \if（psql メタコマンド）で実装する。
+--   → GATE 3 は psql 変数を使わない（inet_server_addr() のみ）ため DO ブロックのままでよい。
+--   → STEP 1〜4 は通常 SQL 内での参照であり展開されるため、変更不要。
+-- ============================================================
 
 -- ============================================================
 -- GATE 0: ON_ERROR_STOP — DO $$ RAISE EXCEPTION 発生時に即停止
@@ -36,41 +45,94 @@
 -- confirmed=yes / confirmed=true / confirmed=1 → TRUE（続行）
 -- confirmed=no  / confirmed=false / confirmed=0 → FALSE（停止）
 -- 未設定 → 停止
+--
+-- 停止時の挙動: 実行拒否を正常終了扱いにしないため、psql を非ゼロ終了させる。
+--   psql の \quit は終了コード引数を受け取らない（引数を付けても
+--   "warning: \quit: extra argument ... ignored" となり終了コードは 0 のまま）。
+--   そのため、GATE 0 の ON_ERROR_STOP=on と、psql 変数を含まない静的な
+--   DO ブロックの RAISE EXCEPTION を組み合わせて停止する（psql 終了コード 3）。
+--   RAISE EXCEPTION 発生時点で以降の SQL は実行されないため、
+--   STEP 2 の UPDATE 等の変更処理へは到達しない。
 -- ============================================================
 \if :{?confirmed}
 \else
   \echo 'ERROR: confirmed variable is required. Pass -v confirmed=yes to proceed.'
-  \quit
+  DO $gate1_missing$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: confirmed variable is not set. No changes were made.';
+  END
+  $gate1_missing$;
 \endif
 
 \if :confirmed
 \else
   \echo 'ERROR: confirmed must be a true value such as yes.'
-  \quit
+  DO $gate1_invalid$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: confirmed is not a true value. No changes were made.';
+  END
+  $gate1_invalid$;
 \endif
 
 -- ============================================================
 -- GATE 2: TARGET base URL が localhost / 127.0.0.1 を含むこと
+-- GATE 1 と同じ psql メタコマンド様式（\if）で実装する。
+--
+-- 停止時の挙動（重要）:
+--   - 判定用の read-only SELECT（\gset 用）は DB へ送信される。
+--     「1 文も送信しない」わけではない。
+--   - 判定に失敗した場合は、GATE 0 の ON_ERROR_STOP=on と、psql 変数を含まない
+--     静的な DO ブロックの RAISE EXCEPTION により psql を非ゼロ終了させる
+--     （psql 終了コード 3）。
+--   - RAISE EXCEPTION 発生時点で以降の SQL は実行されないため、
+--     STEP 2 の UPDATE 等の変更処理へは到達しない。
+--   - 呼び出し側スクリプトは psql の終了コードで失敗を検知できる。
 -- ============================================================
-DO $$
-DECLARE
-  v_target text := :'target_base';
-BEGIN
-  IF v_target IS NULL OR v_target = '' THEN
-    RAISE EXCEPTION 'target_base is not set. Aborting.';
-  END IF;
-  IF v_target NOT LIKE '%127.0.0.1%'
-     AND v_target NOT LIKE '%localhost%' THEN
-    RAISE EXCEPTION
-      'target_base does not contain 127.0.0.1 or localhost. Got: %. SAFETY ABORT.',
-      v_target;
-  END IF;
-  IF v_target LIKE '%supabase.co%' THEN
-    RAISE EXCEPTION
-      'target_base contains supabase.co (Production URL). SAFETY ABORT.';
-  END IF;
-END;
-$$;
+
+-- 2-1. 必須変数の設定確認
+-- 未設定なら :'var' が展開されず syntax error になるため、判定用 SELECT の前に確認する。
+\if :{?target_base}
+\else
+  \echo 'ERROR: target_base variable is required. Pass -v target_base=... to proceed.'
+  DO $gate2_no_target$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: target_base variable is not set. No changes were made.';
+  END
+  $gate2_no_target$;
+\endif
+
+\if :{?source_prefix}
+\else
+  \echo 'ERROR: source_prefix variable is required. Pass -v source_prefix=... to proceed.'
+  DO $gate2_no_source$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: source_prefix variable is not set. No changes were made.';
+  END
+  $gate2_no_source$;
+\endif
+
+-- 2-2. TARGET base URL の安全判定
+-- NULL / 複数行を避けるため、CASE で必ず 'yes' / 'no' の 1 行を返す。
+-- この SELECT は read-only であり、DB を変更しない。
+SELECT CASE
+         WHEN :'target_base' = ''                 THEN 'no'
+         WHEN :'target_base' LIKE '%supabase.co%' THEN 'no'
+         WHEN :'target_base' LIKE '%127.0.0.1%'   THEN 'yes'
+         WHEN :'target_base' LIKE '%localhost%'   THEN 'yes'
+         ELSE 'no'
+       END AS target_ok \gset
+
+\if :target_ok
+\else
+  \echo 'SAFETY ABORT: target_base must contain 127.0.0.1 or localhost, must not be empty,'
+  \echo '              and must not contain supabase.co (Production URL).'
+  \echo '              Only the read-only validation SELECT was executed.'
+  DO $gate2_not_local$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: target_base is not local. No UPDATE was executed.';
+  END
+  $gate2_not_local$;
+\endif
 
 -- ============================================================
 -- GATE 3: TARGET DB が localhost / unix socket であること

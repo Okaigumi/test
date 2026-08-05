@@ -39,17 +39,33 @@
 -- confirmed=yes / confirmed=true / confirmed=1 → TRUE（続行）
 -- confirmed=no  / confirmed=false / confirmed=0 → FALSE（停止）
 -- 未設定 → 停止
+--
+-- 停止時の挙動: 実行拒否を正常終了扱いにしないため、psql を非ゼロ終了させる。
+--   psql の \quit は終了コード引数を受け取らない（引数を付けても
+--   "warning: \quit: extra argument ... ignored" となり終了コードは 0 のまま）。
+--   そのため、GATE 0 の ON_ERROR_STOP=on と、psql 変数を含まない静的な
+--   DO ブロックの RAISE EXCEPTION を組み合わせて停止する（psql 終了コード 3）。
+--   RAISE EXCEPTION 発生時点で以降の SQL は実行されないため、
+--   bucket 作成・policy 作成等の変更処理へは到達しない。
 -- ============================================================
 \if :{?confirmed}
 \else
   \echo 'ERROR: confirmed variable is required. Pass -v confirmed=yes to proceed.'
-  \quit
+  DO $gate1_missing$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: confirmed variable is not set. No changes were made.';
+  END
+  $gate1_missing$;
 \endif
 
 \if :confirmed
 \else
   \echo 'ERROR: confirmed must be a true value such as yes.'
-  \quit
+  DO $gate1_invalid$
+  BEGIN
+    RAISE EXCEPTION 'SAFETY ABORT: confirmed is not a true value. No changes were made.';
+  END
+  $gate1_invalid$;
 \endif
 
 -- ============================================================

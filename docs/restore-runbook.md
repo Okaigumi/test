@@ -1,6 +1,8 @@
 # Phase 7-B Restore Runbook
 
-**状態：main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-D restore testは未開始。復旧可能性は未検証。**
+**状態：main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-D restore test は 2026-08-05 に実施・技術検証完了。復旧可能性：CONFIRMED（`docs/phase7d-restore-test-record.md`）。**
+
+**⚠️ 本 runbook は Phase 7-D 実施前の内容であり、実施で判明した手順・禁止事項（PowerShell 5.1 での SQL 加工禁止／UTF-8 strict・LF・TAB 保持／clean TARGET 限定／明示 BEGIN・COMMIT 方式／stale browser session の clear 手順／application smoke 手順／rollback 検証手順）が未反映である。改訂は PR-2（restore tooling fixes）で実施する。実際に何をどう実行したかは `docs/phase7d-restore-test-record.md` を参照すること。**
 
 ---
 

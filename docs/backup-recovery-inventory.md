@@ -148,11 +148,11 @@ zip 内容：
 | 7-A | backup inventory（本ファイル） | **main反映済み（PR #174 MERGED・2026-08-03）** |
 | 7-B | restore runbook（復旧手順書） | **main反映済み（PR #175 MERGED・2026-08-03）** |
 | 7-C | smoke checklist／復旧判定表 | **完了・main反映済み（PR #178 MERGED・2026-08-04）** |
-| 7-D | non-production restore test（非本番での復元テスト） | **正式クローズ候補（2026-08-06）。技術検証完了・Restore Viability：CONFIRMED。tooling 修正後の正本 SQL 無改変再検証も合格。残るクローズ条件は PR-2 merge と 3 者合意** |
+| 7-D | non-production restore test（非本番での復元テスト） | **正式クローズ済み（2026-08-06）。技術検証完了・Restore Viability：CONFIRMED。PR #182（restore tooling fixes）merge 済み・3 者合意成立** |
 | 7-E | backup automation／rotation／off-site | 未着手 |
 | 7-F | Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル） | 未着手 |
 
-Phase 7-A：main反映済み（PR #174 MERGED・2026-08-03）。Phase 7-B：restore runbook 作成・main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-C：完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D：2026-08-05 実施・技術検証完了・復旧可能性 CONFIRMED。2026-08-06 に PR-2 の tooling 修正後の正本 SQL 無改変再検証も合格（`docs/phase7d-restore-test-record.md` §14）。**Phase 7-D の正式クローズは PR-2 の main merge 後**であり、それ以前にクローズとはしない。**Phase 7 全体は未完了**（7-E / 7-F 未着手）であり、本ファイル作成をもって Phase 7 をクローズとはしない。
+Phase 7-A：main反映済み（PR #174 MERGED・2026-08-03）。Phase 7-B：restore runbook 作成・main反映済み（PR #175 MERGED・2026-08-03）。Phase 7-C：完了・main反映済み（PR #178 MERGED・2026-08-04）。Phase 7-D：2026-08-05 実施・技術検証完了・復旧可能性 CONFIRMED。2026-08-06 に PR-2 の tooling 修正後の正本 SQL 無改変再検証も合格（`docs/phase7d-restore-test-record.md` §14）。**Phase 7-D は 2026-08-06 に正式クローズ済み**（PR #182 merge 済み・merge commit `d3c1295d1b62b7b282bf3a1e60ba9a51dbaba584`・3 者合意成立）。**Phase 7 全体は未完了**（7-E / 7-F 未着手）であり、本ファイル作成および Phase 7-D の正式クローズをもって Phase 7 をクローズとはしない。
 
 ---
 

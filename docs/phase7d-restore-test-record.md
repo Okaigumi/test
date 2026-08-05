@@ -6,11 +6,22 @@
 |---|---|
 | Phase 7-D Technical Validation | **COMPLETE** |
 | Restore Viability | **CONFIRMED** |
-| Phase 7-D Close | **PR-2（restore tooling fixes）merge 後** |
+| Phase 7-D Close | **正式クローズ済み（2026-08-06）** |
 
 Phase 7-A で取得したバックアップ（DB ZIP / Storage photos ZIP）から、local restore-lab へ DB・Storage・写真 URL・アプリケーション動作までを復元し、read smoke・write smoke まで合格した。**バックアップからの復旧可能性は実証済みである。**
 
-Phase 7-D をまだ「クローズ」としないのは、restore そのものに問題があったからではない。今回の実施で **tooling（post-check SQL / photo URL rewrite SQL）と documentation（restore runbook）側の不備**が判明し、「repo の正本どおりに実行して同じ結果を再現できる」状態に戻す作業（PR-2）が残っているためである。
+**【2026-08-06 正式クローズ】** クローズ条件（§15）はすべて充足した。
+
+| 条件 | 状態 |
+|---|---|
+| PR-1（本実行記録）の main merge | 完了・merge commit `3b084ecb49c14bda7b169b385a529185abb6eb57` |
+| PR-2（restore tooling fixes）の main merge | 完了・PR #182・merge commit `d3c1295d1b62b7b282bf3a1e60ba9a51dbaba584` |
+| 3 者（岡井さん・ChatGPT・Claude）合意 | 完了・3 者とも「クローズ可」 |
+| Production への変更 | なし |
+
+当初クローズを保留していた理由は、restore そのものの問題ではなく、**tooling（post-check SQL / photo URL rewrite SQL）と documentation（restore runbook）側の不備**により「repo の正本どおりに実行して同じ結果を再現できる」状態でなかったことである。この不備は PR-2 で解消し、修正後の正本 SQL を無改変実行して再検証合格した（§14）。
+
+**Phase 7-D のみを正式クローズとする。Phase 7 全体は引き続き未完了**（7-E / 7-F 未着手）であり、`data.sql` への `auth` / `storage` COPY 27 ブロック混入の**原因分析は PR-3（backup pipeline hardening）に残す**。
 
 ---
 
@@ -438,22 +449,24 @@ PR-2 で正本 SQL を修正したうえで、**修正後の正本を無改変�
 
 ---
 
-## 15. Phase 7-D close 条件
+## 15. Phase 7-D close 条件（すべて充足・2026-08-06 正式クローズ）
 
 - [x] restore test 実施・技術検証完了
 - [x] Restore Viability：CONFIRMED
-- [x] 実行記録の main 反映（本ファイル・PR-1）
+- [x] 実行記録の main 反映（本ファイル・PR-1・merge commit `3b084ecb49c14bda7b169b385a529185abb6eb57`）
 - [x] 正本 SQL の修正と、修正後の無改変実行による再検証合格（§14・2026-08-06）
-- [ ] **PR-2（restore tooling fixes）の main merge** ← 未了。Phase 7-D のクローズはこの merge 後である
-- [ ] 3 者（岡井さん・ChatGPT・Claude）による「Phase 7-D クローズ可」の合意
+- [x] **PR-2（restore tooling fixes）の main merge**（PR #182・merge commit `d3c1295d1b62b7b282bf3a1e60ba9a51dbaba584`）
+- [x] 3 者（岡井さん・ChatGPT・Claude）による「Phase 7-D クローズ可」の合意（2026-08-06）
+
+**Phase 7-D 正式クローズ日：2026-08-06。** クローズ対象は Phase 7-D のみであり、Phase 7 全体は未完了である。
 
 ---
 
 ## 16. 次工程
 
-- **PR-2**：restore tooling fixes（post-check SQL / photo URL rewrite SQL / restore-runbook 改善）→ merge 後に Phase 7-D を正式クローズ
-- **PR-3**：backup pipeline hardening（backup script 改善 / validation 追加 / scope 見直し）→ Phase 7-E の前提整備
+- ~~**PR-2**：restore tooling fixes~~ → **完了**（PR #182 merged・2026-08-06）
+- **PR-3**：backup pipeline hardening（backup script 改善 / validation 追加 / scope 見直し／`data.sql` への `auth` / `storage` COPY 27 ブロック混入の原因分析）→ Phase 7-E の前提整備。**未着手**
 - **Phase 7-E**：backup automation／rotation／off-site（未着手）
 - **Phase 7-F**：Storage backup 対象拡張（`notice-attachments` / `invoice-pdfs` / 孤立ファイル）（未着手）
 
-**Phase 7 全体は引き続き未完了**である。本記録および Phase 7-D のクローズをもって Phase 7 をクローズとはしない。
+**Phase 7 全体は引き続き未完了**である。本記録および Phase 7-D の正式クローズ（2026-08-06）をもって Phase 7 をクローズとはしない。

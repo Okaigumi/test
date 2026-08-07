@@ -20,7 +20,7 @@ Docker Desktop が起動していない場合、DBバックアップは dump 実
 |------|----------|------|
 | ロール・権限定義 | roles.sql | DB ロールと権限 |
 | スキーマ定義 | schema.sql | テーブル・関数・ポリシー等 |
-| データ | data.sql | 全テーブルのレコード（COPY形式） |
+| データ | data.sql | public・private スキーマのレコード（COPY 形式、`--schema public,private`） |
 
 ### Supabase Storage（写真）について
 
@@ -43,8 +43,60 @@ Docker Desktop が起動していない場合、DBバックアップは dump 実
 .\scripts\backup-supabase.ps1
 ```
 
-4. `backups\YYYYMMDD-HHMMSS.sql.zip` が作成されたことを確認する
-5. zip ファイルを安全な場所（外付けHDD・クラウドストレージ等）に保存する
+4. バリデーション（`scripts/validate-backup.ps1`）が自動実行される。全 21 項目 PASS の場合のみ次のステップへ進む。FAIL の場合はスクリプトが `exit 1` で終了し、ZIP は作成されない
+5. `backups\YYYYMMDD-HHMMSS.sql.zip` が作成されたことを確認する
+6. zip ファイルを安全な場所（外付けHDD・クラウドストレージ等）に保存する
+
+#### 出力
+
+| ファイル | 内容 |
+|---------|------|
+| `backups\YYYYMMDD-HHMMSS.sql.zip` | ZIP（バリデーション PASS の場合のみ作成） |
+| ZIP 内 `roles.sql` | ロール・権限定義 |
+| ZIP 内 `schema.sql` | スキーマ定義 |
+| ZIP 内 `data.sql` | データ（public・private スキーマ、COPY 形式） |
+| ZIP 内 `backup-info.txt` | 実行サマリー（下記参照） |
+
+バリデーション FAIL の場合、ZIP は作成されず `backups\YYYYMMDD-HHMMSS\` フォルダが調査用に残ります。
+
+`backup-info.txt` の作成はバリデーターが機械可読結果（JSON）を正常に出力できた場合のみ行われます。その場合、`validation : FAILED` と検証結果の概要が記録されます。バリデーター起動失敗・結果 JSON 欠如・JSON 読み込み失敗・必須フィールド欠如など、結果を安全に取得できない場合は `backup-info.txt` を作成せず非ゼロ終了します。
+
+#### backup-info.txt の記録内容
+
+| フィールド | 内容 |
+|-----------|------|
+| backup_timestamp | バックアップ実行日時 |
+| supabase_cli | 使用した Supabase CLI バージョン |
+| dump_scope_data | data.sql の対象スキーマ（`public, private`） |
+| dump_flags_data | dump コマンドに渡したフラグ |
+| files | バックアップファイル一覧 |
+| sha256_roles / sha256_schema / sha256_data | 各ファイルの SHA-256 ハッシュ値 |
+| copy_total / copy_public / copy_private | COPY ブロック数（スキーマ別） |
+| copy_auth / copy_storage / copy_other | auth・storage・その他スキーマの COPY 数（0 であること） |
+| validation | バリデーション結果（`PASSED` / `FAILED`） |
+| classification | `CONFIDENTIAL`（固定） |
+| contains_plaintext_pin | `YES`（固定） |
+| github_allowed | `NO`（固定） |
+
+#### バリデーション項目（validate-backup.ps1）
+
+`backup-supabase.ps1` は dump 完了後に `scripts/validate-backup.ps1` を自動実行します。全 21 項目が PASS の場合のみ ZIP を作成します。
+
+| カテゴリ | 項目数 | チェック内容 |
+|---------|--------|------------|
+| ファイル存在 | 3 | roles.sql / schema.sql / data.sql が存在すること |
+| ファイルサイズ | 3 | 各ファイルが 0 バイト超であること |
+| BOM なし | 3 | UTF-8 BOM が含まれていないこと |
+| CRLF なし | 1 | data.sql に CR バイト（0x0D）が含まれていないこと |
+| UTF-8 厳密デコード | 1 | data.sql が正規の UTF-8 であること |
+| COPY ブロック数 | 1 | data.sql に 1 件以上の COPY ブロックがあること |
+| auth COPY = 0 | 1 | auth スキーマの COPY ブロックが 0 件であること |
+| storage COPY = 0 | 1 | storage スキーマの COPY ブロックが 0 件であること |
+| スコープ外 COPY = 0 | 1 | public・private 以外のスキーマの COPY ブロックが 0 件であること |
+| カラム整合性 | 1 | COPY ヘッダーのカラム数とデータ行の TAB 数が一致すること |
+| ターミネータ | 1 | 全 COPY ブロックが `\.` で正常終了していること |
+| ヘッダー解析可能 | 1 | COPY ヘッダー行が全て正規フォーマットであること |
+| SHA-256 | 3 | 各ファイルのハッシュ算出が正常に完了すること（値は backup-info.txt に記録） |
 
 ### 2. Storage 写真バックアップ（DBバックアップの後に実施）
 

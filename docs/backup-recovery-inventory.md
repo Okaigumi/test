@@ -60,10 +60,18 @@ zip 内容：
 
 ## 3. 機密区分（重要）
 
+| フィールド | 値 |
+|-----------|---|
+| classification | CONFIDENTIAL |
+| contains_plaintext_pin | YES |
+| github_allowed | NO |
+
+- `public.employees.pin` を含む可能性があるため、**新方式（PR-3）でも機密扱いを継続する**。
 - DB dump には現時点で `employees.pin` 列が残存している（Phase 5-D の hash 化は dual-write 段階であり、`pin` 列の DROP は未実施）。
 - したがって **この DB dump は平文 PIN を含む可能性がある機密バックアップ**として扱う。
+- SHA-256 ハッシュ値は完全性確認用であり、暗号化ではない。バックアップ本体は平文 SQL のままである。
 - 取扱い：
-  - GitHub へ push しない
+  - GitHub へ push しない（`github_allowed : NO`）
   - 共有ストレージへ平文のまま置かない（暗号化方針は Phase 7-E で決定する）
   - 不要世代は内容を確認のうえ確実に破棄する
   - 第三者・社外へ渡さない
@@ -84,6 +92,8 @@ zip 内容：
 | 環境変数そのもの | 値は取得・記録しない |
 | Vercel / DNS / 各サービスのアカウント設定 | デプロイ設定・ドメイン・外部サービス側の設定 |
 
+**【PR-3 merge 後に適用されるスコープ変更（統合検証合格済み 2026-08-07・PR merge 未完了）】** PR-3（backup pipeline hardening）により `backup-supabase.ps1` への `--schema public,private` 追加実装が完了しており、`validate-backup.ps1` 人工 fixture 13/13 合格済み。PR-3 merge 後は data.sql の COPY 対象が `public`・`private` スキーマに限定される。auth・storage スキーマのデータは dump 対象外となり、`validate-backup.ps1` が毎回自動検証する（auth COPY = 0 / storage COPY = 0 / スコープ外 COPY = 0）。**実バックアップによる統合検証は 2026-08-07 に合格済み（validate-backup.ps1 21/21 PASS・copy_auth=0・copy_storage=0）。PR merge は未完了のため、現時点では main 未反映。** 2026-07-26 取得の既存 backup ZIP は旧方式で取得したものであり、上記の保証は適用されない。
+
 復旧時の含意：**上記は DB / Storage の復元だけでは戻らない**。Phase 7-B（restore runbook）で手動再設定手順として扱う必要がある。
 
 ### 復旧可能性について（重要）
@@ -96,7 +106,7 @@ zip 内容：
 
 **【2026-08-05 追記】** 上記は本ファイル作成時（2026-07-26）の記述である。Phase 7-B（restore runbook）は作成・main 反映済み、Phase 7-D（非本番 restore test）は 2026-08-05 に実施し、**Restore Viability：CONFIRMED**（`docs/phase7d-restore-test-record.md`）。ただし復元対象は Section 4 の対象範囲に限られ、対象外項目（`notice-attachments` / `invoice-pdfs` / 孤立ファイル / project 設定 / Auth 設定 / Vercel・DNS）が復元されないことに変更はない。
 
-**【2026-08-05 追記・要対応】** Phase 7-D の検証で、DB dump の `data.sql` に `auth` / `storage` の COPY が **27 ブロック含まれていた**事実を確認した。これは Section 3（機密区分）および Section 4（対象範囲）の前提に影響する可能性がある。**原因分析・dump scope の見直し・機密区分の再評価は PR-3（backup pipeline hardening）で実施する。** 現時点で特定のスクリプトを原因と断定しない。それまでの間、既存 backup ZIP は Section 3 の機密取扱い（GitHub へ push しない／平文で共有ストレージへ置かない／第三者へ渡さない）を継続する。
+**【2026-08-05 追記・要対応 → PR-3 統合検証合格済み（2026-08-07）・merge 未完了】** Phase 7-D の検証で、DB dump の `data.sql` に `auth` / `storage` の COPY が **27 ブロック含まれていた**事実を確認した。主要因：`backup-supabase.ps1` が `--schema` 指定なしで `db dump --data-only` を実行していたため、auth・storage スキーマが対象に含まれたと判断している。**PR-3（backup pipeline hardening）にて `--schema public,private` を dump オプションに追加し、`validate-backup.ps1` による自動検証（auth COPY = 0 / storage COPY = 0 / スコープ外 COPY = 0）を実装した。人工 fixture 13/13 合格済み。実バックアップによる統合検証は 2026-08-07 に合格済み（validate-backup.ps1 21/21 PASS）。PR merge は未完了であり、main 反映前は対応完了としない。** 2026-07-26 取得の既存 backup ZIP（Section 2）は旧方式で取得したものであり、auth・storage データを含む。引き続き Section 3 の機密取扱いを継続すること。
 
 ---
 

@@ -49,7 +49,8 @@
 **先に進めるもの**
 1. **PR-1：構想・roadmap整理**（docsのみ・本PR）
 2. **PR-2：セキュリティ棚卸し**（PIN・ログイン・試行制限・保存方式の調査のみ・DB変更なし）
-3. **PR-3：PIN強化・セキュリティヘッダー**（PR-2の結果を踏まえ小さく安全に実装。保存方式変更は別PR）
+3. **PR-3：backup pipeline hardening**（Phase 7-D で判明した `data.sql` スコープ問題への対応。`--schema public,private` 追加・`validate-backup.ps1` 新設・docs 更新。統合検証合格済み（2026-08-07）・PR merge 未完了。当初この枠は「PIN強化・セキュリティヘッダー」として計画していたが、Phase 7-D のスコープ問題優先対応のため差し替え）
+   - 旧 PR-3「PIN強化・セキュリティヘッダー」は PR-3 完了後の後続 PR へ繰り下げ
 4. **PR-4：RPC未返却列参照の同種バグ調査**（#70/#71 と同種の残存調査・調査のみ）
 5. **PR-5：原価管理A4印刷 / PDF保存改善**（表示層中心。印刷専用ページ方式が有力）
 
@@ -759,7 +760,7 @@ admin-app.html の「日報カレンダー」メニューで、管理者が従�
 - DB dump には `employees.pin` が残存するため、**平文PINを含む可能性のある機密バックアップ**として厳重管理する。
 - 復旧可能性は Phase 7-D（2026-08-05）で**検証済み・CONFIRMED**（`docs/phase7d-restore-test-record.md`）。※本節作成時点（2026-07-26）では未検証だった。
 - 状態：Phase 7-A は main 反映済み。PR #174 MERGED（2026-08-03T06:13:56Z・merge commit `7455c4190f844c0d50a183b7390bb1e1ff5295b8`）。**Phase 7 全体は未完了**。
-- Phase 7-D で、backup dump の `data.sql` に `auth` / `storage` の COPY が 27 ブロック含まれていた事実を確認した。本節の対象範囲記述との関係および機密区分への影響は **Phase 7-E 前提整備（PR-3 backup pipeline hardening）で評価する**。
+- Phase 7-D で、backup dump の `data.sql` に `auth` / `storage` の COPY が 27 ブロック含まれていた事実を確認した。本節の対象範囲記述との関係および機密区分への影響は **PR-3（backup pipeline hardening）で対応中**（`--schema public,private` 追加・`validate-backup.ps1` 新設を実装済み・統合検証合格済み（2026-08-07）・PR merge 未完了・main 未反映）。Phase 7-E 着手前に PR-3 の完了が前提となる。
 
 ### Phase 7-B：restore runbook（2026-07-27 作成・2026-08-03 main反映）
 

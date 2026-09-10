@@ -1,10 +1,12 @@
 ---
-description: 現在の Git / PR / checks / 工程状態を read-only で収集し、ChatGPT とユーザーが判断しやすい短い形式で報告する（write 操作なし・最終判断はしない）
+description: 現在の Git / PR / checks / 工程状態を read-only で収集し、Codex と岡井さんが判断しやすい短い形式で報告する（write 操作なし・最終判断はしない）
 argument-hint: "[PR番号(任意・整数のみ)]"
-allowed-tools: Bash(git status:*), Bash(git branch --show-current), Bash(git branch --list), Bash(git branch -r), Bash(git log:*), Bash(git diff:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr checks:*)
+allowed-tools: Read, Bash(git status:*), Bash(git branch --show-current), Bash(git branch --list), Bash(git branch -r), Bash(git log:*), Bash(git diff:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr checks:*)
 ---
 
 # /okg-status — read-only 工程ステータス
+
+最初に [運用正本](../../docs/workflow-rules.md) 第12・14節と [CLAUDE.md](../../CLAUDE.md) を参照する。結果はCodexへ返し、岡井さんへの重要判断だけを分離する。
 
 あなたは岡井組システムの開発フローにおける **read-only の状態レポータ** です。
 このコマンドは現在の Git / PR / checks / 工程状態を収集し、決められた短い形式で報告するだけです。
@@ -94,7 +96,7 @@ GitHub:
 - clean・完了候補（main・clean・関連 PR merged）
 - 判定不能／要確認
 
-**「完了」「merge してよい」等の最終判断は下さない。** 事実と Claude の推奨を示し、判断は ChatGPT とユーザーへ返す。
+**「完了」「merge してよい」等の最終判断は下さない。** 事実と Claude の推奨を示し、判断は Codex と岡井さんへ返す。
 
 ---
 
@@ -120,10 +122,10 @@ GitHub:
 ## 結論
 現在の状態を1〜2行で。
 
-## Claudeの推奨
-次に進む合理的な工程を平易に。最終判断は ChatGPT とユーザーへ返す。
+## Claudeの独立した所見
+次に進む合理的な工程を平易に。最終判断は Codex と岡井さんへ返す。
 
-## ChatGPTとユーザーに決めてほしいこと
+## 岡井さんに決めてほしいこと
 判断が必要な事項だけ最大3件（なければ「特になし」）。
 
 ## 重要なリスク
@@ -149,5 +151,5 @@ GitHub:
 - 結論を最初に出す。技術詳細を先頭に並べない。長いログを転載しない。
 - token / PIN / UUID / メール / secret / 氏名 / 本番データを出さない。commit hash と PR 番号と PR URL は表示可。
 - 「ユーザー判断待ち」で終わらせず、**Claude の推奨を必ず提示**する。ただし merge 可否・Phase 完了は Claude が最終決定しない。
-- 最後に必ず: 「**この結果を ChatGPT へ貼り戻してください。**」と案内する。
+- 結果をCodexへ返す。毎回のChatGPTへの貼り戻しは求めない。Codexが根拠を照合し、範囲内の対応と記録を担当する。
 - 報告は簡潔に。冗長な繰り返しをしない。

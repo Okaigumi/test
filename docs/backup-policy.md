@@ -1,16 +1,18 @@
 # バックアップ方針
 
+更新日：2026-09-10。取得対象・頻度・検証基準の正本は本書。**現在の実行コマンドと外部パスの指定例は [機密資産の外部保管](private-assets-local-usage.md) に集約する。** 旧コマンドは末尾の履歴のみで、現行手順には使用しない。担当・承認は [運用正本](workflow-rules.md) 第12節に従う。
+
 ## 前提・必要ツール
 
 - Node.js（npx が使えること）
 - npx --yes supabase（Supabase CLI を npx 経由で実行）
 - **Docker Desktop（現行方式では必須）**：現行の Supabase CLI による Windows 上のバックアップ方式では、`db dump` の実行に Docker を使用します。Docker が未導入または未起動だと `LegacyDockerRunError` で失敗します。
-  - 検証済み環境：この自宅 PC（Windows）では Docker Desktop を **WSL 2 backend** で使用しています（WSL 2 は本環境での構成であり、全 OS 共通の必須条件ではありません）。
+  - WindowsでのDocker実行方式は各環境の前提条件に従う。端末別の構成と確認結果はGit管理外の運用記録に残す。
 - Windows PowerShell 5.1 以上（PowerShell 7 推奨）
 - `.env.backup.local`（接続文字列を記載したローカル専用ファイル）
 
 Node.js と npx がインストールされていない場合、スクリプトは起動直後に停止します。
-Docker Desktop が起動していない場合、DBバックアップは dump 実行時に失敗します。事前に Docker Desktop を起動してください。
+Docker Desktop が起動していない場合、DBバックアップは dump 実行時に失敗します。実バックアップを承認した利用時に、前提環境を確認してください。ダミー検証は実接続・実バックアップの動作確認を代替しません。
 
 取得実績（世代・checksum・対象範囲）は `docs/backup-recovery-inventory.md` に記録します。
 
@@ -34,32 +36,40 @@ Docker Desktop が起動していない場合、DBバックアップは dump 実
 
 ### 1. DBバックアップ（毎回実施）
 
-1. `.env.backup.local` が存在することを確認する
-   - 存在しない場合は `.env.backup.local.example` を参考に作成する
+1. 外部保管先の `.env.backup.local` の存在を確認する。本文を表示しない
+   - 新規作成が必要な場合は `.env.backup.local.example` を参考に外部保管先で本人が設定する
 2. PowerShell を開き、プロジェクトルートへ移動する
-3. スクリプトを実行する
-
-```powershell
-.\scripts\backup-supabase.ps1
-```
+3. [現在のDBコマンド](private-assets-local-usage.md#コマンドの変更) に従い、絶対パスの `-EnvFile`・`-BackupRoot`・`-TempRoot` を指定して実行する
 
 4. バリデーション（`scripts/validate-backup.ps1`）が自動実行される。全 21 項目 PASS の場合のみ次のステップへ進む。FAIL の場合はスクリプトが `exit 1` で終了し、ZIP は作成されない
-5. `backups\YYYYMMDD-HHMMSS.sql.zip` が作成されたことを確認する
-6. zip ファイルを安全な場所（外付けHDD・クラウドストレージ等）に保存する
+5. `<BackupRoot>\yyyyMMdd-HHmmss-fff.sql.zip` が作成されたことを確認する
+6. 外部保管先のZIPを保全する。クラウドへ移送する場合は平文ZIPを同期対象へ置かず、別途承認した暗号化移送手順を使用する
 
 #### 出力
 
 | ファイル | 内容 |
 |---------|------|
-| `backups\YYYYMMDD-HHMMSS.sql.zip` | ZIP（バリデーション PASS の場合のみ作成） |
+| `<BackupRoot>\yyyyMMdd-HHmmss-fff.sql.zip` | ZIP（バリデーション PASS の場合のみ作成） |
 | ZIP 内 `roles.sql` | ロール・権限定義 |
 | ZIP 内 `schema.sql` | スキーマ定義 |
 | ZIP 内 `data.sql` | データ（public・private スキーマ、COPY 形式） |
 | ZIP 内 `backup-info.txt` | 実行サマリー（下記参照） |
 
-バリデーション FAIL の場合、ZIP は作成されず `backups\YYYYMMDD-HHMMSS\` フォルダが調査用に残ります。
+バリデーション FAIL の場合、ZIP は作成されず `<TempRoot>\db-<GUID>\` フォルダが調査用に残ります。
 
-`backup-info.txt` の作成はバリデーターが機械可読結果（JSON）を正常に出力できた場合のみ行われます。その場合、`validation : FAILED` と検証結果の概要が記録されます。バリデーター起動失敗・結果 JSON 欠如・JSON 読み込み失敗・必須フィールド欠如など、結果を安全に取得できない場合は `backup-info.txt` を作成せず非ゼロ終了します。
+サマリーは**今回の検証JSONを安全に取得できた場合のみ**作成する。
+
+| 今回の検証結果 | サマリー・ZIP・終了状態 |
+|---|---|
+| 有効なJSONがPASSED、終了コード0 | PASSEDサマリーと今回のZIPを作成し、成功時の外部一時dumpを削除する。 |
+| 有効なJSONがFAILED、または有効な結果取得後の終了コードが非ゼロ | FAILEDサマリーを今回の外部dumpフォルダへ保存。ZIPを作らず失敗として終了する。JSONがFAILEDなら終了コード0でも成功にしない。 |
+| validator不在・例外、終了コード未取得、JSON不在・不正・必須値欠落 | 今回分のサマリーとZIPを作らず失敗終了。外部dumpを調査用に保全する。 |
+
+JSONは単一オブジェクト、必須値非null、PASSED/FAILEDの状態、非負整数の件数・合計整合、文字列のハッシュ欄を確認する。FAIL時に検証できなかったファイルのハッシュが空文字でも、取得できたFAILED結果として保全する。PASSEDでは空欄を認めない。validatorの21検証項目・対象スキーマは変更しない。取得できない結果をn/aや0で補わない。
+
+今回専用のGUID付きdumpフォルダと結果JSONを使用し、過去のサマリーやZIPを今回の結果として再利用しない。既存ZIPを上書きせず、失敗時は過去の成功ZIPが存在しても今回の成功を通知しない。結果JSONの後片付けとDB接続用環境変数の復元はfinallyで行う。
+
+検証：`tests/backup-validation-summary.test.ps1 -TestRoot <新しい外部のダミー専用絶対パス>` の17ケースをPowerShell 5.1／7で確認。既存保存処理26項目も回帰確認。いずれもCLIとvalidatorをスタブ化し、過去成果物のダミーも保全確認した。実DB・実秘密は使用しない。HTTP54ケースはサーバー無変更のため既存証拠を利用する。
 
 #### backup-info.txt の記録内容
 
@@ -117,33 +127,29 @@ Docker Desktop が起動していない場合、DBバックアップは dump 実
 
 #### 実行手順
 
-1. DBバックアップを完了し、`backups\YYYYMMDD-HHMMSS.sql.zip` が存在することを確認する
+1. DBバックアップを完了し、`<BackupRoot>\yyyyMMdd-HHmmss-fff.sql.zip` が存在することを確認する
 2. PowerShell を開き、プロジェクトルートへ移動する
-3. スクリプトを実行する
-
-```powershell
-.\scripts\backup-supabase-storage.ps1 -SqlZipPath .\backups\YYYYMMDD-HHMMSS.sql.zip
-```
+3. [現在のStorageコマンド](private-assets-local-usage.md#コマンドの変更) に従い、絶対パスの `-SqlZipPath`・`-BackupRoot`・`-TempRoot` を指定して実行する
 
 4. 結果を確認する
 
 ```
 OK=N  SKIPPED=0  ERROR=0
-Complete : backups\YYYYMMDD-HHMMSS-storage.zip
+Complete : <BackupRoot>\yyyyMMdd-HHmmss-fff-storage.zip
 ```
 
 #### 出力
 
 | ファイル | 内容 |
 |---------|------|
-| `backups\YYYYMMDD-HHMMSS-storage.zip` | zip（ERROR=0 の場合のみ作成） |
+| `<BackupRoot>\yyyyMMdd-HHmmss-fff-storage.zip` | zip（ERROR=0 の場合のみ作成） |
 | zip内 `photos\{reportId}\{filename}.jpg` | 日報に紐付いた写真ファイル |
 | zip内 `storage-backup-manifest.csv` | ファイル単位のダウンロード結果（OK / SKIPPED / ERROR） |
 | zip内 `backup-info.txt` | 実行日時・件数サマリー |
 
 #### ERROR が出た場合
 
-- zip は作成されず、`backups\YYYYMMDD-HHMMSS-storage\` フォルダが残る
+- zip は作成されず、`<BackupRoot>\yyyyMMdd-HHmmss-fff-storage\` フォルダが残る
 - 残ったフォルダの `storage-backup-manifest.csv` の ERROR 行を確認する
 - 原因を解消してから再実行する
 - 再実行時は通常、新しいタイムスタンプのバックアップフォルダが作成され、全 URL を再取得する
@@ -157,9 +163,7 @@ Complete : backups\YYYYMMDD-HHMMSS-storage.zip
 - 通常の再実行では新しいタイムスタンプフォルダへ全件ダウンロードされる
 - `-DataSqlPath` を使えば zip 展開済みの `data.sql` を直接指定することもできる
 
-```powershell
-.\scripts\backup-supabase-storage.ps1 -DataSqlPath .\path\to\data.sql
-```
+この場合も外部の絶対パスを指定し、`-BackupRoot`・`-TempRoot` は省略しない。完全な例は [現在の利用手順](private-assets-local-usage.md#コマンドの変更) を参照する。
 
 ## バックアップのタイミング
 
@@ -199,4 +203,8 @@ Complete : backups\YYYYMMDD-HHMMSS-storage.zip
 SUPABASE_DB_URL="postgresql://postgres.xxxxx:[YOUR-PASSWORD]@xxxxx.pooler.supabase.com:5432/postgres"
 ```
 
-このファイルは Git 管理外です。PCを変えた場合は再作成が必要です。
+このファイルは外部保管先へ置き、リポジトリへコピーしません。PC移行時は承認された暗号化移送・照合手順を使い、存在する資産を一律に再作成しません。
+
+## 旧起動方法の扱い（実行しない）
+
+以前の引数なし・リポジトリ相対パスによる起動方法は、必須の外部パス引数を欠くため使用しない。現在の利用手順に従う。過去成果物の所在・移設・照合結果はGit管理外の運用記録で管理し、承認なく移動・改名・削除しない。

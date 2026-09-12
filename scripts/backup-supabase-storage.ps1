@@ -15,9 +15,9 @@
 .PARAMETER DataSqlPath
     Direct path to a data.sql file.
 .EXAMPLE
-    .\scripts\backup-supabase-storage.ps1 -SqlZipPath .\backups\20260601-154102.sql.zip
+    .\scripts\backup-supabase-storage.ps1 -SqlZipPath C:\PrivateAssets\backups\sample.sql.zip -BackupRoot C:\PrivateAssets\backups -TempRoot C:\PrivateAssets\tmp
 .EXAMPLE
-    .\scripts\backup-supabase-storage.ps1 -DataSqlPath .\path\to\data.sql
+    .\scripts\backup-supabase-storage.ps1 -DataSqlPath C:\PrivateAssets\data.sql -BackupRoot C:\PrivateAssets\backups -TempRoot C:\PrivateAssets\tmp
 .NOTES
     Run backup-supabase.ps1 first to obtain a fresh data.sql before using -SqlZipPath.
 #>
@@ -28,11 +28,21 @@ param(
     [string]$SqlZipPath,
 
     [Parameter(ParameterSetName = 'Sql', Mandatory = $true)]
-    [string]$DataSqlPath
+    [string]$DataSqlPath,
+    [Parameter(Mandatory=$true)][string]$BackupRoot,
+    [Parameter(Mandatory=$true)][string]$TempRoot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'private-asset-paths.ps1')
+$backupBase = Resolve-PrivateAssetPath -Path $BackupRoot
+$TempRoot = Resolve-PrivateAssetPath -Path $TempRoot
+if ($PSCmdlet.ParameterSetName -eq 'Zip') {
+    $SqlZipPath = Resolve-PrivateAssetPath -Path $SqlZipPath -Kind File
+} else {
+    $DataSqlPath = Resolve-PrivateAssetPath -Path $DataSqlPath -Kind File
+}
 
 # ===========================================================
 # Helper functions
@@ -91,6 +101,9 @@ function Get-PhotoRelPath([string]$url) {
     $rel = $url.Substring($idx + $marker.Length)
     if ([string]::IsNullOrEmpty($rel)) { return $null }
     # Convert URL forward-slashes to OS path separator
+    try { $rel = [Uri]::UnescapeDataString($rel) } catch { return $null }
+    if ($rel -match '[\\:*?"<>|]' -or $rel.StartsWith('/') -or
+        @($rel.Split('/') | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' -or $_ -match '[. ]$' }).Count) { return $null }
     return $rel.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
 }
 
@@ -117,6 +130,8 @@ $tempDir             = $null
 $resolvedDataSqlPath = $null
 $inputLabel          = ''
 
+try {
+
 if ($PSCmdlet.ParameterSetName -eq 'Zip') {
     if (-not (Test-Path $SqlZipPath)) {
         Write-Error "SqlZipPath not found: $SqlZipPath"
@@ -124,15 +139,16 @@ if ($PSCmdlet.ParameterSetName -eq 'Zip') {
     }
     $inputLabel = (Resolve-Path $SqlZipPath).Path
 
-    $tempDir = Join-Path $env:TEMP ('supabase-storage-' + [System.IO.Path]::GetRandomFileName())
-    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
+    $tempDir = Join-Path $TempRoot ('supabase-storage-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
     Write-Host "  Expanding zip to temp folder: $tempDir"
     Expand-Archive -Path $inputLabel -DestinationPath $tempDir -Force
 
     $found = Get-ChildItem -Path $tempDir -Filter 'data.sql' -Recurse -ErrorAction SilentlyContinue |
              Select-Object -First 1
     if (-not $found) {
-        Remove-Item -Recurse -Force $tempDir
+        Remove-PrivateTempDirectory -Path $tempDir -TempRoot $TempRoot
         Write-Error "data.sql not found inside zip: $SqlZipPath"
         exit 1
     }
@@ -176,7 +192,7 @@ try {
                 foreach ($key in @('id', 'report_date', 'photo_urls', 'photo_count')) {
                     if ($colMap[$key] -eq -1) {
                         $reader.Close()
-                        if ($tempDir -and (Test-Path $tempDir)) { Remove-Item -Recurse -Force $tempDir }
+                        if ($tempDir -and (Test-Path $tempDir)) { Remove-PrivateTempDirectory -Path $tempDir -TempRoot $TempRoot }
                         Write-Error "Required column '$key' not found in COPY header of public.reports."
                         exit 1
                     }
@@ -216,11 +232,10 @@ try {
     $reader.Close()
 }
 
-# Temp dir no longer needed after data.sql is fully read
-if ($tempDir -and (Test-Path $tempDir)) {
-    Remove-Item -Recurse -Force $tempDir
-    $tempDir = $null
-    Write-Host "  Temp folder removed."
+} finally {
+    if ($tempDir -and (Test-Path -LiteralPath $tempDir)) {
+        Remove-PrivateTempDirectory -Path $tempDir -TempRoot $TempRoot
+    }
 }
 
 $totalUrls = 0
@@ -239,8 +254,8 @@ if ($photoRows.Count -eq 0) {
 # ===========================================================
 Write-Host "[3/6] Preparing output directory..."
 
-$timestamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
-$backupBase = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\backups'))
+$timestamp  = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
+$backupBase = Resolve-PrivateAssetPath -Path $backupBase
 $outDir     = Join-Path $backupBase "$timestamp-storage"
 $photosDir  = Join-Path $outDir 'photos'
 New-Item -ItemType Directory -Force -Path $photosDir | Out-Null
@@ -277,7 +292,9 @@ foreach ($row in $photoRows) {
             continue
         }
 
-        $absPath  = Join-Path $photosDir $relPath
+        $absPath  = [IO.Path]::GetFullPath((Join-Path $photosDir $relPath))
+        if (!(Test-AssetPathWithin $absPath $photosDir)) { throw 'Photo path escapes output directory.' }
+        $null = Resolve-PrivateAssetPath -Path (Split-Path $absPath -Parent)
         $localRec = 'photos\' + $relPath        # recorded in manifest
 
         # File already exists: SKIPPED (idempotent re-run support)
@@ -388,8 +405,8 @@ Write-Host "  Info     : $infoPath"
 if ($errorCount -eq 0) {
     Write-Host "[6/6] Creating zip..."
     $zipPath = Join-Path $backupBase "$timestamp-storage.zip"
-    Compress-Archive -Path "$outDir\*" -DestinationPath $zipPath -Force
-    Remove-Item -Recurse -Force $outDir
+    Compress-Archive -Path "$outDir\*" -DestinationPath $zipPath
+    Remove-PrivateTempDirectory -Path $outDir -TempRoot $backupBase
     Write-Host ""
     Write-Host "Complete : $zipPath"
     Write-Host "Note     : Do not push this file to GitHub."

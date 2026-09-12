@@ -1,1 +1,9 @@
 local-viewers/
+docs/
+scripts/
+tests/
+.claude/
+AGENTS.md
+CLAUDE.md
+/.gitattributes
+/playwright.config.ts

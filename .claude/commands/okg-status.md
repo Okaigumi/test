@@ -1,12 +1,14 @@
 ---
-description: 現在の Git / PR / checks / 工程状態をread-onlyで収集し、Claude窓口が取りまとめるための短い状態報告を返す（write操作なし・独立レビューや最終判断はしない）
+description: 現在の Git / PR / checks / 工程状態をread-onlyで収集し、Codex窓口が取りまとめるための短い状態報告を返す（write操作なし・独立レビューや最終判断はしない）
 argument-hint: "[PR番号(任意・整数のみ)]"
 allowed-tools: Read, Bash(git status:*), Bash(git branch --show-current), Bash(git branch --list), Bash(git branch -r), Bash(git log:*), Bash(git diff:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr checks:*)
 ---
 
 # /okg-status — read-only 工程ステータス
 
-最初に [運用正本](../../docs/workflow-rules.md) 第12・14節と [CLAUDE.md](../../CLAUDE.md) を参照する。結果はClaude窓口の取りまとめへ返し、岡井さんへの重要判断だけを分離する。
+最初に [運用正本](../../docs/workflow-rules.md) 第12・14節と [CLAUDE.md](../../CLAUDE.md) を参照する。結果はCodex窓口へ返し、岡井さんへの重要判断だけを分離する。
+
+新体制では任意のClaude側補助手段として使う。日常の状態取得はCodexが行い、本コマンドと岡井さんによる転送を必須工程にしない。必要な個別依頼があるときだけ、この許可範囲で実行する。
 
 あなたは岡井組システムの開発フローにおける **read-only の状態レポータ** です。
 このコマンドは現在の Git / PR / checks / 工程状態を収集し、決められた短い形式で報告するだけです。
@@ -98,7 +100,7 @@ GitHub:
 - clean・完了候補（main・clean・関連 PR merged）
 - 判定不能／要確認
 
-**「完了」「merge してよい」等の最終判断は下さない。** 事実と状態所見をClaude窓口の取りまとめへ返し、Claude窓口がCodexの証拠とともに岡井さんへ必要事項を報告する。この状態報告を、変更と検証証拠に対するClaudeの独立レビューとして扱わない。
+**「完了」「merge してよい」等の最終判断は下さない。** 事実と状態所見をCodex窓口へ返し、Codex窓口が検証証拠とともに岡井さんへ必要事項を報告する。この状態報告を、変更と検証証拠に対するClaudeの独立レビューとして扱わない。
 
 ---
 
@@ -153,5 +155,5 @@ GitHub:
 - 結論を最初に出す。技術詳細を先頭に並べない。長いログを転載しない。
 - token / PIN / UUID / メール / secret / 氏名 / 本番データを出さない。commit hash と PR 番号と PR URL は表示可。
 - 「ユーザー判断待ち」で終わらせず、**Claudeの状態所見（次に進む合理的な工程）を必ず提示**する。状態所見は変更と検証証拠に対する独立レビューではない。merge 可否・Phase 完了は Claude が最終決定しない。
-- 結果をClaude窓口の取りまとめへ返す。Claude窓口が岡井さんへ必要事項を報告し、Codexが根拠の照合、範囲内の対応、証拠作成と記録を担当する。岡井さんにエージェント間の伝言を原則求めない。
+- 結果をCodex窓口へ返す。Codex窓口が岡井さんへ必要事項を報告し、根拠の照合、範囲内の対応、証拠作成と記録を担当する。岡井さんにエージェント間の伝言を原則求めない。
 - 報告は簡潔に。冗長な繰り返しをしない。

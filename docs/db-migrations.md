@@ -6631,3 +6631,56 @@ PRE-CHECK 全合格：total=11 / NULL=10 / NOT NULL=1 / 不正 PIN=0 / 整合=1 
 - login：hash-first dual-read のまま
 - create / update：dual-write のまま
 - **Phase 5-D 全体は未完了（5-D-5 以降が残る）。**
+
+---
+
+## 2026-09-21 Phase 5-D-5 employee login RPC hash-only化
+
+### 概要
+
+- 対象：`public.create_employee_session(uuid,text)`のPIN照合だけをhash-first dual-readからhash-onlyへ変更
+- 変更しない範囲：signature、引数名、戻り値、owner、SECURITY DEFINER、search_path、volatility、throttle、inactive拒否、session発行、create／update RPC、`employees.pin`列、frontend
+- 実行者：岡井さん（Production Supabase SQL Editor）。Codex／Claudeは実DBで実行していない
+- SQL参照：`docs/sql/phase5d-5-employee-login-hash-only.sql`。この固定ファイルは設計・guard・rollback案の参照用であり、実際の実行文面とbyte同一ではないため実行済み正本とは扱わない
+
+### PRE-CHECK
+
+- total=11／hash_null=0／hash_notnull=11／pin_notnull=11／hash_integrity=11／cost12=11
+- 変更前login RPC fingerprint：length `3798`／md5 `006550c3455e34aa9d1d61bd60bb85ad`
+- writer RPC 2件のbaseline_match=true
+- pin／pin_hash列の想定外権限0、必要EXECUTE 6、PUBLIC EXECUTE 0
+
+### 本番適用と手順逸脱
+
+- 岡井さんはCodexが画面へ提示したBEGIN〜COMMITの転記版を報告上1回実行し、`Success. No rows returned`を確認
+- 承認対象は固定SQL blob `420c907c12ed77ddcb5ec632c9df83f21ed0f589`だったが、提示時にコメント削除と整形が入り、固定blobとのbyte同一性は不成立
+- 転記版全文は永続保存されておらず、Codex提示文面とSQL Editorへ実際に貼り付けた文面のbyte同一性も独立確認していない。転記版がguard・hash-only条件・throttle／session処理・transaction内post-checkを保持したという説明はCodex申告であり、第三者の逐語照合は不能
+- 会話で確認できるDB結果はPRE-CHECK、変更前定義のread-only照会、成功報告の3件。成功した変更試行は報告上1回だが、未報告の実行／abort有無は確認不能
+- 実行文面の固定blob同一性を求めた旧AC-02はFAILのまま維持する。固定blobの再実行、rollback、場当たりのACL変更は行っていない
+- 非関与Claude H確認は、手順逸脱、証拠限界、停止判断を含む記録をPASS／must-fix 0と判定。そのPASSは旧AC-02をPASSへ変更するものではない
+
+### POST-COMMIT・最終read-only確認
+
+- 変更後login RPC fingerprint：length `3146`／md5 `fbdb8d8cbd06fe38683aebf1bbe9bc2e`
+- hash-only=true／plaintext fallback=false／dual-read CASE=false
+- total=11／hash_null=0／hash_notnull=11／hash_integrity=11／cost12=11／inactive_count=0
+- 引数名、戻り値、owner=`postgres`、language=`plpgsql`、SECURITY DEFINER=true、volatility=`v`、search_path=`public, extensions`が一致
+- inactive拒否、throttle、session発行を含む関数sourceの必須marker 14／14がtrue。marker存在の確認であり、各挙動の網羅的live testではない
+- writer RPC 2件のbaseline_match=true
+- pin／pin_hash列の想定外権限0、必要EXECUTE 6、PUBLIC EXECUTE 0
+- PIN、hash、氏名、UUID、tokenは記録していない
+
+### Production smoke・完了判断
+
+- 従業員正PIN、logout、誤PIN拒否後の正PIN、管理者、原価管理について岡井さんから`ALL OK`を受領
+- inactive従業員は最終照会で0件と確認したため、個別inactive smokeは対象なし・未実施。RPC内inactive guardはsource markerで確認
+- 岡井さんが、旧AC-02 FAILを履歴保持したまま、COMMIT済み機能状態・hash整合・権限・marker・smokeで判定する改訂完了条件を承認
+- 改訂完了条件RC-01〜05はすべてPASS。**Phase 5-D-5本番適用を機能完了**とする
+- 詳細：`docs/tasks/SEC-5D5-PREFLIGHT-001.md`、`docs/tasks/SEC-5D5-001.md`、`docs/tasks/SEC-5D5-EXEC-001.md`
+
+### rollback / 次工程
+
+- rollback：未実行・不要。固定SQL内のrollback案はコメント状態で、別Hレビューと明示承認なしに使用しない
+- 再適用：禁止。現行Productionはhash-only状態で正常確認済み
+- `employees.pin`列は残存。Phase 5-D-6のDROPは不可逆ゲートとして、別作業ID・別承認・3者合意・復旧可能性確認が必要
+- **Phase 5-D-5は機能完了。Phase 5-D全体は未完了（5-D-6が残る）。**

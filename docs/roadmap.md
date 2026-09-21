@@ -1,12 +1,13 @@
 # 社内業務システム ロードマップ
 
 
-## 開発運用の現在の本流（2026-09-20更新）
+## 開発運用の現在の本流（2026-09-21更新）
 
-- 本流：移行後の最初の監督付き実案件 [WF-PILOT-001](tasks/WF-PILOT-001.md) は、固定3文書の非関与Claude HレビューPASS／must-fix 0件を得てDONE。実物と計画表示のずれを照合し、重複作業を避けて次案件を選べる比較材料と推奨案を確定した。セキュリティ残工程内の推奨は「Phase 5-D-5（従業員ログインのhash-only化）の着手前確認」。業務全体の優先順位決定・着手承認は未実施。本DONE表示はcloseout固定版への新規・非関与Claude HレビューPASSを条件とし、結果はCodex task `01a0bc3a-7ee9-7f70-82d9-b650ce736753` にGit管理外で保持する。
+- 本流：Phase 5-D-5（従業員login RPC hash-only化）は、[着手前確認](tasks/SEC-5D5-PREFLIGHT-001.md)、[設計](tasks/SEC-5D5-001.md)、[本番適用記録](tasks/SEC-5D5-EXEC-001.md)を経て、2026-09-21にProductionの機能完了を確認した。login RPCはhash-only、平文fallbackなし、従業員11件のhash整合・cost 12、権限と必須markerをread-onlyで確認し、岡井さん報告ベースのProduction smokeも完了した。固定SQL blobではなくCodex提示の転記版が実行された手順逸脱はAC-02 FAILとして履歴に残し、岡井さんが承認した改訂完了条件で機能完了とした。転記版全文は永続保存されておらず、実際の貼付文面との逐語照合は不能である。固定SQLは実行済み正本と表示しない。
+- 前工程：移行後の最初の監督付き実案件 [WF-PILOT-001](tasks/WF-PILOT-001.md) は、固定3文書の非関与Claude HレビューPASS／must-fix 0件を得てDONE。実物と計画表示のずれを照合し、重複作業を避けてPhase 5-D-5着手前確認を選定した。closeout証拠はCodex task `01a0bc3a-7ee9-7f70-82d9-b650ce736753` にGit管理外で保持する。
 - 文書移行：[WF-MIGRATION-001](tasks/WF-MIGRATION-001.md) の訂正6文書は、非関与Claude session `local_1ff2c946-3ccf-4f4f-b157-fdc040ab7085` がPASS（must-fix 0件）。岡井さんの対象限定承認後、PR #188、merge commit `e107d041e238a1e6f6164d98a838b59489d0260c` でmainへ反映され、レビュー対象6文書とmainのblob一致を2026-09-20 13:17 JSTに確認した。成立証拠はCodex task `01a0bc3a-7ee9-7f70-82d9-b650ce736753` にGit管理外で保持する。
 - 自動運転：未有効。UIターン中断後に開始済みPTYコマンドが残存する実測FAILがある。無作用fixtureの期限付き清掃成功を一般の停止保証へ広げず、無人実行・定期起動を開始しない。
-- 次の操作：岡井さんが業務全体の次案件を選択する。セキュリティ残工程を選ぶ場合は、Phase 5-D-5の実装へ直行せず、実DBの現行fingerprintと全従業員hash状態を秘密値なしでread-only確認する着手前確認を推奨する。PR-3 backup pipeline hardeningのmerge未完了、PR-4、PR-5等との業務優先順位は別判断である。SQL案・実DB実行・実装・Git反映・公開・自動運転は未承認であり開始しない。本流外を含む新規OPEN／BLOCKED記録を作成した場合は、この入口に作業IDと参照を追加する。製品側の既存未完了案件は下記の履歴・仕様を参照し、一覧未整備を完了と読み替えない。
+- 次の操作：Phase 5-D-6（平文`employees.pin`列DROP）の着手前確認へ進むか、PR-3 backup pipeline hardeningのmerge未完了、PR-4、PR-5等を優先するかを岡井さんが選択する。5-D-6は不可逆ゲートであり、別作業ID・別承認・3者合意・復旧可能性の確認前には開始しない。DB／SQL実行、Git反映、公開、自動運転は対象ごとの承認なしに開始しない。本流外を含む新規OPEN／BLOCKED記録を作成した場合は、この入口に作業IDと参照を追加する。製品側の既存未完了案件は下記の履歴・仕様を参照し、一覧未整備を完了と読み替えない。
 - 既存のChange BとOrca疎通試験は移行変更に混ぜず、元の証拠と差分を保全する。通知経路の追加調査・worker再試行は行わない。
 - 以下の製品計画・過去の現在地・完了実績は原文を保全する。古い「現在地」や終了時pushの記述を、最新状態や実行承認とみなさない。実行条件は [運用正本](workflow-rules.md) に従う。
 
@@ -640,10 +641,23 @@
 - 詳細は docs/phase5d-4-observation-closeout.md 参照
 - **Phase 5-D は未完了**（5-D-5 以降が残る）
 
-#### 5-D の残工程（次工程：5-D-5）
+#### 5-D-5 employee login RPC hash-only化
 
-- **5-D-5**（次工程）：login RPC を hash-only 化（`pin_hash IS NULL` fallback を削除）
-- **5-D-6**：`employees.pin` 列 DROP（不可逆ゲート・3者合意必須）
+**状態：✅ 機能完了（2026-09-21）**
+
+- `create_employee_session(uuid,text)`から平文PIN fallbackを除去し、hash-onlyへ移行
+- 最終fingerprint：length `3146`／md5 `fbdb8d8cbd06fe38683aebf1bbe9bc2e`
+- DB最終状態：total=11／hash_null=0／hash_integrity=11／cost12=11
+- owner、SECURITY DEFINER、search_path、戻り値、引数名、writer RPC baseline、列権限、EXECUTE権限をcatalogで確認。throttle、inactive拒否、session発行は関数sourceの必須marker存在を確認したもので、各挙動の網羅的live testではない
+- Production smoke：岡井さん報告`ALL OK`。inactive_count=0のためinactive live smokeは対象なし・未実施で、関数sourceのinactive guard markerを確認
+- 固定SQL blobではなくCodex提示の転記版が実行されたため、固定blob同一性AC-02はFAILのまま維持。転記版全文は永続保存されておらず、実際の貼付文面との逐語照合は不能。機能状態を確認する改訂完了条件は岡井さんが承認
+- 再適用・rollbackは行わず、固定SQLは実行済み正本と表示しない
+- 詳細は [SEC-5D5-EXEC-001](tasks/SEC-5D5-EXEC-001.md) と docs/db-migrations.md「2026-09-21 Phase 5-D-5」参照
+- **Phase 5-D全体は未完了**（5-D-6が残る）
+
+#### 5-D の残工程（次工程候補：5-D-6）
+
+- **5-D-6**：`employees.pin`列DROP（不可逆ゲート・別作業ID・別承認・3者合意必須）
 
 ## Phase 6：admin-app.html 改善
 
